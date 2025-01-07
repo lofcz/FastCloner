@@ -14,21 +14,25 @@
     <DebugType>portable</DebugType>
     <DebugSymbols>true</DebugSymbols>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <PackageId>Lofcz.Forks.DeepCloner.Core</PackageId>
+    <PackageId>FastCloner</PackageId>
+    <PackageIcon>icon.jpg</PackageIcon>
+    <RepositoryUrl>https://github.com/lofcz/FastCloner</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>deepclone,clone,fastclone,cloner,replicate,duplicate</PackageTags>
   </PropertyGroup>
   
   <PropertyGroup>
-    <Version>0.1.4</Version>
+    <Version>1.1.4</Version>
 
-    <Title>DeepCloner.Core</Title>
-    <Description>A library for cloning objects, ported from DeepCloner.</Description>
+    <Title>FastCloner</Title>
+    <Description>Fast deep cloning library for .NET 8+</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     
-    <Authors>Adrian Mos, Matěj Štágl</Authors>
+    <Authors>Matěj Štágl, Adrian Mos, DeepCloner Collaborators</Authors>
     <Company />
-    <Product>IX Libraries</Product>
-    <Copyright>Adrian Mos, 2024, Matěj Štágl 2025</Copyright>
-    <PackageProjectUrl>https://github.com/lofcz/DeepCloner</PackageProjectUrl>
+    <Product>FastCloner</Product>
+    <Copyright> Matěj Štágl - 2025, Adrian Mos - 2024</Copyright>
+    <PackageProjectUrl>https://github.com/lofcz/FastCloner</PackageProjectUrl>
     <NeutralLanguage>en</NeutralLanguage>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
