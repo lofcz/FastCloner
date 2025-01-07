@@ -1,4 +1,5 @@
-﻿using Microsoft.Win32.SafeHandles;
+﻿using System.Collections;
+using Microsoft.Win32.SafeHandles;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -13,14 +14,14 @@ public class SystemTypesSpec
     [Test]
     public void StandardTypes_Should_Be_Cloned()
     {
-        var b = new StringBuilder();
+        StringBuilder b = new StringBuilder();
         b.Append("test1");
-        var cloned = b.DeepClone();
+        StringBuilder cloned = b.DeepClone();
         Assert.That(cloned.ToString(), Is.EqualTo("test1"));
-        var arr = new[] { 1, 2, 3 };
-        var enumerator = arr.GetEnumerator();
+        int[] arr = new[] { 1, 2, 3 };
+        IEnumerator enumerator = arr.GetEnumerator();
         enumerator.MoveNext();
-        var enumCloned = enumerator.DeepClone();
+        IEnumerator enumCloned = enumerator.DeepClone();
         enumerator.MoveNext();
         Assert.That(enumCloned.Current, Is.EqualTo(1));
     }
@@ -28,13 +29,13 @@ public class SystemTypesSpec
     [Test(Description = "Just for fun, do not clone such object in real situation")]
     public void Type_With_Native_Resource_Should_Be_Cloned()
     {
-        var fileName = Path.GetTempFileName();
+        string fileName = Path.GetTempFileName();
         try
         {
-            var writer = File.CreateText(fileName);
+            StreamWriter writer = File.CreateText(fileName);
             writer.AutoFlush = true;
             writer.Write("1");
-            var cloned = writer.DeepClone();
+            StreamWriter cloned = writer.DeepClone();
             writer.Write("2");
             cloned.Write("3");
 #if OLDFRAMEWORK
@@ -50,7 +51,7 @@ public class SystemTypesSpec
             // ~~this was a bug, we should not throw there~~
 
             Assert.Throws<ObjectDisposedException>(cloned.Flush);
-            var res = File.ReadAllText(fileName);
+            string res = File.ReadAllText(fileName);
 #if !OLDFRAMEWORK
                 // it uses RandomAccess.WriteAtOffset(this._fileHandle, buffer, this._filePosition); - and offset of cloned file
                 // is preserved, so, 2 will disappear
@@ -69,10 +70,10 @@ public class SystemTypesSpec
     [Test]
     public void Funcs_Should_Be_Cloned()
     {
-        var closure = new[] { "123" };
+        string[] closure = new[] { "123" };
         Func<int, string> f = x => closure[0] + x.ToString(CultureInfo.InvariantCulture);
-        var df = f.DeepClone();
-        var cf = f.ShallowClone();
+        Func<int, string> df = f.DeepClone();
+        Func<int, string> cf = f.ShallowClone();
         closure[0] = "xxx";
         Assert.That(f(3), Is.EqualTo("xxx3"));
         // we clone delegate together with a closure
@@ -99,15 +100,15 @@ public class SystemTypesSpec
     [Test(Description = "Some libraries notifies about problems with this types")]
     public void Events_Should_Be_Cloned()
     {
-        var eht = new EventHandlerTest1();
-        var summ = new int[1];
+        EventHandlerTest1 eht = new EventHandlerTest1();
+        int[] summ = new int[1];
         Action<int> a1 = x => summ[0] += x;
         Action<int> a2 = x => summ[0] += x;
         eht.Event += a1;
         eht.Event += a2;
         eht.Call(1);
         Assert.That(summ[0], Is.EqualTo(2));
-        var clone = eht.DeepClone();
+        EventHandlerTest1 clone = eht.DeepClone();
         clone.Call(1);
         // do not call
         Assert.That(summ[0], Is.EqualTo(2));
@@ -124,7 +125,7 @@ public class SystemTypesSpec
     [Test(Description = "Without special handling it causes exception on destruction due native resources usage")]
     public void Certificate_Should_Be_Cloned()
     {
-        var cert = new X509Certificate2(Convert.FromBase64String(CertData), "1");
+        X509Certificate2 cert = new X509Certificate2(Convert.FromBase64String(CertData), "1");
         cert.DeepClone();
         cert.DeepClone();
         GC.Collect();
@@ -150,7 +151,7 @@ public class SystemTypesSpec
     [Test(Description = "Without special handling it causes exception on destruction due native resources usage")]
     public void Certificate_Should_Be_Shallow_Cloned()
     {
-        var cert = new X509Certificate2(Convert.FromBase64String(CertData), "1");
+        X509Certificate2 cert = new X509Certificate2(Convert.FromBase64String(CertData), "1");
         cert.ShallowClone();
         cert.ShallowClone();
         GC.Collect();

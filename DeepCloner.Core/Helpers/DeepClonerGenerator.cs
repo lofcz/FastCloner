@@ -6,7 +6,7 @@ internal static class DeepClonerGenerator
     {
         if (obj is ValueType)
         {
-            var type = obj.GetType();
+            Type? type = obj.GetType();
             if (typeof(T) == type)
             {
                 if (DeepClonerSafeTypes.CanReturnSameObject(type))
@@ -24,7 +24,7 @@ internal static class DeepClonerGenerator
         if (obj == null)
             return null;
 
-        var cloner = (Func<object, DeepCloneState, object>)DeepClonerCache.GetOrAddClass(obj.GetType(), t => GenerateCloner(t, true));
+        Func<object, DeepCloneState, object>? cloner = (Func<object, DeepCloneState, object>)DeepClonerCache.GetOrAddClass(obj.GetType(), t => GenerateCloner(t, true));
 
         // null -> should return same type
         if (cloner == null)
@@ -38,14 +38,14 @@ internal static class DeepClonerGenerator
         if (obj == null)
             return null;
 
-        var cloner = (Func<object, DeepCloneState, object>)DeepClonerCache.GetOrAddClass(obj.GetType(), t => GenerateCloner(t, true));
+        Func<object, DeepCloneState, object>? cloner = (Func<object, DeepCloneState, object>)DeepClonerCache.GetOrAddClass(obj.GetType(), t => GenerateCloner(t, true));
 
         // safe object
         if (cloner == null)
             return obj;
 
         // loop
-        var knownRef = state.GetKnownRef(obj);
+        object? knownRef = state.GetKnownRef(obj);
         if (knownRef != null)
             return knownRef;
 
@@ -55,7 +55,7 @@ internal static class DeepClonerGenerator
     internal static T CloneStructInternal<T>(T obj, DeepCloneState state) // where T : struct
     {
         // no loops, no nulls, no inheritance
-        var cloner = GetClonerForValueType<T>();
+        Func<T, DeepCloneState, T>? cloner = GetClonerForValueType<T>();
 
         // safe ojbect
         if (cloner == null)
@@ -67,8 +67,8 @@ internal static class DeepClonerGenerator
     // when we can't use code generation, we can use these methods
     internal static T[] Clone1DimArraySafeInternal<T>(T[] obj, DeepCloneState state)
     {
-        var l = obj.Length;
-        var outArray = new T[l];
+        int l = obj.Length;
+        T[]? outArray = new T[l];
         state.AddKnownRef(obj, outArray);
         Array.Copy(obj, outArray, obj.Length);
         return outArray;
@@ -78,11 +78,11 @@ internal static class DeepClonerGenerator
     {
         // not null from called method, but will check it anyway
         if (obj == null) return null;
-        var l = obj.Length;
-        var outArray = new T[l];
+        int l = obj.Length;
+        T[]? outArray = new T[l];
         state.AddKnownRef(obj, outArray);
-        var cloner = GetClonerForValueType<T>();
-        for (var i = 0; i < l; i++)
+        Func<T, DeepCloneState, T>? cloner = GetClonerForValueType<T>();
+        for (int i = 0; i < l; i++)
             outArray[i] = cloner(obj[i], state);
 
         return outArray;
@@ -92,10 +92,10 @@ internal static class DeepClonerGenerator
     {
         // not null from called method, but will check it anyway
         if (obj == null) return null;
-        var l = obj.Length;
-        var outArray = new T[l];
+        int l = obj.Length;
+        T[]? outArray = new T[l];
         state.AddKnownRef(obj, outArray);
-        for (var i = 0; i < l; i++)
+        for (int i = 0; i < l; i++)
             outArray[i] = (T)CloneClassInternal(obj[i], state);
 
         return outArray;
@@ -109,14 +109,14 @@ internal static class DeepClonerGenerator
 
         // we cannot determine by type multidim arrays (one dimension is possible)
         // so, will check for index here
-        var lb1 = obj.GetLowerBound(0);
-        var lb2 = obj.GetLowerBound(1);
+        int lb1 = obj.GetLowerBound(0);
+        int lb2 = obj.GetLowerBound(1);
         if (lb1 != 0 || lb2 != 0)
             return (T[,]) CloneAbstractArrayInternal(obj, state);
 
-        var l1 = obj.GetLength(0);
-        var l2 = obj.GetLength(1);
-        var outArray = new T[l1, l2];
+        int l1 = obj.GetLength(0);
+        int l2 = obj.GetLength(1);
+        T[,]? outArray = new T[l1, l2];
         state.AddKnownRef(obj, outArray);
         if (DeepClonerSafeTypes.CanReturnSameObject(typeof(T)))
         {
@@ -126,15 +126,15 @@ internal static class DeepClonerGenerator
 
         if (typeof(T).IsValueType())
         {
-            var cloner = GetClonerForValueType<T>();
-            for (var i = 0; i < l1; i++)
-                for (var k = 0; k < l2; k++)
+            Func<T, DeepCloneState, T>? cloner = GetClonerForValueType<T>();
+            for (int i = 0; i < l1; i++)
+                for (int k = 0; k < l2; k++)
                     outArray[i, k] = cloner(obj[i, k], state);
         }
         else
         {
-            for (var i = 0; i < l1; i++)
-                for (var k = 0; k < l2; k++)
+            for (int i = 0; i < l1; i++)
+                for (int k = 0; k < l2; k++)
                     outArray[i, k] = (T)CloneClassInternal(obj[i, k], state);
         }
 
@@ -146,15 +146,15 @@ internal static class DeepClonerGenerator
     {
         // not null from called method, but will check it anyway
         if (obj == null) return null;
-        var rank = obj.Rank;
+        int rank = obj.Rank;
 
-        var lengths = Enumerable.Range(0, rank).Select(obj.GetLength).ToArray();
+        int[]? lengths = Enumerable.Range(0, rank).Select(obj.GetLength).ToArray();
 
-        var lowerBounds = Enumerable.Range(0, rank).Select(obj.GetLowerBound).ToArray();
-        var idxes = Enumerable.Range(0, rank).Select(obj.GetLowerBound).ToArray();
+        int[]? lowerBounds = Enumerable.Range(0, rank).Select(obj.GetLowerBound).ToArray();
+        int[]? idxes = Enumerable.Range(0, rank).Select(obj.GetLowerBound).ToArray();
 
-        var elementType = obj.GetType().GetElementType();
-        var outArray = Array.CreateInstance(elementType, lengths, lowerBounds);
+        Type? elementType = obj.GetType().GetElementType();
+        Array? outArray = Array.CreateInstance(elementType, lengths, lowerBounds);
 
         state.AddKnownRef(obj, outArray);
 
@@ -168,7 +168,7 @@ internal static class DeepClonerGenerator
             return outArray;
         }
 
-        var ofs = rank - 1;
+        int ofs = rank - 1;
         while (true)
         {
             outArray.SetValue(CloneClassInternal(obj.GetValue(idxes), state), idxes);
@@ -205,12 +205,12 @@ internal static class DeepClonerGenerator
 
         if (objFrom == null)
             throw new ArgumentNullException(nameof(objFrom), "Cannot copy null object to another");
-        var type = objFrom.GetType();
+        Type? type = objFrom.GetType();
         if (!type.IsInstanceOfType(objTo))
             throw new InvalidOperationException("From object should be derived from From object, but From object has type " + objFrom.GetType().FullName + " and to " + objTo.GetType().FullName);
         if (objFrom is string)
             throw new InvalidOperationException("It is forbidden to clone strings");
-        var cloner = (Func<object, object, DeepCloneState, object>)(isDeep
+        Func<object, object, DeepCloneState, object>? cloner = (Func<object, object, DeepCloneState, object>)(isDeep
             ? DeepClonerCache.GetOrAddDeepClassTo(type, t => ClonerToExprGenerator.GenerateClonerInternal(t, true))
             : DeepClonerCache.GetOrAddShallowClassTo(type, t => ClonerToExprGenerator.GenerateClonerInternal(t, false)));
         if (cloner == null) return objTo;

@@ -22,7 +22,7 @@ public class CopyToObjectSpec
             }
         };
 
-        var to = source.DeepClone();
+        SampleInterfaceClsWithProp to = source.DeepClone();
         Assert.That(ReferenceEquals(source.ActivityData, to.ActivityData), Is.EqualTo(false));
     }
 
@@ -35,13 +35,13 @@ public class CopyToObjectSpec
     public void DictionaryBrokenAfterCloningTest()
     {
         // Arrange
-        var originalDict = new Dictionary<KeyClass, string>();
-        var key = new KeyClass { Value = "TestKey" };
+        Dictionary<KeyClass, string> originalDict = new Dictionary<KeyClass, string>();
+        KeyClass key = new KeyClass { Value = "TestKey" };
         originalDict[key] = "TestValue";
 
         // Act
-        var clonedDict = originalDict.DeepClone();
-        var clonedKey = clonedDict.Keys.First();
+        Dictionary<KeyClass, string> clonedDict = originalDict.DeepClone();
+        KeyClass clonedKey = clonedDict.Keys.First();
 
         // Assert
         Assert.Multiple(() =>
@@ -60,22 +60,22 @@ public class CopyToObjectSpec
     public void MultipleDictionariesAtSameLevelShouldBeClonedCorrectly()
     {
         // Arrange
-        var container = new DictionaryContainer
+        DictionaryContainer container = new DictionaryContainer
         {
             Dict1 = new Dictionary<KeyClass, string>(),
             Dict2 = new Dictionary<KeyClass, string>()
         };
 
-        var key1 = new KeyClass { Value = "Key1" };
-        var key2 = new KeyClass { Value = "Key2" };
+        KeyClass key1 = new KeyClass { Value = "Key1" };
+        KeyClass key2 = new KeyClass { Value = "Key2" };
 
         container.Dict1[key1] = "Value1";
         container.Dict2[key2] = "Value2";
 
         // Act
-        var clonedContainer = container.DeepClone();
-        var clonedKey1 = clonedContainer.Dict1.Keys.First();
-        var clonedKey2 = clonedContainer.Dict2.Keys.First();
+        DictionaryContainer clonedContainer = container.DeepClone();
+        KeyClass clonedKey1 = clonedContainer.Dict1.Keys.First();
+        KeyClass clonedKey2 = clonedContainer.Dict2.Keys.First();
 
         // Assert
         Assert.Multiple(() =>
@@ -102,26 +102,26 @@ public class CopyToObjectSpec
     public void MultipleHashSetsAtSameLevelShouldBeClonedCorrectly()
     {
         // Arrange
-        var container = new HashSetContainer
+        HashSetContainer container = new HashSetContainer
         {
             Set1 = new HashSet<KeyClass>(),
             Set2 = new HashSet<KeyClass>(),
             Set3 = new HashSet<KeyClass>()
         };
 
-        var item1 = new KeyClass { Value = "Item1" };
-        var item2 = new KeyClass { Value = "Item2" };
-        var item3 = new KeyClass { Value = "Item3" };
+        KeyClass item1 = new KeyClass { Value = "Item1" };
+        KeyClass item2 = new KeyClass { Value = "Item2" };
+        KeyClass item3 = new KeyClass { Value = "Item3" };
 
         container.Set1.Add(item1);
         container.Set2.Add(item2);
         container.Set3.Add(item3);
 
         // Act
-        var clonedContainer = container.DeepClone();
-        var clonedItem1 = clonedContainer.Set1.First();
-        var clonedItem2 = clonedContainer.Set2.First();
-        var clonedItem3 = clonedContainer.Set3.First();
+        HashSetContainer clonedContainer = container.DeepClone();
+        KeyClass clonedItem1 = clonedContainer.Set1.First();
+        KeyClass clonedItem2 = clonedContainer.Set2.First();
+        KeyClass clonedItem3 = clonedContainer.Set3.First();
 
         // Assert
         Assert.Multiple(() =>
@@ -173,16 +173,16 @@ public class CopyToObjectSpec
     public void NestedDictionariesShouldBeClonedCorrectly()
     {
         // Arrange
-        var outerDict = new Dictionary<string, Dictionary<KeyClass, string>>();
-        var innerDict = new Dictionary<KeyClass, string>();
-        var key = new KeyClass { Value = "TestKey" };
+        Dictionary<string, Dictionary<KeyClass, string>> outerDict = new Dictionary<string, Dictionary<KeyClass, string>>();
+        Dictionary<KeyClass, string> innerDict = new Dictionary<KeyClass, string>();
+        KeyClass key = new KeyClass { Value = "TestKey" };
         innerDict[key] = "TestValue";
         outerDict["outer"] = innerDict;
 
         // Act
-        var clonedOuterDict = outerDict.DeepClone();
-        var clonedInnerDict = clonedOuterDict["outer"];
-        var clonedKey = clonedInnerDict.Keys.First();
+        Dictionary<string, Dictionary<KeyClass, string>> clonedOuterDict = outerDict.DeepClone();
+        Dictionary<KeyClass, string> clonedInnerDict = clonedOuterDict["outer"];
+        KeyClass clonedKey = clonedInnerDict.Keys.First();
 
         // Assert
         Assert.Multiple(() =>
@@ -211,13 +211,13 @@ public class CopyToObjectSpec
     public void SetBrokenAfterCloningTest()
     {
         // Arrange
-        var originalSet = new HashSet<KeyClass>();
-        var key = new KeyClass { Value = "TestKey" };
+        HashSet<KeyClass> originalSet = new HashSet<KeyClass>();
+        KeyClass key = new KeyClass { Value = "TestKey" };
         originalSet.Add(key);
 
         // Act
-        var clonedSet = originalSet.DeepClone();
-        var clonedKey = clonedSet.First();
+        HashSet<KeyClass> clonedSet = originalSet.DeepClone();
+        KeyClass clonedKey = clonedSet.First();
 
         // Assert
         Assert.Multiple(() =>
@@ -234,13 +234,13 @@ public class CopyToObjectSpec
     public void OrderedDictionaryBrokenAfterCloningTest()
     {
         // Arrange
-        var originalDict = new OrderedDictionary();
-        var key = new KeyClass { Value = "TestKey" };
+        OrderedDictionary originalDict = new OrderedDictionary();
+        KeyClass key = new KeyClass { Value = "TestKey" };
         originalDict[key] = "TestValue";
 
         // Act
-        var clonedDict = originalDict.DeepClone();
-        var clonedKey = clonedDict.Keys.Cast<KeyClass>().First();
+        OrderedDictionary clonedDict = originalDict.DeepClone();
+        KeyClass? clonedKey = clonedDict.Keys.Cast<KeyClass>().First();
 
         // Assert
         Assert.Multiple(() =>
@@ -258,7 +258,7 @@ public class CopyToObjectSpec
     public void TaskCancelledExceptionCloningTest()
     {
         // Arrange
-        var cts = new CancellationTokenSource();
+        CancellationTokenSource cts = new CancellationTokenSource();
         TaskCanceledException? originalException = null;
     
         try
@@ -279,7 +279,7 @@ public class CopyToObjectSpec
             
             Assert.DoesNotThrow(() =>
             {
-                var clonedException = originalException.DeepClone();
+                TaskCanceledException? clonedException = originalException.DeepClone();
                 Assert.That(clonedException, Is.Not.Null);
                 Assert.That(clonedException.Message, Is.EqualTo(originalException.Message));
                 Assert.That(ReferenceEquals(originalException, clonedException), Is.False);
@@ -294,15 +294,15 @@ public class CopyToObjectSpec
     public void SingleGenericDictionaryCloneTest()
     {
         // Arrange
-        var originalDict = new SingleGenericDictionary<KeyValuePair<KeyClass, string>>();
-        var key = new KeyClass { Value = "TestKey" };
-        var kvp = new KeyValuePair<KeyClass, string>(key, "TestValue");
+        SingleGenericDictionary<KeyValuePair<KeyClass, string>> originalDict = new SingleGenericDictionary<KeyValuePair<KeyClass, string>>();
+        KeyClass key = new KeyClass { Value = "TestKey" };
+        KeyValuePair<KeyClass, string> kvp = new KeyValuePair<KeyClass, string>(key, "TestValue");
         originalDict.Add(kvp);
 
         // Act
-        var clonedDict = originalDict.DeepClone();
-        var clonedKvp = clonedDict.First();
-        var clonedKey = clonedKvp.Key;
+        SingleGenericDictionary<KeyValuePair<KeyClass, string>> clonedDict = originalDict.DeepClone();
+        KeyValuePair<KeyClass, string> clonedKvp = clonedDict.First();
+        KeyClass clonedKey = clonedKvp.Key;
 
         // Assert
         Assert.Multiple(() =>
@@ -417,21 +417,21 @@ public class CopyToObjectSpec
     [TestCase(true)]
     public void Simple_Class_Should_Be_Cloned(bool isDeep)
     {
-        var cFrom = new C1
+        C1 cFrom = new C1
         {
             A = 12,
             B = "testestest",
             C = [1, 2, 3]
         };
 
-        var cTo = new C1
+        C1 cTo = new C1
         {
             A = 11,
             B = "tes",
             C = [1]
         };
 
-        var cToRef = cTo;
+        C1 cToRef = cTo;
 
         if (isDeep)
             cFrom.DeepCloneTo(cTo);
@@ -450,20 +450,20 @@ public class CopyToObjectSpec
     [TestCase(true)]
     public void Descendant_Class_Should_Be_Cloned(bool isDeep)
     {
-        var cFrom = new C1
+        C1 cFrom = new C1
         {
             A = 12,
             B = "testestest",
             C = [1, 2, 3]
         };
 
-        var cTo = new C2
+        C2 cTo = new C2
         {
             A = 11,
             D = 42.3m
         };
 
-        var cToRef = cTo;
+        C2 cToRef = cTo;
 
         if (isDeep)
             cFrom.DeepCloneTo(cTo);
@@ -479,9 +479,9 @@ public class CopyToObjectSpec
     [Test]
     public void Class_With_Subclass_Should_Be_Shallow_CLoned()
     {
-        var c1 = new C1 { A = 12 };
-        var cFrom = new C3 { A = c1, B = c1 };
-        var cTo = cFrom.ShallowCloneTo(new C3());
+        C1 c1 = new C1 { A = 12 };
+        C3 cFrom = new C3 { A = c1, B = c1 };
+        C3 cTo = cFrom.ShallowCloneTo(new C3());
         Assert.That(ReferenceEquals(cFrom.A, cTo.A), Is.True);
         Assert.That(ReferenceEquals(cFrom.B, cTo.B), Is.True);
         Assert.That(ReferenceEquals(cTo.A, cTo.B), Is.True);
@@ -490,9 +490,9 @@ public class CopyToObjectSpec
     [Test]
     public void Class_With_Subclass_Should_Be_Deep_CLoned()
     {
-        var c1 = new C1 { A = 12 };
-        var cFrom = new C3 { A = c1, B = c1 };
-        var cTo = cFrom.DeepCloneTo(new C3());
+        C1 c1 = new C1 { A = 12 };
+        C3 cFrom = new C3 { A = c1, B = c1 };
+        C3 cTo = cFrom.DeepCloneTo(new C3());
         Assert.That(ReferenceEquals(cFrom.A, cTo.A), Is.False);
         Assert.That(ReferenceEquals(cFrom.B, cTo.B), Is.False);
         Assert.That(ReferenceEquals(cTo.A, cTo.B), Is.True);
@@ -503,7 +503,7 @@ public class CopyToObjectSpec
     [TestCase(true)]
     public void Copy_To_Null_Should_Return_Null(bool isDeep)
     {
-        var c1 = new C1();
+        C1 c1 = new C1();
         if (isDeep)
             Assert.That(c1.DeepCloneTo((C1)null), Is.Null);
         else
@@ -545,7 +545,7 @@ public class CopyToObjectSpec
     {
         S1 sFrom = new S1 { A = 42 };
         S1 sTo = new S1();
-        var objTo = (I1)sTo;
+        I1? objTo = (I1)sTo;
         objTo.A = 23;
         if (isDeep)
             // ReSharper disable once ExpressionIsAlwaysNull
@@ -558,8 +558,8 @@ public class CopyToObjectSpec
     [Test]
     public void String_Should_Not_Be_Cloned()
     {
-        var s1 = "abc";
-        var s2 = "def";
+        string s1 = "abc";
+        string s2 = "def";
         Assert.Throws<InvalidOperationException>(() => s1.ShallowCloneTo(s2));
     }
 
@@ -568,8 +568,8 @@ public class CopyToObjectSpec
     [TestCase(true)]
     public void Array_Should_Be_Cloned_Correct_Size(bool isDeep)
     {
-        var arrFrom = new[] { 1, 2, 3 };
-        var arrTo = new[] { 4, 5, 6 };
+        int[] arrFrom = new[] { 1, 2, 3 };
+        int[] arrTo = new[] { 4, 5, 6 };
         if (isDeep) arrFrom.DeepCloneTo(arrTo);
         else arrFrom.ShallowCloneTo(arrTo);
         Assert.That(arrTo.Length, Is.EqualTo(3));
@@ -583,8 +583,8 @@ public class CopyToObjectSpec
     [TestCase(true)]
     public void Array_Should_Be_Cloned_From_Is_Bigger(bool isDeep)
     {
-        var arrFrom = new[] { 1, 2, 3 };
-        var arrTo = new[] { 4, 5 };
+        int[] arrFrom = new[] { 1, 2, 3 };
+        int[] arrTo = new[] { 4, 5 };
         if (isDeep) arrFrom.DeepCloneTo(arrTo);
         else arrFrom.ShallowCloneTo(arrTo);
         Assert.That(arrTo.Length, Is.EqualTo(2));
@@ -597,8 +597,8 @@ public class CopyToObjectSpec
     [TestCase(true)]
     public void Array_Should_Be_Cloned_From_Is_Smaller(bool isDeep)
     {
-        var arrFrom = new[] { 1, 2 };
-        var arrTo = new[] { 4, 5, 6 };
+        int[] arrFrom = new[] { 1, 2 };
+        int[] arrTo = new[] { 4, 5, 6 };
         if (isDeep) arrFrom.DeepCloneTo(arrTo);
         else arrFrom.ShallowCloneTo(arrTo);
         Assert.That(arrTo.Length, Is.EqualTo(3));
@@ -610,9 +610,9 @@ public class CopyToObjectSpec
     [Test]
     public void Shallow_Array_Should_Be_Cloned()
     {
-        var c1 = new C1();
-        var arrFrom = new[] { c1, c1, c1 };
-        var arrTo = new C1[4];
+        C1 c1 = new C1();
+        C1[] arrFrom = new[] { c1, c1, c1 };
+        C1[] arrTo = new C1[4];
         arrFrom.ShallowCloneTo(arrTo);
         Assert.That(arrTo.Length, Is.EqualTo(4));
         Assert.That(arrTo[0], Is.EqualTo(c1));
@@ -624,10 +624,10 @@ public class CopyToObjectSpec
     [Test]
     public void Deep_Array_Should_Be_Cloned()
     {
-        var c1 = new C4();
-        var c3 = new C3 { A = c1, B = c1 };
-        var arrFrom = new[] { c3, c3, c3 };
-        var arrTo = new C3[4];
+        C4 c1 = new C4();
+        C3 c3 = new C3 { A = c1, B = c1 };
+        C3[] arrFrom = new[] { c3, c3, c3 };
+        C3[] arrTo = new C3[4];
         arrFrom.DeepCloneTo(arrTo);
         Assert.That(arrTo.Length, Is.EqualTo(4));
 #pragma warning disable NUnit2021 // Incompatible types for EqualTo constraint
@@ -645,11 +645,11 @@ public class CopyToObjectSpec
     [TestCase(true)]
     public void Non_Zero_Based_Array_Should_Be_Cloned(bool isDeep)
     {
-        var arrFrom = Array.CreateInstance(typeof(int),
+        Array arrFrom = Array.CreateInstance(typeof(int),
             [2],
             [1]);
         // with offset. its ok
-        var arrTo = Array.CreateInstance(typeof(int),
+        Array arrTo = Array.CreateInstance(typeof(int),
             [2],
             [0]);
         arrFrom.SetValue(1, 1);
@@ -666,11 +666,11 @@ public class CopyToObjectSpec
     [TestCase(true)]
     public void MultiDim_Array_Should_Be_Cloned(bool isDeep)
     {
-        var arrFrom = Array.CreateInstance(typeof(int),
+        Array arrFrom = Array.CreateInstance(typeof(int),
             [2, 2],
             [1, 1]);
         // with offset. its ok
-        var arrTo = Array.CreateInstance(typeof(int),
+        Array arrTo = Array.CreateInstance(typeof(int),
             [1, 1],
             [0, 0]);
         arrFrom.SetValue(1, 1, 1);
@@ -686,9 +686,9 @@ public class CopyToObjectSpec
     [TestCase(true)]
     public void TwoDim_Array_Should_Be_Cloned(bool isDeep)
     {
-        var arrFrom = new[,] { { 1, 2 }, { 3, 4 } };
+        int[,] arrFrom = new[,] { { 1, 2 }, { 3, 4 } };
         // with offset. its ok
-        var arrTo = new int[3, 1];
+        int[,] arrTo = new int[3, 1];
         if (isDeep) arrFrom.DeepCloneTo(arrTo);
         else arrFrom.ShallowCloneTo(arrTo);
         Assert.That(arrTo[0, 0], Is.EqualTo(1));
@@ -708,16 +708,16 @@ public class CopyToObjectSpec
         const int cnt1 = 4;
         const int cnt2 = 5;
         const int cnt3 = 6;
-        var arr = new int[cnt1, cnt2, cnt3];
-        for (var i1 = 0; i1 < cnt1; i1++)
-            for (var i2 = 0; i2 < cnt2; i2++)
-                for (var i3 = 0; i3 < cnt3; i3++)
+        int[,,] arr = new int[cnt1, cnt2, cnt3];
+        for (int i1 = 0; i1 < cnt1; i1++)
+            for (int i2 = 0; i2 < cnt2; i2++)
+                for (int i3 = 0; i3 < cnt3; i3++)
                     arr[i1, i2, i3] = i1 * 100 + i2 * 10 + i3;
-        var clone = arr.DeepCloneTo(new int[cnt1, cnt2, cnt3]);
+        int[,,] clone = arr.DeepCloneTo(new int[cnt1, cnt2, cnt3]);
         Assert.That(ReferenceEquals(arr, clone), Is.False);
-        for (var i1 = 0; i1 < cnt1; i1++)
-            for (var i2 = 0; i2 < cnt2; i2++)
-                for (var i3 = 0; i3 < cnt3; i3++)
+        for (int i1 = 0; i1 < cnt1; i1++)
+            for (int i2 = 0; i2 < cnt2; i2++)
+                for (int i3 = 0; i3 < cnt3; i3++)
                     Assert.That(arr[i1, i2, i3], Is.EqualTo(i1 * 100 + i2 * 10 + i3));
     }
 
@@ -740,17 +740,17 @@ public class CopyToObjectSpec
     [Test]
     public void Shallow_Clone_Of_MultiDim_Array_Should_Not_Perform_Deep()
     {
-        var c1 = new C1();
-        var arrFrom = new[,] { { c1, c1 }, { c1, c1 } };
+        C1 c1 = new C1();
+        C1[,] arrFrom = new[,] { { c1, c1 }, { c1, c1 } };
         // with offset. its ok
-        var arrTo = new C1[3, 1];
+        C1[,] arrTo = new C1[3, 1];
         arrFrom.ShallowCloneTo(arrTo);
         Assert.That(ReferenceEquals(c1, arrTo[0, 0]), Is.True);
         Assert.That(ReferenceEquals(c1, arrTo[1, 0]), Is.True);
 
-        var arrFrom2 = new C1[1, 1, 1];
+        C1[,,] arrFrom2 = new C1[1, 1, 1];
         arrFrom2[0, 0, 0] = c1;
-        var arrTo2 = new C1[1, 1, 1];
+        C1[,,] arrTo2 = new C1[1, 1, 1];
         arrFrom2.ShallowCloneTo(arrTo2);
         Assert.That(ReferenceEquals(c1, arrTo2[0, 0, 0]), Is.True);
     }
@@ -758,18 +758,18 @@ public class CopyToObjectSpec
     [Test]
     public void Deep_Clone_Of_MultiDim_Array_Should_Perform_Deep()
     {
-        var c1 = new C1();
-        var arrFrom = new[,] { { c1, c1 }, { c1, c1 } };
+        C1 c1 = new C1();
+        C1[,] arrFrom = new[,] { { c1, c1 }, { c1, c1 } };
         // with offset. its ok
-        var arrTo = new C1[3, 1];
+        C1[,] arrTo = new C1[3, 1];
         arrFrom.DeepCloneTo(arrTo);
         Assert.That(ReferenceEquals(c1, arrTo[0, 0]), Is.False);
         Assert.That(ReferenceEquals(arrTo[0, 0], arrTo[1, 0]), Is.True);
 
-        var arrFrom2 = new C1[1, 1, 2];
+        C1[,,] arrFrom2 = new C1[1, 1, 2];
         arrFrom2[0, 0, 0] = c1;
         arrFrom2[0, 0, 1] = c1;
-        var arrTo2 = new C1[1, 1, 2];
+        C1[,,] arrTo2 = new C1[1, 1, 2];
         arrFrom2.DeepCloneTo(arrTo2);
         Assert.That(ReferenceEquals(c1, arrTo2[0, 0, 0]), Is.False);
         Assert.That(ReferenceEquals(arrTo2[0, 0, 1], arrTo2[0, 0, 0]), Is.True);
@@ -778,8 +778,8 @@ public class CopyToObjectSpec
     [Test]
     public void Dictionary_Should_Be_Deeply_Cloned()
     {
-        var d1 = new Dictionary<string, string>{ { "A", "B" }, { "C", "D" } };
-        var d2 = new Dictionary<string, string>();
+        Dictionary<string, string> d1 = new Dictionary<string, string>{ { "A", "B" }, { "C", "D" } };
+        Dictionary<string, string> d2 = new Dictionary<string, string>();
         d1.DeepCloneTo(d2);
         d1["A"] = "E";
         Assert.That(d2.Count, Is.EqualTo(2));
@@ -788,7 +788,7 @@ public class CopyToObjectSpec
 
         // big dictionary
         d1.Clear();
-        for (var i = 0; i < 1000; i++)
+        for (int i = 0; i < 1000; i++)
             d1[i.ToString()] = i.ToString();
         d1.DeepCloneTo(d2);
         Assert.That(d2.Count, Is.EqualTo(1000));
@@ -814,8 +814,8 @@ public class CopyToObjectSpec
     [Test]
     public void Inner_Implementation_In_Class_Should_Work()
     {
-        var baseObject = new D1 { A = 12 };
-        var wrapper = new D2(baseObject);
+        D1 baseObject = new D1 { A = 12 };
+        D2 wrapper = new D2(baseObject);
         Assert.That(wrapper.A, Is.EqualTo(12));
         Assert.That(wrapper.B, Is.EqualTo(14));
     }

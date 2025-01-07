@@ -19,7 +19,7 @@ internal static class DeepClonerCache
         // return _typeCache.GetOrAdd(type, x => adder(x));
 
         // this implementation is slightly faster than getoradd
-        if (_typeCache.TryGetValue(type, out var value)) return value;
+        if (_typeCache.TryGetValue(type, out object? value)) return value;
 
         value = _typeCache.GetOrAdd(type, t => adder(t));
         return value;
@@ -27,7 +27,7 @@ internal static class DeepClonerCache
 
     public static object GetOrAddDeepClassTo<T>(Type type, Func<Type, T> adder)
     {
-        if (_typeCacheDeepTo.TryGetValue(type, out var value)) return value;
+        if (_typeCacheDeepTo.TryGetValue(type, out object? value)) return value;
 
         value = _typeCacheDeepTo.GetOrAdd(type, t => adder(t));
         return value;
@@ -35,7 +35,7 @@ internal static class DeepClonerCache
 
     public static object GetOrAddShallowClassTo<T>(Type type, Func<Type, T> adder)
     {
-        if (_typeCacheShallowTo.TryGetValue(type, out var value)) return value;
+        if (_typeCacheShallowTo.TryGetValue(type, out object? value)) return value;
 
         value = _typeCacheShallowTo.GetOrAdd(type, t => adder(t));
         return value;
@@ -46,7 +46,7 @@ internal static class DeepClonerCache
         // return _typeCache.GetOrAdd(type, x => adder(x));
 
         // this implementation is slightly faster than getoradd
-        if (_structAsObjectCache.TryGetValue(type, out var value)) return value;
+        if (_structAsObjectCache.TryGetValue(type, out object? value)) return value;
 
         value = _structAsObjectCache.GetOrAdd(type, t => adder(t));
         return value;

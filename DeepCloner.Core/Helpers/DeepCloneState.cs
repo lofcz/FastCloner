@@ -14,7 +14,7 @@ internal class DeepCloneState
     {
         // this is faster than call Dictionary from begin
         // also, small poco objects does not have a lot of references
-        var baseFromTo = _baseFromTo;
+        object[]? baseFromTo = _baseFromTo;
         if (ReferenceEquals(from, baseFromTo[0])) return baseFromTo[3];
         if (ReferenceEquals(from, baseFromTo[1])) return baseFromTo[4];
         if (ReferenceEquals(from, baseFromTo[2])) return baseFromTo[5];
@@ -65,9 +65,9 @@ internal class DeepCloneState
         {
             if (_buckets != null)
             {
-                var hashCode = RuntimeHelpers.GetHashCode(key) & 0x7FFFFFFF;
-                var entries1 = _entries;
-                for (var i = _buckets[hashCode % _buckets.Length]; i >= 0; i = entries1[i].Next)
+                int hashCode = RuntimeHelpers.GetHashCode(key) & 0x7FFFFFFF;
+                Entry[]? entries1 = _entries;
+                for (int i = _buckets[hashCode % _buckets.Length]; i >= 0; i = entries1[i].Next)
                 {
                     if (entries1[i].HashCode == hashCode && ReferenceEquals(entries1[i].Key, key))
                         return entries1[i].Value;
@@ -88,15 +88,15 @@ internal class DeepCloneState
 
         private static int GetPrime(int min)
         {
-            for (var i = 0; i < _primes.Length; i++)
+            for (int i = 0; i < _primes.Length; i++)
             {
-                var prime = _primes[i];
+                int prime = _primes[i];
                 if (prime >= min) return prime;
             }
 
             //outside of our predefined table.
             //compute the hard way.
-            for (var i = min | 1; i < int.MaxValue; i += 2)
+            for (int i = min | 1; i < int.MaxValue; i += 2)
             {
                 if (IsPrime(i) && (i - 1) % 101 != 0)
                     return i;
@@ -109,8 +109,8 @@ internal class DeepCloneState
         {
             if ((candidate & 1) != 0)
             {
-                var limit = (int)Math.Sqrt(candidate);
-                for (var divisor = 3; divisor <= limit; divisor += 2)
+                int limit = (int)Math.Sqrt(candidate);
+                for (int divisor = 3; divisor <= limit; divisor += 2)
                 {
                     if ((candidate % divisor) == 0)
                         return false;
@@ -124,7 +124,7 @@ internal class DeepCloneState
 
         private static int ExpandPrime(int oldSize)
         {
-            var newSize = 2 * oldSize;
+            int newSize = 2 * oldSize;
 
             if ((uint)newSize > 0x7FEFFFFD && 0x7FEFFFFD > oldSize)
             {
@@ -145,10 +145,10 @@ internal class DeepCloneState
         public void Insert(object key, object value)
         {
             if (_buckets == null) Initialize(0);
-            var hashCode = RuntimeHelpers.GetHashCode(key) & 0x7FFFFFFF;
-            var targetBucket = hashCode % _buckets.Length;
+            int hashCode = RuntimeHelpers.GetHashCode(key) & 0x7FFFFFFF;
+            int targetBucket = hashCode % _buckets.Length;
 
-            var entries1 = _entries;
+            Entry[]? entries1 = _entries;
 
             if (_count == entries1.Length)
             {
@@ -157,7 +157,7 @@ internal class DeepCloneState
                 targetBucket = hashCode % _buckets.Length;
             }
 
-            var index = _count;
+            int index = _count;
             _count++;
 
             entries1[index].HashCode = hashCode;
@@ -171,17 +171,17 @@ internal class DeepCloneState
 
         private void Resize(int newSize)
         {
-            var newBuckets = new int[newSize];
+            int[]? newBuckets = new int[newSize];
             for (int i = 0; i < newBuckets.Length; i++)
                 newBuckets[i] = -1;
-            var newEntries = new Entry[newSize];
+            Entry[]? newEntries = new Entry[newSize];
             Array.Copy(_entries, 0, newEntries, 0, _count);
 
-            for (var i = 0; i < _count; i++)
+            for (int i = 0; i < _count; i++)
             {
                 if (newEntries[i].HashCode >= 0)
                 {
-                    var bucket = newEntries[i].HashCode % newSize;
+                    int bucket = newEntries[i].HashCode % newSize;
                     newEntries[i].Next = newBuckets[bucket];
                     newBuckets[bucket] = i;
                 }

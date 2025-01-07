@@ -1,4 +1,5 @@
 ﻿using System.Linq.Expressions;
+using System.Reflection;
 
 namespace DeepCloner.Core.Helpers;
 
@@ -27,9 +28,9 @@ public abstract class ShallowObjectCloner
 
         static ShallowSafeObjectCloner()
         {
-            var methodInfo = typeof(object).GetPrivateMethod(nameof(MemberwiseClone));
-            var p = Expression.Parameter(typeof(object));
-            var mce = Expression.Call(p, methodInfo);
+            MethodInfo? methodInfo = typeof(object).GetPrivateMethod(nameof(MemberwiseClone));
+            ParameterExpression? p = Expression.Parameter(typeof(object));
+            MethodCallExpression? mce = Expression.Call(p, methodInfo);
             _cloneFunc = Expression.Lambda<Func<object, object>>(mce, p).Compile();
         }
 

@@ -17,8 +17,8 @@ public class SpecificScenariosTest
     [Test]
     public void Test_ExpressionTree_OrderBy1()
     {
-        var q = Enumerable.Range(1, 5).Reverse().AsQueryable().OrderBy(x => x);
-        var q2 = q.DeepClone();
+        IOrderedQueryable<int> q = Enumerable.Range(1, 5).Reverse().AsQueryable().OrderBy(x => x);
+        IOrderedQueryable<int> q2 = q.DeepClone();
         Assert.That(q2.ToArray()[0], Is.EqualTo(1));
         Assert.That(q.ToArray().Length, Is.EqualTo(5));
     }
@@ -26,9 +26,9 @@ public class SpecificScenariosTest
     [Test]
     public void Test_ExpressionTree_OrderBy2()
     {
-        var l = new List<int> { 2, 1, 3, 4, 5 }.Select(y => new Tuple<int, string>(y, y.ToString(CultureInfo.InvariantCulture)));
-        var q = l.AsQueryable().OrderBy(x => x.Item1);
-        var q2 = q.DeepClone();
+        IEnumerable<Tuple<int, string>> l = new List<int> { 2, 1, 3, 4, 5 }.Select(y => new Tuple<int, string>(y, y.ToString(CultureInfo.InvariantCulture)));
+        IOrderedQueryable<Tuple<int, string>> q = l.AsQueryable().OrderBy(x => x.Item1);
+        IOrderedQueryable<Tuple<int, string>> q2 = q.DeepClone();
         Assert.That(q2.ToArray()[0].Item1, Is.EqualTo(1));
         Assert.That(q.ToArray().Length, Is.EqualTo(5));
     }
@@ -37,12 +37,12 @@ public class SpecificScenariosTest
     [Ignore("Test on MS Server")]
     public void Clone_EfQuery1()
     {
-        var at = new AdventureContext();
+        AdventureContext at = new AdventureContext();
         // var at2 = at.DeepClone();
         // Console.WriteLine(at.ChangeTracker);
         // Console.WriteLine(at.ChangeTracker);
-        var q = at.Currencies.Where(x => x.CurrencyCode == "AUD");
-        var q2 = q.DeepClone();
+        IQueryable<Currency> q = at.Currencies.Where(x => x.CurrencyCode == "AUD");
+        IQueryable<Currency> q2 = q.DeepClone();
 #if !OLDFRAMEWORK
             // Console.WriteLine(Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions
             //	.GetRequiredService<Microsoft.EntityFrameworkCore.ChangeTracking.Internal.IChangeTrackerFactory>(
@@ -65,9 +65,9 @@ public class SpecificScenariosTest
     [Ignore("Test on MS Server")]
     public void Clone_EfQuery2()
     {
-        var q = new AdventureContext().Currencies.OrderBy(x => x.Name);
-        var q2 = q.DeepClone();
-        var cnt = q.Count();
+        IOrderedQueryable<Currency> q = new AdventureContext().Currencies.OrderBy(x => x.Name);
+        IOrderedQueryable<Currency> q2 = q.DeepClone();
+        int cnt = q.Count();
         Assert.That(q2.Count(), Is.EqualTo(cnt));
     }
 
@@ -99,9 +99,9 @@ public class SpecificScenariosTest
     [Test]
     public void Lazy_Clone()
     {
-        var lazy = new LazyClass();
-        var clone = lazy.DeepClone();
-        var v = LazyClass.Counter;
+        LazyClass lazy = new LazyClass();
+        LazyClass clone = lazy.DeepClone();
+        int v = LazyClass.Counter;
         Assert.That(clone.GetValue(), Is.EqualTo((v + 1).ToString(CultureInfo.InvariantCulture)));
         Assert.That(lazy.GetValue(), Is.EqualTo((v + 2).ToString(CultureInfo.InvariantCulture)));
     }
@@ -144,7 +144,7 @@ public class SpecificScenariosTest
     [Test]
     public void GenericComparer_Clone()
     {
-        var comparer = new TestComparer();
+        TestComparer comparer = new TestComparer();
         comparer.DeepClone();
     }
 
@@ -153,7 +153,7 @@ public class SpecificScenariosTest
     {
         int a = 0;
         Func<int> f = () => ++a;
-        var fCopy = f.DeepClone();
+        Func<int> fCopy = f.DeepClone();
         Assert.That(f(), Is.EqualTo(1));
         Assert.That(fCopy(), Is.EqualTo(1));
         Assert.That(a, Is.EqualTo(1));

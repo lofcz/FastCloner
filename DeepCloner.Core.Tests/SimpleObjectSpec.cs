@@ -1,5 +1,6 @@
 ﻿using DeepCloner.Core.Tests.Objects;
 using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
 
 namespace DeepCloner.Core.Tests;
 
@@ -9,9 +10,9 @@ public class SimpleObjectSpec
     [Test]
     public void SimpleObject_Should_Be_Cloned()
     {
-        var obj = new TestObject1 { Int = 42, Byte = 42, Short = 42, Long = 42, DateTime = new DateTime(2001, 01, 01), Char = 'X', Decimal = 1.2m, Double = 1.3, Float = 1.4f, String = "test1", UInt = 42, ULong = 42, UShort = 42, Bool = true, IntPtr = new IntPtr(42), UIntPtr = new UIntPtr(42), Enum = AttributeTargets.Delegate };
+        TestObject1 obj = new TestObject1 { Int = 42, Byte = 42, Short = 42, Long = 42, DateTime = new DateTime(2001, 01, 01), Char = 'X', Decimal = 1.2m, Double = 1.3, Float = 1.4f, String = "test1", UInt = 42, ULong = 42, UShort = 42, Bool = true, IntPtr = new IntPtr(42), UIntPtr = new UIntPtr(42), Enum = AttributeTargets.Delegate };
 
-        var cloned = obj.DeepClone();
+        TestObject1 cloned = obj.DeepClone();
         Assert.That(cloned.Byte, Is.EqualTo(42));
         Assert.That(cloned.Short, Is.EqualTo(42));
         Assert.That(cloned.UShort, Is.EqualTo(42));
@@ -49,16 +50,16 @@ public class SimpleObjectSpec
     [Test(Description = "We have an special logic for simple structs, so, this test checks that this logic works correctly")]
     public void SimpleStruct_Should_Be_Cloned()
     {
-        var s1 = new S1 { A = 1 };
-        var cloned = s1.DeepClone();
+        S1 s1 = new S1 { A = 1 };
+        S1 cloned = s1.DeepClone();
         Assert.That(cloned.A, Is.EqualTo(1));
     }
 
     [Test(Description = "We have an special logic for simple structs, so, this test checks that this logic works correctly")]
     public void Simple_Struct_With_Child_Should_Be_Cloned()
     {
-        var s1 = new S2 { S = new S3 { B = true } };
-        var cloned = s1.DeepClone();
+        S2 s1 = new S2 { S = new S3 { B = true } };
+        S2 cloned = s1.DeepClone();
         Assert.That(cloned.S.B, Is.EqualTo(true));
     }
 
@@ -72,8 +73,8 @@ public class SimpleObjectSpec
     [Test]
     public void Nullable_Shoild_Be_Cloned()
     {
-        var c = new ClassWithNullable { B = 42 };
-        var cloned = c.DeepClone();
+        ClassWithNullable c = new ClassWithNullable { B = 42 };
+        ClassWithNullable cloned = c.DeepClone();
         Assert.That(cloned.A, Is.Null);
         Assert.That(cloned.B, Is.EqualTo(42));
     }
@@ -95,9 +96,9 @@ public class SimpleObjectSpec
     [Test]
     public void Class_Should_Be_Cloned()
     {
-        var c1 = new C1();
+        C1 c1 = new C1();
         c1.C = new C2();
-        var cloned = c1.DeepClone();
+        C1 cloned = c1.DeepClone();
         Assert.That(cloned.C, Is.Not.Null);
         Assert.That(cloned.C, Is.Not.EqualTo(c1.C));
     }
@@ -112,10 +113,10 @@ public class SimpleObjectSpec
     [Test]
     public void StructWithClass_Should_Be_Cloned()
     {
-        var c1 = new S4();
+        S4 c1 = new S4();
         c1.F = 1;
         c1.C = new C2();
-        var cloned = c1.DeepClone();
+        S4 cloned = c1.DeepClone();
         c1.F = 2;
         Assert.That(cloned.C, Is.Not.Null);
         Assert.That(cloned.F, Is.EqualTo(1));
@@ -132,7 +133,7 @@ public class SimpleObjectSpec
         Assert.That(DateTime.MinValue.DeepClone(), Is.EqualTo(DateTime.MinValue));
         Assert.That(AttributeTargets.Delegate.DeepClone(), Is.EqualTo(AttributeTargets.Delegate));
         Assert.That(((object)null).DeepClone(), Is.Null);
-        var obj = new object();
+        object obj = new object();
         Assert.That(obj.DeepClone(), Is.Not.Null);
         Assert.That(true.DeepClone(), Is.True);
         Assert.That(((object)true).DeepClone(), Is.True);
@@ -143,7 +144,7 @@ public class SimpleObjectSpec
     [Test]
     public void Guid_Should_Be_Cloned()
     {
-        var g = Guid.NewGuid();
+        Guid g = Guid.NewGuid();
         Assert.That(g.DeepClone(), Is.EqualTo(g));
     }
 
@@ -159,16 +160,16 @@ public class SimpleObjectSpec
     [Test]
     public void Unsafe_Should_Be_Cloned()
     {
-        var u = new UnsafeObject();
-        var i = 1;
-        var j = 2;
+        UnsafeObject u = new UnsafeObject();
+        int i = 1;
+        int j = 2;
         unsafe
         {
             u.Int = &i;
             u.Void = &i;
         }
 
-        var cloned = u.DeepClone();
+        UnsafeObject cloned = u.DeepClone();
         unsafe
         {
             u.Int = &j;
@@ -180,8 +181,8 @@ public class SimpleObjectSpec
     [Test]
     public void String_In_Class_Should_Not_Be_Cloned()
     {
-        var c = new C3 { X = "aaa" };
-        var cloned = c.DeepClone();
+        C3 c = new C3 { X = "aaa" };
+        C3 cloned = c.DeepClone();
         Assert.That(cloned.X, Is.EqualTo(c.X));
         Assert.That(ReferenceEquals(cloned.X, c.X), Is.True);
     }
@@ -209,8 +210,8 @@ public class SimpleObjectSpec
     [Test]
     public void Object_With_Readonly_Fields_Should_Be_Cloned()
     {
-        var c = new C6();
-        var clone = c.DeepClone();
+        C6 c = new C6();
+        C6 clone = c.DeepClone();
         Assert.That(clone, Is.Not.EqualTo(c));
         Assert.That(clone.X, Is.EqualTo(1));
         Assert.That(clone.GetY(), Is.Not.Null);
@@ -236,12 +237,12 @@ public class SimpleObjectSpec
     [Test(Description = "Nothings special, just for checking")]
     public void Class_With_Virtual_Methods_Should_Be_Cloned()
     {
-        var v2 = new VirtualClass2();
+        VirtualClass2 v2 = new VirtualClass2();
         v2.A = 1;
         v2.B = 2;
         VirtualClass1 v1 = v2;
         v1.A = 3;
-        var clone = v1.DeepClone() as VirtualClass2;
+        VirtualClass2? clone = v1.DeepClone() as VirtualClass2;
         v2.B = 0;
         v2.A = 0;
         Assert.That(clone.B, Is.EqualTo(2));
@@ -251,7 +252,7 @@ public class SimpleObjectSpec
     [Test(Description = "DBNull is compared by value, so, we don't need to clone it")]
     public void DbNull_Should_Not_Be_Cloned()
     {
-        var v = DBNull.Value;
+        DBNull v = DBNull.Value;
         Assert.That(v == v.DeepClone(), Is.True);
         Assert.That(v == v.ShallowClone(), Is.True);
     }
@@ -264,7 +265,7 @@ public class SimpleObjectSpec
     // todo: think about another reasons
     public void Empty_Should_Not_Be_Cloned()
     {
-        var v = new EmptyClass();
+        EmptyClass v = new EmptyClass();
         Assert.That(ReferenceEquals(v, v.DeepClone()), Is.True);
         Assert.That(ReferenceEquals(v, v.ShallowClone()), Is.True);
     }
@@ -275,7 +276,7 @@ public class SimpleObjectSpec
 #if NETCORE13
             var v = GetType().GetTypeInfo().GetMethod("MethodInfo_Should_Not_Be_Cloned");
 #else
-        var v = GetType().GetMethod("MethodInfo_Should_Not_Be_Cloned");
+        MethodInfo? v = GetType().GetMethod("MethodInfo_Should_Not_Be_Cloned");
 #endif
         Assert.That(ReferenceEquals(v, v.DeepClone()), Is.True);
         Assert.That(ReferenceEquals(v, v.ShallowClone()), Is.True);
@@ -293,7 +294,7 @@ public class SimpleObjectSpec
     [Test]
     public void Readonly_Field_Should_Remain_ReadOnly()
     {
-        var c = new Readonly1("Z").DeepClone();
+        Readonly1 c = new Readonly1("Z").DeepClone();
         Assert.That(c.X, Is.EqualTo("Z"));
         Assert.That(typeof(Readonly1).GetField("X").IsInitOnly, Is.True);
     }
@@ -302,8 +303,8 @@ public class SimpleObjectSpec
     public void System_Type_Should_Not_Be_Cloned()
     {
         // it used for dictionaries as key. there are no sense to copy it
-        var t = GetType(); // RuntimeType
-        var clone = t.DeepClone();
+        Type t = GetType(); // RuntimeType
+        Type clone = t.DeepClone();
         Assert.That(ReferenceEquals(t, clone));
     }
 }

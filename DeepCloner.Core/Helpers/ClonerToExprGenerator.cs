@@ -19,15 +19,15 @@ internal static class ClonerToExprGenerator
             return GenerateProcessArrayMethod(type, isDeepClone);
         }
 
-        var methodType = typeof(object);
+        Type? methodType = typeof(object);
 
-        var expressionList = new List<Expression>();
+        List<Expression>? expressionList = new List<Expression>();
 
         ParameterExpression from = Expression.Parameter(methodType);
-        var fromLocal = from;
-        var to = Expression.Parameter(methodType);
-        var toLocal = to;
-        var state = Expression.Parameter(typeof(DeepCloneState));
+        ParameterExpression? fromLocal = from;
+        ParameterExpression? to = Expression.Parameter(methodType);
+        ParameterExpression? toLocal = to;
+        ParameterExpression? state = Expression.Parameter(typeof(DeepCloneState));
 
         // if (!type.IsValueType())
         {
@@ -47,7 +47,7 @@ internal static class ClonerToExprGenerator
         }
 
         List<FieldInfo> fi = [];
-        var tp = type;
+        Type? tp = type;
         do
         {
             if (tp == typeof(ContextBoundObject)) break;
@@ -57,15 +57,15 @@ internal static class ClonerToExprGenerator
         }
         while (tp != null);
 
-        foreach (var fieldInfo in fi)
+        foreach (FieldInfo? fieldInfo in fi)
         {
             if (isDeepClone && !DeepClonerSafeTypes.CanReturnSameObject(fieldInfo.FieldType))
             {
-                var methodInfo = fieldInfo.FieldType.IsValueType()
+                MethodInfo? methodInfo = fieldInfo.FieldType.IsValueType()
                     ? StaticMethodInfos.DeepClonerGeneratorMethods.CloneStructInternal.MakeGenericMethod(fieldInfo.FieldType)
                     : StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassInternal;
 
-                var get = Expression.Field(fromLocal, fieldInfo);
+                MemberExpression? get = Expression.Field(fromLocal, fieldInfo);
 
                 // toLocal.Field = Clone...Internal(fromLocal.Field)
                 Expression call = Expression.Call(methodInfo, get, state);
@@ -78,7 +78,7 @@ internal static class ClonerToExprGenerator
                 {
                     // var setMethod = fieldInfo.GetType().GetMethod("SetValue", new[] { typeof(object), typeof(object) });
                     // expressionList.Add(Expression.Call(Expression.Constant(fieldInfo), setMethod, toLocal, call));
-                    var setMethod = typeof(DeepClonerExprGenerator).GetPrivateStaticMethod(nameof(DeepClonerExprGenerator.ForceSetField))!;
+                    MethodInfo? setMethod = typeof(DeepClonerExprGenerator).GetPrivateStaticMethod(nameof(DeepClonerExprGenerator.ForceSetField))!;
                     expressionList.Add(Expression.Call(setMethod, Expression.Constant(fieldInfo),
                                                        Expression.Convert(toLocal, typeof(object)), Expression.Convert(call, typeof(object))));
                 }
@@ -95,9 +95,9 @@ internal static class ClonerToExprGenerator
 
         expressionList.Add(Expression.Convert(toLocal, methodType));
 
-        var funcType = typeof(Func<,,,>).MakeGenericType(methodType, methodType, typeof(DeepCloneState), methodType);
+        Type? funcType = typeof(Func<,,,>).MakeGenericType(methodType, methodType, typeof(DeepCloneState), methodType);
 
-        var blockParams = new List<ParameterExpression>();
+        List<ParameterExpression>? blockParams = new List<ParameterExpression>();
         if (from != fromLocal) blockParams.Add(fromLocal);
         if (to != toLocal) blockParams.Add(toLocal);
 
@@ -106,31 +106,31 @@ internal static class ClonerToExprGenerator
 
     private static object GenerateProcessArrayMethod(Type type, bool isDeep)
     {
-        var elementType = type.GetElementType()!;
-        var rank = type.GetArrayRank();
+        Type? elementType = type.GetElementType()!;
+        int rank = type.GetArrayRank();
 
         ParameterExpression from = Expression.Parameter(typeof(object));
         ParameterExpression to = Expression.Parameter(typeof(object));
-        var state = Expression.Parameter(typeof(DeepCloneState));
+        ParameterExpression? state = Expression.Parameter(typeof(DeepCloneState));
 
-        var funcType = typeof(Func<,,,>).MakeGenericType(typeof(object), typeof(object), typeof(DeepCloneState), typeof(object));
+        Type? funcType = typeof(Func<,,,>).MakeGenericType(typeof(object), typeof(object), typeof(DeepCloneState), typeof(object));
 
         if (rank == 1 && type == elementType.MakeArrayType())
         {
             if (!isDeep)
             {
-                var callS = Expression.Call(
+                MethodCallExpression? callS = Expression.Call(
                     typeof(ClonerToExprGenerator).GetPrivateStaticMethod(nameof(ShallowClone1DimArraySafeInternal))!
                                                                                     .MakeGenericMethod(elementType), Expression.Convert(from, type), Expression.Convert(to, type));
                 return Expression.Lambda(funcType, callS, from, to, state).Compile();
             }
             else
             {
-                var methodName = nameof(Clone1DimArrayClassInternal);
+                string? methodName = nameof(Clone1DimArrayClassInternal);
                 if (DeepClonerSafeTypes.CanReturnSameObject(elementType)) methodName = nameof(Clone1DimArraySafeInternal);
                 else if (elementType.IsValueType()) methodName = nameof(Clone1DimArrayStructInternal);
-                var methodInfo = typeof(ClonerToExprGenerator).GetPrivateStaticMethod(methodName)!.MakeGenericMethod(elementType);
-                var callS = Expression.Call(methodInfo, Expression.Convert(from, type), Expression.Convert(to, type), state);
+                MethodInfo? methodInfo = typeof(ClonerToExprGenerator).GetPrivateStaticMethod(methodName)!.MakeGenericMethod(elementType);
+                MethodCallExpression? callS = Expression.Call(methodInfo, Expression.Convert(from, type), Expression.Convert(to, type), state);
                 return Expression.Lambda(funcType, callS, from, to, state).Compile();
             }
         }
@@ -143,7 +143,7 @@ internal static class ClonerToExprGenerator
             else
                 methodInfo = typeof(ClonerToExprGenerator).GetPrivateStaticMethod(nameof(CloneAbstractArrayInternal))!;
 
-            var callS = Expression.Call(methodInfo, Expression.Convert(from, type), Expression.Convert(to, type), state, Expression.Constant(isDeep));
+            MethodCallExpression? callS = Expression.Call(methodInfo, Expression.Convert(from, type), Expression.Convert(to, type), state, Expression.Constant(isDeep));
             return Expression.Lambda(funcType, callS, from, to, state).Compile();
         }
     }
@@ -151,7 +151,7 @@ internal static class ClonerToExprGenerator
     // when we can't use code generation, we can use these methods
     internal static T[] ShallowClone1DimArraySafeInternal<T>(T[] objFrom, T[] objTo)
     {
-        var l = Math.Min(objFrom.Length, objTo.Length);
+        int l = Math.Min(objFrom.Length, objTo.Length);
         Array.Copy(objFrom, objTo, l);
         return objTo;
     }
@@ -159,7 +159,7 @@ internal static class ClonerToExprGenerator
     // when we can't use code generation, we can use these methods
     internal static T[] Clone1DimArraySafeInternal<T>(T[] objFrom, T[] objTo, DeepCloneState state)
     {
-        var l = Math.Min(objFrom.Length, objTo.Length);
+        int l = Math.Min(objFrom.Length, objTo.Length);
         state.AddKnownRef(objFrom, objTo);
         Array.Copy(objFrom, objTo, l);
         return objTo;
@@ -169,10 +169,10 @@ internal static class ClonerToExprGenerator
     {
         // not null from called method, but will check it anyway
         if (objFrom == null || objTo == null) return null;
-        var l = Math.Min(objFrom.Length, objTo.Length);
+        int l = Math.Min(objFrom.Length, objTo.Length);
         state.AddKnownRef(objFrom, objTo);
-        var cloner = DeepClonerGenerator.GetClonerForValueType<T>();
-        for (var i = 0; i < l; i++)
+        Func<T, DeepCloneState, T>? cloner = DeepClonerGenerator.GetClonerForValueType<T>();
+        for (int i = 0; i < l; i++)
             objTo[i] = cloner(objTo[i], state);
 
         return objTo;
@@ -182,9 +182,9 @@ internal static class ClonerToExprGenerator
     {
         // not null from called method, but will check it anyway
         if (objFrom == null || objTo == null) return null;
-        var l = Math.Min(objFrom.Length, objTo.Length);
+        int l = Math.Min(objFrom.Length, objTo.Length);
         state.AddKnownRef(objFrom, objTo);
-        for (var i = 0; i < l; i++)
+        for (int i = 0; i < l; i++)
             objTo[i] = (T)DeepClonerGenerator.CloneClassInternal(objFrom[i], state)!;
 
         return objTo;
@@ -198,8 +198,8 @@ internal static class ClonerToExprGenerator
                                           || objTo.GetLowerBound(0) != 0 || objTo.GetLowerBound(1) != 0)
             return (T[,]) CloneAbstractArrayInternal(objFrom, objTo, state, isDeep);
 
-        var l1 = Math.Min(objFrom.GetLength(0), objTo.GetLength(0));
-        var l2 = Math.Min(objFrom.GetLength(1), objTo.GetLength(1));
+        int l1 = Math.Min(objFrom.GetLength(0), objTo.GetLength(0));
+        int l2 = Math.Min(objFrom.GetLength(1), objTo.GetLength(1));
         state.AddKnownRef(objFrom, objTo);
         if ((!isDeep || DeepClonerSafeTypes.CanReturnSameObject(typeof(T)))
             && objFrom.GetLength(0) == objTo.GetLength(0)
@@ -211,23 +211,23 @@ internal static class ClonerToExprGenerator
 
         if (!isDeep)
         {
-            for (var i = 0; i < l1; i++)
-                for (var k = 0; k < l2; k++)
+            for (int i = 0; i < l1; i++)
+                for (int k = 0; k < l2; k++)
                     objTo[i, k] = objFrom[i, k];
             return objTo;
         }
 
         if (typeof(T).IsValueType())
         {
-            var cloner = DeepClonerGenerator.GetClonerForValueType<T>();
-            for (var i = 0; i < l1; i++)
-                for (var k = 0; k < l2; k++)
+            Func<T, DeepCloneState, T>? cloner = DeepClonerGenerator.GetClonerForValueType<T>();
+            for (int i = 0; i < l1; i++)
+                for (int k = 0; k < l2; k++)
                     objTo[i, k] = cloner(objFrom[i, k], state);
         }
         else
         {
-            for (var i = 0; i < l1; i++)
-                for (var k = 0; k < l2; k++)
+            for (int i = 0; i < l1; i++)
+                for (int k = 0; k < l2; k++)
                     objTo[i, k] = (T)DeepClonerGenerator.CloneClassInternal(objFrom[i, k], state)!;
         }
 
@@ -239,15 +239,15 @@ internal static class ClonerToExprGenerator
     {
         // not null from called method, but will check it anyway
         if (objFrom == null || objTo == null) return null;
-        var rank = objFrom.Rank;
+        int rank = objFrom.Rank;
 
         if (objTo.Rank != rank)
             throw new InvalidOperationException("Invalid rank of target array");
-        var lowerBoundsFrom = Enumerable.Range(0, rank).Select(objFrom.GetLowerBound).ToArray();
-        var lowerBoundsTo = Enumerable.Range(0, rank).Select(objTo.GetLowerBound).ToArray();
-        var lengths = Enumerable.Range(0, rank).Select(x => Math.Min(objFrom.GetLength(x), objTo.GetLength(x))).ToArray();
-        var idxesFrom = Enumerable.Range(0, rank).Select(objFrom.GetLowerBound).ToArray();
-        var idxesTo = Enumerable.Range(0, rank).Select(objTo.GetLowerBound).ToArray();
+        int[]? lowerBoundsFrom = Enumerable.Range(0, rank).Select(objFrom.GetLowerBound).ToArray();
+        int[]? lowerBoundsTo = Enumerable.Range(0, rank).Select(objTo.GetLowerBound).ToArray();
+        int[]? lengths = Enumerable.Range(0, rank).Select(x => Math.Min(objFrom.GetLength(x), objTo.GetLength(x))).ToArray();
+        int[]? idxesFrom = Enumerable.Range(0, rank).Select(objFrom.GetLowerBound).ToArray();
+        int[]? idxesTo = Enumerable.Range(0, rank).Select(objTo.GetLowerBound).ToArray();
 
         state.AddKnownRef(objFrom, objTo);
 
@@ -263,7 +263,7 @@ internal static class ClonerToExprGenerator
                         objFrom.GetValue(idxesFrom),
                         state)
                     : objFrom.GetValue(idxesFrom), idxesTo);
-            var ofs = rank - 1;
+            int ofs = rank - 1;
             while (true)
             {
                 idxesFrom[ofs]++;

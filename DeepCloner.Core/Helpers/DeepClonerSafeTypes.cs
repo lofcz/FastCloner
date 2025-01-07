@@ -39,7 +39,7 @@ internal static class DeepClonerSafeTypes
     static DeepClonerSafeTypes()
     {
         foreach (
-            var x in
+            Type? x in
             new[]
             {
                 Type.GetType("System.RuntimeType"),
@@ -51,7 +51,7 @@ internal static class DeepClonerSafeTypes
 
     private static bool CanReturnSameType(Type type, HashSet<Type>? processingTypes)
     {
-        if (KnownTypes.TryGetValue(type, out var isSafe))
+        if (KnownTypes.TryGetValue(type, out bool isSafe))
             return isSafe;
 
         // enums are safe
@@ -140,7 +140,7 @@ internal static class DeepClonerSafeTypes
         processingTypes.Add(type);
 
         List<FieldInfo> fi = [];
-        var tp = type;
+        Type? tp = type;
         do
         {
             fi.AddRange(tp.GetAllFields());
@@ -148,10 +148,10 @@ internal static class DeepClonerSafeTypes
         }
         while (tp != null);
 
-        foreach (var fieldInfo in fi)
+        foreach (FieldInfo fieldInfo in fi)
         {
             // type loop
-            var fieldType = fieldInfo.FieldType;
+            Type fieldType = fieldInfo.FieldType;
             if (processingTypes.Contains(fieldType))
                 continue;
 
