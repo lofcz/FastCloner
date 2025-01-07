@@ -3,6 +3,61 @@
 [TestFixture]
 public class CopyToObjectSpec
 {
+    [Test]
+    public void InterfaceTest()
+    {
+        SampleInterfaceClsWithProp source = new SampleInterfaceClsWithProp
+        {
+            ActivityData = new SampleActivityDataWithProp
+            {
+                Data = new SampleActivityParsedData
+                {
+                    Steps = new List<string> { "A", "B", "C" }
+                }
+            }
+        };
+
+        var to = source.DeepClone();
+        Assert.That(ReferenceEquals(source.ActivityData, to.ActivityData), Is.EqualTo(false));
+    }
+
+    public interface IActivityDataWithProp
+    {
+        int Test { get; set; }
+    }
+
+    public class SampleInterfaceClsWithProp
+    {
+        [Newtonsoft.Json.JsonIgnore]
+        public IActivityDataWithProp? ActivityData { get; set; }
+
+        public SampleInterfaceClsWithProp()
+        {
+
+        }
+
+        public SampleInterfaceClsWithProp(IActivityDataWithProp data)
+        {
+            SetActivityData(data);
+        }
+
+        public void SetActivityData(IActivityDataWithProp data)
+        {
+            ActivityData = data;
+        }
+    }
+
+    public class SampleActivityDataWithProp : IActivityDataWithProp
+    {
+        public int Test { get; set; } = 42;
+        public SampleActivityParsedData Data { get; set; }
+    }
+
+    public class SampleActivityParsedData
+    {
+        public List<string> Steps { get; set; } = new List<string>();
+    }
+
     public class C1
     {
         public int A { get; set; }
@@ -340,7 +395,7 @@ public class CopyToObjectSpec
                 for (var i3 = 0; i3 < cnt3; i3++)
                     Assert.That(arr[i1, i2, i3], Is.EqualTo(i1 * 100 + i2 * 10 + i3));
     }
-        
+
     [Test]
     public void MultiDimensional_Array_Should_Be_Cloned()
     {
@@ -349,7 +404,7 @@ public class CopyToObjectSpec
         Array.CreateInstance(typeof(int), new[] { 1, 0 }).DeepCloneTo(new int[1, 0]);
         Array.CreateInstance(typeof(int), new[] { 0, 1 }).DeepCloneTo(new int[0, 1]);
         Array.CreateInstance(typeof(int), new[] { 1, 1 }).DeepCloneTo(new int[1, 1]);
-            
+
         Array.CreateInstance(typeof(int), new[] { 0, 0, 0 }).DeepCloneTo(new int[0, 0, 0]);
         Array.CreateInstance(typeof(int), new[] { 1, 0, 0 }).DeepCloneTo(new int[1, 0, 0]);
         Array.CreateInstance(typeof(int), new[] { 0, 1, 0 }).DeepCloneTo(new int[0, 1, 0]);
