@@ -1,4 +1,7 @@
-﻿using System.ComponentModel.DataAnnotations;
+﻿using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Diagnostics.Tracing;
 using System.Drawing;
@@ -240,6 +243,270 @@ public class SpecificScenariosTest
             Assert.That(cloned.Nested, Is.Not.SameAs(original.Nested), "Nested object should be cloned");
             Assert.That(cloned.Nested.Value, Is.EqualTo("Nested Value"), "Nested value should be copied");
         });
+    }
+    
+    [Test]
+    public void Dynamic_With_Nested_ExpandoObject_Clone()
+    {
+        // Arrange
+        dynamic original = new ExpandoObject();
+        original.Name = "Parent";
+        original.Child = new ExpandoObject();
+        original.Child.Name = "Child";
+        original.Child.Parent = original; // Circular reference
+
+        // Act
+        dynamic cloned = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned.Name, Is.EqualTo("Parent"), "Parent name should be copied");
+            Assert.That(cloned.Child.Name, Is.EqualTo("Child"), "Child name should be copied");
+            
+            Assert.That(cloned.Child.Parent, Is.SameAs(cloned), "Circular reference should point to cloned parent");
+            Assert.That(original.Child.Parent, Is.SameAs(original), "Original circular reference should remain unchanged");
+        });
+    }
+
+    [Test]
+    public void Dynamic_With_Collection_Clone()
+    {
+        // Arrange
+        dynamic original = new ExpandoObject();
+        original.Items = new List<ExpandoObject>();
+        
+        dynamic item1 = new ExpandoObject();
+        item1.Name = "Item1";
+        item1.Owner = original;
+        
+        dynamic item2 = new ExpandoObject();
+        item2.Name = "Item2";
+        item2.Owner = original;
+        
+        original.Items.Add(item1);
+        original.Items.Add(item2);
+
+        // Act
+        dynamic cloned = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned.Items, Is.Not.SameAs(original.Items), "Collection should be cloned");
+            Assert.That(cloned.Items.Count, Is.EqualTo(2), "Collection should have same number of items");
+            
+            Assert.That(cloned.Items[0].Name, Is.EqualTo("Item1"), "First item name should be copied");
+            Assert.That(cloned.Items[0].Owner, Is.SameAs(cloned), "First item should reference cloned parent");
+            
+            Assert.That(cloned.Items[1].Name, Is.EqualTo("Item2"), "Second item name should be copied");
+            Assert.That(cloned.Items[1].Owner, Is.SameAs(cloned), "Second item should reference cloned parent");
+        });
+    }
+
+    [Test]
+    public void Dynamic_With_Dictionary_Clone()
+    {
+        // Arrange
+        dynamic original = new ExpandoObject();
+        original.Dict = new Dictionary<string, ExpandoObject>();
+        
+        dynamic value1 = new ExpandoObject();
+        value1.Name = "Value1";
+        value1.Container = original;
+        
+        original.Dict["key1"] = value1;
+        original.Self = original;
+
+        // Act
+        dynamic cloned = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned.Dict, Is.Not.SameAs(original.Dict), "Dictionary should be cloned");
+            Assert.That(cloned.Dict.Count, Is.EqualTo(1), "Dictionary should have same number of items");
+            Assert.That(cloned.Dict["key1"].Name, Is.EqualTo("Value1"), "Dictionary value should be copied");
+            Assert.That(cloned.Dict["key1"].Container, Is.SameAs(cloned), "Dictionary value should reference cloned container");
+            Assert.That(cloned.Self, Is.SameAs(cloned), "Self reference should point to clone");
+        });
+    }
+    
+    [Test]
+    public void NotifyPropertyChanged_Clone()
+    {
+        // Arrange
+        NotifyingPerson original = new NotifyingPerson { Name = "John", Age = 30 };
+        List<string> propertyChanges = [];
+        original.PropertyChanged += (sender, args) => propertyChanges.Add(args.PropertyName);
+
+        // Act
+        NotifyingPerson? cloned = FastCloner.DeepClone(original);
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned.Name, Is.EqualTo("John"), "Property should be copied");
+            Assert.That(cloned.Age, Is.EqualTo(30), "Property should be copied");
+            
+            cloned.Name = "Jane";
+            Assert.That(propertyChanges, Is.Empty, "Cloned object should not trigger original events");
+            
+            List<string> clonedChanges = [];
+            cloned.PropertyChanged += (object sender, PropertyChangedEventArgs args) => clonedChanges.Add(args.PropertyName);
+            cloned.Age = 31;
+            Assert.That(clonedChanges, Has.Count.EqualTo(1), "Cloned object should trigger its own events");
+            Assert.That(clonedChanges[0], Is.EqualTo(nameof(NotifyingPerson.Age)));
+        });
+    }
+
+    [Test]
+    public void NotifyPropertyChanged_With_Complex_Properties_Clone()
+    {
+        // Arrange
+        NotifyingPerson original = new NotifyingPerson
+        {
+            Name = "John",
+            Address = new NotifyingAddress { Street = "Main St", City = "New York" }
+        };
+        
+        List<string> addressChanges = [];
+        original.Address.PropertyChanged += (object sender, PropertyChangedEventArgs args) => addressChanges.Add(args.PropertyName);
+
+        // Act
+        NotifyingPerson? cloned = FastCloner.DeepClone(original);
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned.Address, Is.Not.Null, "Complex property should be cloned");
+            Assert.That(cloned.Address.Street, Is.EqualTo("Main St"), "Nested property should be copied");
+            Assert.That(cloned.Address.City, Is.EqualTo("New York"), "Nested property should be copied");
+            
+            cloned.Address.Street = "Broadway";
+            Assert.That(addressChanges, Is.Empty, "Cloned nested object should not trigger original events");
+            
+            List<string> clonedAddressChanges = [];
+            cloned.Address.PropertyChanged += (object sender, PropertyChangedEventArgs args) => clonedAddressChanges.Add(args.PropertyName);
+            cloned.Address.City = "Boston";
+            Assert.That(clonedAddressChanges, Has.Count.EqualTo(1), "Cloned nested object should trigger its own events");
+            Assert.That(clonedAddressChanges[0], Is.EqualTo(nameof(NotifyingAddress.City)));
+        });
+    }
+
+    [Test]
+    public void NotifyPropertyChanged_With_Collection_Clone()
+    {
+        // Arrange
+        NotifyingPerson original = new NotifyingPerson
+        {
+            Name = "John",
+            Children =
+            [
+                new NotifyingPerson { Name = "Child1", Age = 5 },
+                new NotifyingPerson { Name = "Child2", Age = 7 }
+            ]
+        };
+        
+        int collectionChanges = 0;
+        original.Children.CollectionChanged += (object sender, NotifyCollectionChangedEventArgs args) => collectionChanges++;
+
+        // Act
+        NotifyingPerson? cloned = FastCloner.DeepClone(original);
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned.Children, Is.Not.Null, "Collection should be cloned");
+            Assert.That(cloned.Children, Has.Count.EqualTo(2), "Collection should have same number of items");
+            Assert.That(cloned.Children[0].Name, Is.EqualTo("Child1"), "Collection items should be copied");
+            
+            cloned.Children.Add(new NotifyingPerson { Name = "Child3" });
+            Assert.That(collectionChanges, Is.EqualTo(0), "Cloned collection should not trigger original events");
+            
+            int clonedChanges = 0;
+            cloned.Children.CollectionChanged += (object sender, NotifyCollectionChangedEventArgs args) => clonedChanges++;
+            cloned.Children.RemoveAt(0);
+            Assert.That(clonedChanges, Is.EqualTo(1), "Cloned collection should trigger its own events");
+        });
+    }
+
+    public class NotifyingPerson : INotifyPropertyChanged
+    {
+        private string _name;
+        private int _age;
+        private NotifyingAddress _address;
+        private ObservableCollection<NotifyingPerson> _children;
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        public string Name
+        {
+            get => _name;
+            set
+            {
+                _name = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
+            }
+        }
+
+        public int Age
+        {
+            get => _age;
+            set
+            {
+                _age = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Age)));
+            }
+        }
+
+        public NotifyingAddress Address
+        {
+            get => _address;
+            set
+            {
+                _address = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Address)));
+            }
+        }
+
+        public ObservableCollection<NotifyingPerson> Children
+        {
+            get => _children;
+            set
+            {
+                _children = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Children)));
+            }
+        }
+    }
+
+    public class NotifyingAddress : INotifyPropertyChanged
+    {
+        private string _street;
+        private string _city;
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        public string Street
+        {
+            get => _street;
+            set
+            {
+                _street = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Street)));
+            }
+        }
+
+        public string City
+        {
+            get => _city;
+            set
+            {
+                _city = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(City)));
+            }
+        }
     }
     
     [Test]
