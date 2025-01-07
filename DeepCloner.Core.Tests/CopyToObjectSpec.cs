@@ -1,4 +1,9 @@
-﻿namespace DeepCloner.Core.Tests;
+﻿using System.Collections;
+using System.Collections.Concurrent;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+
+namespace DeepCloner.Core.Tests;
 
 [TestFixture]
 public class CopyToObjectSpec
@@ -19,6 +24,288 @@ public class CopyToObjectSpec
 
         var to = source.DeepClone();
         Assert.That(ReferenceEquals(source.ActivityData, to.ActivityData), Is.EqualTo(false));
+    }
+
+    public class KeyClass
+    {
+        public string Value { get; set; }
+    }
+
+    [Test]
+    public void DictionaryBrokenAfterCloningTest()
+    {
+        // Arrange
+        var originalDict = new Dictionary<KeyClass, string>();
+        var key = new KeyClass { Value = "TestKey" };
+        originalDict[key] = "TestValue";
+
+        // Act
+        var clonedDict = originalDict.DeepClone();
+        var clonedKey = clonedDict.Keys.First();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(ReferenceEquals(key, clonedKey), Is.False);
+            Assert.That(key.Value, Is.EqualTo(clonedKey.Value));
+
+            Assert.That(originalDict.ContainsKey(key), Is.True);
+            Assert.That(clonedDict.ContainsKey(clonedKey), Is.True); // important
+
+            Assert.That(clonedKey.Value is "TestKey", Is.True);
+        });
+    }
+
+    [Test]
+    public void MultipleDictionariesAtSameLevelShouldBeClonedCorrectly()
+    {
+        // Arrange
+        var container = new DictionaryContainer
+        {
+            Dict1 = new Dictionary<KeyClass, string>(),
+            Dict2 = new Dictionary<KeyClass, string>()
+        };
+
+        var key1 = new KeyClass { Value = "Key1" };
+        var key2 = new KeyClass { Value = "Key2" };
+
+        container.Dict1[key1] = "Value1";
+        container.Dict2[key2] = "Value2";
+
+        // Act
+        var clonedContainer = container.DeepClone();
+        var clonedKey1 = clonedContainer.Dict1.Keys.First();
+        var clonedKey2 = clonedContainer.Dict2.Keys.First();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(ReferenceEquals(container.Dict1, clonedContainer.Dict1), Is.False);
+            Assert.That(ReferenceEquals(container.Dict2, clonedContainer.Dict2), Is.False);
+
+            Assert.That(ReferenceEquals(key1, clonedKey1), Is.False);
+            Assert.That(ReferenceEquals(key2, clonedKey2), Is.False);
+            Assert.That(key1.Value, Is.EqualTo(clonedKey1.Value));
+            Assert.That(key2.Value, Is.EqualTo(clonedKey2.Value));
+
+            Assert.That(container.Dict1.ContainsKey(key1), Is.True);
+            Assert.That(container.Dict2.ContainsKey(key2), Is.True);
+            Assert.That(clonedContainer.Dict1.ContainsKey(clonedKey1), Is.True);
+            Assert.That(clonedContainer.Dict2.ContainsKey(clonedKey2), Is.True);
+
+            Assert.That(clonedContainer.Dict1[clonedKey1], Is.EqualTo("Value1"));
+            Assert.That(clonedContainer.Dict2[clonedKey2], Is.EqualTo("Value2"));
+        });
+    }
+
+    [Test]
+    public void MultipleHashSetsAtSameLevelShouldBeClonedCorrectly()
+    {
+        // Arrange
+        var container = new HashSetContainer
+        {
+            Set1 = new HashSet<KeyClass>(),
+            Set2 = new HashSet<KeyClass>(),
+            Set3 = new HashSet<KeyClass>()
+        };
+
+        var item1 = new KeyClass { Value = "Item1" };
+        var item2 = new KeyClass { Value = "Item2" };
+        var item3 = new KeyClass { Value = "Item3" };
+
+        container.Set1.Add(item1);
+        container.Set2.Add(item2);
+        container.Set3.Add(item3);
+
+        // Act
+        var clonedContainer = container.DeepClone();
+        var clonedItem1 = clonedContainer.Set1.First();
+        var clonedItem2 = clonedContainer.Set2.First();
+        var clonedItem3 = clonedContainer.Set3.First();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(ReferenceEquals(container.Set1, clonedContainer.Set1), Is.False);
+            Assert.That(ReferenceEquals(container.Set2, clonedContainer.Set2), Is.False);
+            Assert.That(ReferenceEquals(container.Set3, clonedContainer.Set3), Is.False);
+
+            Assert.That(ReferenceEquals(item1, clonedItem1), Is.False);
+            Assert.That(ReferenceEquals(item2, clonedItem2), Is.False);
+            Assert.That(ReferenceEquals(item3, clonedItem3), Is.False);
+
+            Assert.That(item1.Value, Is.EqualTo(clonedItem1.Value));
+            Assert.That(item2.Value, Is.EqualTo(clonedItem2.Value));
+            Assert.That(item3.Value, Is.EqualTo(clonedItem3.Value));
+
+            Assert.That(container.Set1, Does.Contain(item1));
+            Assert.That(container.Set2, Does.Contain(item2));
+            Assert.That(container.Set3, Does.Contain(item3));
+
+            Assert.That(clonedContainer.Set1, Does.Contain(clonedItem1));
+            Assert.That(clonedContainer.Set2, Does.Contain(clonedItem2));
+            Assert.That(clonedContainer.Set3, Does.Contain(clonedItem3));
+            
+            Assert.That(container.Set1, Has.Count.EqualTo(1));
+            Assert.That(container.Set2, Has.Count.EqualTo(1));
+            Assert.That(container.Set3, Has.Count.EqualTo(1));
+
+            Assert.That(clonedContainer.Set1, Has.Count.EqualTo(1));
+            Assert.That(clonedContainer.Set2, Has.Count.EqualTo(1));
+            Assert.That(clonedContainer.Set3, Has.Count.EqualTo(1));
+        });
+    }
+
+    public class HashSetContainer
+    {
+        public HashSet<KeyClass> Set1 { get; set; } = null!;
+        public HashSet<KeyClass> Set2 { get; set; } = null!;
+        public HashSet<KeyClass> Set3 { get; set; } = null!;
+    }
+
+    public class DictionaryContainer
+    {
+        public Dictionary<KeyClass, string> Dict1 { get; set; } = null!;
+        public Dictionary<KeyClass, string> Dict2 { get; set; } = null!;
+    }
+
+    [Test]
+    public void NestedDictionariesShouldBeClonedCorrectly()
+    {
+        // Arrange
+        var outerDict = new Dictionary<string, Dictionary<KeyClass, string>>();
+        var innerDict = new Dictionary<KeyClass, string>();
+        var key = new KeyClass { Value = "TestKey" };
+        innerDict[key] = "TestValue";
+        outerDict["outer"] = innerDict;
+
+        // Act
+        var clonedOuterDict = outerDict.DeepClone();
+        var clonedInnerDict = clonedOuterDict["outer"];
+        var clonedKey = clonedInnerDict.Keys.First();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(ReferenceEquals(outerDict, clonedOuterDict), Is.False, "Outer dictionaries should be different instances");
+            Assert.That(ReferenceEquals(innerDict, clonedInnerDict), Is.False, "Inner dictionaries should be different instances");
+
+            Assert.That(ReferenceEquals(key, clonedKey), Is.False, "Keys should be different instances");
+            Assert.That(key.Value, Is.EqualTo(clonedKey.Value), "Key values should be equal");
+
+            Assert.That(innerDict.ContainsKey(key), Is.True, "Original inner dict should contain original key");
+            Assert.That(clonedInnerDict.ContainsKey(clonedKey), Is.True, "Cloned inner dict should contain cloned key");
+
+            Assert.That(innerDict[key], Is.EqualTo("TestValue"), "Original value should be preserved");
+            Assert.That(clonedInnerDict[clonedKey], Is.EqualTo("TestValue"), "Cloned value should be equal");
+
+            Assert.That(outerDict.Keys, Has.Count.EqualTo(1), "Original outer dict should have one key");
+            Assert.That(clonedOuterDict.Keys, Has.Count.EqualTo(1), "Cloned outer dict should have one key");
+            Assert.That(innerDict.Keys, Has.Count.EqualTo(1), "Original inner dict should have one key");
+            Assert.That(clonedInnerDict.Keys, Has.Count.EqualTo(1), "Cloned inner dict should have one key");
+        });
+    }
+
+
+    [Test]
+    public void SetBrokenAfterCloningTest()
+    {
+        // Arrange
+        var originalSet = new HashSet<KeyClass>();
+        var key = new KeyClass { Value = "TestKey" };
+        originalSet.Add(key);
+
+        // Act
+        var clonedSet = originalSet.DeepClone();
+        var clonedKey = clonedSet.First();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(ReferenceEquals(key, clonedKey), Is.False);
+            Assert.That(key.Value, Is.EqualTo(clonedKey.Value));
+            Assert.That(originalSet, Does.Contain(key));
+            Assert.That(clonedSet, Does.Contain(clonedKey)); // important
+            Assert.That(clonedKey.Value is "TestKey", Is.True);
+        });
+    }
+
+    [Test]
+    public void OrderedDictionaryBrokenAfterCloningTest()
+    {
+        // Arrange
+        var originalDict = new OrderedDictionary();
+        var key = new KeyClass { Value = "TestKey" };
+        originalDict[key] = "TestValue";
+
+        // Act
+        var clonedDict = originalDict.DeepClone();
+        var clonedKey = clonedDict.Keys.Cast<KeyClass>().First();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(ReferenceEquals(key, clonedKey), Is.False);
+            Assert.That(key.Value, Is.EqualTo(clonedKey.Value));
+            Assert.That(originalDict.Contains(key), Is.True);
+            Assert.That(clonedDict.Contains(clonedKey), Is.True); // important
+            Assert.That(clonedKey.Value is "TestKey", Is.True);
+            Assert.That(clonedDict[clonedKey], Is.EqualTo("TestValue"));
+        });
+    }
+
+    [Test]
+    public void SingleGenericDictionaryCloneTest()
+    {
+        // Arrange
+        var originalDict = new SingleGenericDictionary<KeyValuePair<KeyClass, string>>();
+        var key = new KeyClass { Value = "TestKey" };
+        var kvp = new KeyValuePair<KeyClass, string>(key, "TestValue");
+        originalDict.Add(kvp);
+
+        // Act
+        var clonedDict = originalDict.DeepClone();
+        var clonedKvp = clonedDict.First();
+        var clonedKey = clonedKvp.Key;
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(ReferenceEquals(key, clonedKey), Is.False, "Klíč by měl být nová instance");
+            Assert.That(key.Value, Is.EqualTo(clonedKey.Value), "Hodnota klíče by měla být zachována");
+
+            Assert.That(originalDict.Count, Is.EqualTo(clonedDict.Count), "Počet položek by měl být stejný");
+            Assert.That(clonedDict.Contains(clonedKvp), Is.True, "Naklonovaný slovník by měl obsahovat naklonovanou KeyValuePair");
+
+            Assert.That(clonedKey.Value, Is.EqualTo("TestKey"), "Hodnota klíče by měla být zachována");
+            Assert.That(clonedKvp.Value, Is.EqualTo("TestValue"), "Hodnota by měla být zachována");
+        });
+    }
+
+    public class SingleGenericDictionary<T> : Collection<T>, IDictionary
+    {
+        public object? this[object key]
+        {
+            get => throw new NotImplementedException();
+            set => throw new NotImplementedException();
+        }
+
+        public bool IsFixedSize => false;
+        public bool IsReadOnly => false;
+        public ICollection Keys => throw new NotImplementedException();
+        public ICollection Values => throw new NotImplementedException();
+        public void Add(object key, object? value)
+        {
+            if (key is not T typedKey)
+                throw new ArgumentException($"Key must be of type {typeof(T).Name}", nameof(key));
+
+            Add((T)key);
+        }
+        public void Clear() => base.Clear();
+        public bool Contains(object key) => Items.Contains((T)key);
+        public IDictionaryEnumerator GetEnumerator() => throw new NotImplementedException();
+        public void Remove(object key) => throw new NotImplementedException();
+        IEnumerator IEnumerable.GetEnumerator() => base.GetEnumerator();
     }
 
     public interface IActivityDataWithProp
