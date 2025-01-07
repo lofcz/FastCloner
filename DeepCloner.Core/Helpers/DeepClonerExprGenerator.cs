@@ -87,7 +87,7 @@ internal static class DeepClonerExprGenerator
 
         Type methodType = unboxStruct || type.IsClass() ? typeof(object) : type;
 
-        List<Expression> expressionList = new List<Expression>();
+        List<Expression> expressionList = [];
 
         ParameterExpression from = Expression.Parameter(methodType);
         ParameterExpression fromLocal = from;
@@ -181,7 +181,7 @@ internal static class DeepClonerExprGenerator
 
         Type funcType = typeof(Func<,,>).MakeGenericType(methodType, typeof(DeepCloneState), methodType);
 
-        List<ParameterExpression> blockParams = new List<ParameterExpression>();
+        List<ParameterExpression> blockParams = [];
         if (from != fromLocal) blockParams.Add(fromLocal);
         blockParams.Add(toLocal);
 

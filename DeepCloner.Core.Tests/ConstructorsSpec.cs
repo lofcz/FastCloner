@@ -46,7 +46,7 @@ public class ConstructorsSpec
     {
         // Arrange
         int iterations = 1000;
-        List<Task>? parallelTasks = new List<Task>();
+        List<Task>? parallelTasks = [];
         ConcurrentDictionary<Type, string> typeCache = new ConcurrentDictionary<Type, string>();
 
         // Act

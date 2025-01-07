@@ -131,7 +131,7 @@ public class ShallowClonerSpec
     [Test]
     public void Array_Should_Be_Cloned()
     {
-        int[] a = new[] { 3, 4 };
+        int[] a = [3, 4];
         int[] clone = a.ShallowClone();
         Assert.That(clone.Length, Is.EqualTo(2));
         Assert.That(clone[0], Is.EqualTo(3));

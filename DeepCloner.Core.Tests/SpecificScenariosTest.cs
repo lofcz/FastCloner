@@ -110,7 +110,7 @@ public class SpecificScenariosTest
     {
         public static int Counter;
 
-        private readonly LazyRef<object> _lazyValue = new LazyRef<object>(() => (object)(++Counter).ToString(CultureInfo.InvariantCulture));
+        private readonly LazyRef<object> _lazyValue = new LazyRef<object>(() => (++Counter).ToString(CultureInfo.InvariantCulture));
 
         public string GetValue() => _lazyValue.Value.ToString();
     }

@@ -9,7 +9,7 @@ public class ArraysSpec
     [Test]
     public void IntArray_Should_Be_Cloned()
     {
-        int[] arr = new[] { 1, 2, 3 };
+        int[] arr = [1, 2, 3];
         int[] cloned = arr.DeepClone();
         Assert.That(cloned.Length, Is.EqualTo(3));
         CollectionAssert.AreEqual(arr, cloned);
@@ -18,7 +18,7 @@ public class ArraysSpec
     [Test]
     public void StringArray_Should_Be_Cloned()
     {
-        string[] arr = new[] { "1", "2", "3" };
+        string[] arr = ["1", "2", "3"];
         string[] cloned = arr.DeepClone();
         Assert.That(cloned.Length, Is.EqualTo(3));
         CollectionAssert.AreEqual(arr, cloned);
@@ -28,7 +28,7 @@ public class ArraysSpec
     public void StringArray_Should_Be_Cloned_Two_Arrays()
     {
         // checking that cached object correctly clones arrays of different length
-        string[]? arr = new[] { "111111111111111111111", "2", "3" };
+        string[]? arr = ["111111111111111111111", "2", "3"];
         string[] cloned = arr.DeepClone();
         Assert.That(cloned.Length, Is.EqualTo(3));
         CollectionAssert.AreEqual(arr, cloned);
@@ -85,7 +85,7 @@ public class ArraysSpec
     [Test]
     public void ClassArray_Should_Be_Cloned()
     {
-        C1[] arr = new[] { new C1(1), new C1(2) };
+        C1[] arr = [new C1(1), new C1(2)];
         C1[] cloned = arr.DeepClone();
         Assert.That(cloned.Length, Is.EqualTo(2));
         Assert.That(cloned[0].X, Is.EqualTo(1));
@@ -109,7 +109,7 @@ public class ArraysSpec
     [Test]
     public void StructArray_Should_Be_Cloned()
     {
-        S1[] arr = new[] { new S1(1), new S1(2) };
+        S1[] arr = [new S1(1), new S1(2)];
         S1[] cloned = arr.DeepClone();
         Assert.That(cloned.Length, Is.EqualTo(2));
         Assert.That(cloned[0].X, Is.EqualTo(1));
@@ -119,7 +119,7 @@ public class ArraysSpec
     [Test]
     public void StructArray_With_Class_Should_Be_Cloned()
     {
-        S2[] arr = new[] { new S2 { C = new C1(1) }, new S2 { C = new C1(2) } };
+        S2[] arr = [new S2 { C = new C1(1) }, new S2 { C = new C1(2) }];
         S2[] cloned = arr.DeepClone();
         Assert.That(cloned.Length, Is.EqualTo(2));
         Assert.That(cloned[0].C.X, Is.EqualTo(1));
@@ -131,7 +131,7 @@ public class ArraysSpec
     [Test]
     public void NullArray_hould_Be_Cloned()
     {
-        C1[] arr = new C1[] { null, null };
+        C1[] arr = [null, null];
         C1[] cloned = arr.DeepClone();
         Assert.That(cloned.Length, Is.EqualTo(2));
         Assert.That(cloned[0], Is.Null);
@@ -152,7 +152,7 @@ public class ArraysSpec
     public void IntList_Should_Be_Cloned()
     {
         // TODO: better performance for this type
-        List<int> arr = new List<int> { 1, 2, 3 };
+        List<int> arr = [1, 2, 3];
         List<int> cloned = arr.DeepClone();
         Assert.That(cloned.Count, Is.EqualTo(3));
         Assert.That(cloned[0], Is.EqualTo(1));
@@ -176,8 +176,8 @@ public class ArraysSpec
     [Test]
     public void Array_Of_Same_Arrays_Should_Be_Cloned()
     {
-        int[] c1 = new[] { 1, 2, 3 };
-        int[][] arr = new[] { c1, c1, c1, c1, c1 };
+        int[] c1 = [1, 2, 3];
+        int[][] arr = [c1, c1, c1, c1, c1];
         int[][] cloned = arr.DeepClone();
 
         Assert.That(cloned.Length, Is.EqualTo(5));
@@ -309,7 +309,7 @@ public class ArraysSpec
     [Test]
     public void Array_As_Generic_Array_Should_Be_Cloned()
     {
-        int[] arr = new[] { 1, 2, 3 };
+        int[] arr = [1, 2, 3];
         Array genArr = arr;
         int[] clone = (int[])genArr.DeepClone();
         Assert.That(clone.Length, Is.EqualTo(3));
@@ -321,7 +321,7 @@ public class ArraysSpec
     [Test]
     public void Array_As_IEnumerable_Should_Be_Cloned()
     {
-        int[] arr = new[] { 1, 2, 3 };
+        int[] arr = [1, 2, 3];
         IEnumerable<int> genArr = arr;
         int[] clone = (int[])genArr.DeepClone();
 // ReSharper disable PossibleMultipleEnumeration
@@ -351,7 +351,7 @@ public class ArraysSpec
     [Test]
     public void Issue_17_Spec()
     {
-        HashSet<string> set = new HashSet<string> { "value" };
+        HashSet<string> set = ["value"];
         Assert.That(set.Contains("value"), Is.True);
 
         HashSet<string> cloned = set.DeepClone();

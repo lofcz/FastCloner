@@ -21,7 +21,7 @@ internal static class ClonerToExprGenerator
 
         Type? methodType = typeof(object);
 
-        List<Expression>? expressionList = new List<Expression>();
+        List<Expression>? expressionList = [];
 
         ParameterExpression from = Expression.Parameter(methodType);
         ParameterExpression? fromLocal = from;
@@ -97,7 +97,7 @@ internal static class ClonerToExprGenerator
 
         Type? funcType = typeof(Func<,,,>).MakeGenericType(methodType, methodType, typeof(DeepCloneState), methodType);
 
-        List<ParameterExpression>? blockParams = new List<ParameterExpression>();
+        List<ParameterExpression>? blockParams = [];
         if (from != fromLocal) blockParams.Add(fromLocal);
         if (to != toLocal) blockParams.Add(toLocal);
 

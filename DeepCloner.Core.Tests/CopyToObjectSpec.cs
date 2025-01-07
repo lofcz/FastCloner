@@ -104,9 +104,9 @@ public class CopyToObjectSpec
         // Arrange
         HashSetContainer container = new HashSetContainer
         {
-            Set1 = new HashSet<KeyClass>(),
-            Set2 = new HashSet<KeyClass>(),
-            Set3 = new HashSet<KeyClass>()
+            Set1 = [],
+            Set2 = [],
+            Set3 = []
         };
 
         KeyClass item1 = new KeyClass { Value = "Item1" };
@@ -211,7 +211,7 @@ public class CopyToObjectSpec
     public void SetBrokenAfterCloningTest()
     {
         // Arrange
-        HashSet<KeyClass> originalSet = new HashSet<KeyClass>();
+        HashSet<KeyClass> originalSet = [];
         KeyClass key = new KeyClass { Value = "TestKey" };
         originalSet.Add(key);
 
@@ -228,6 +228,14 @@ public class CopyToObjectSpec
             Assert.That(clonedSet, Does.Contain(clonedKey)); // important
             Assert.That(clonedKey.Value is "TestKey", Is.True);
         });
+    }
+    
+    [Test]
+    public void CanCopyTypes()
+    {
+        Type original = typeof(string);
+        Type result = original.DeepClone();
+        Assert.That(original, Is.EqualTo(result));
     }
 
     [Test]
@@ -307,14 +315,14 @@ public class CopyToObjectSpec
         // Assert
         Assert.Multiple(() =>
         {
-            Assert.That(ReferenceEquals(key, clonedKey), Is.False, "Klíč by měl být nová instance");
-            Assert.That(key.Value, Is.EqualTo(clonedKey.Value), "Hodnota klíče by měla být zachována");
+            Assert.That(ReferenceEquals(key, clonedKey), Is.False);
+            Assert.That(key.Value, Is.EqualTo(clonedKey.Value));
 
-            Assert.That(originalDict.Count, Is.EqualTo(clonedDict.Count), "Počet položek by měl být stejný");
-            Assert.That(clonedDict.Contains(clonedKvp), Is.True, "Naklonovaný slovník by měl obsahovat naklonovanou KeyValuePair");
+            Assert.That(originalDict.Count, Is.EqualTo(clonedDict.Count));
+            Assert.That(clonedDict.Contains(clonedKvp), Is.True);
 
-            Assert.That(clonedKey.Value, Is.EqualTo("TestKey"), "Hodnota klíče by měla být zachována");
-            Assert.That(clonedKvp.Value, Is.EqualTo("TestValue"), "Hodnota by měla být zachována");
+            Assert.That(clonedKey.Value, Is.EqualTo("TestKey"));
+            Assert.That(clonedKvp.Value, Is.EqualTo("TestValue"));
         });
     }
 
@@ -463,14 +471,12 @@ public class CopyToObjectSpec
             D = 42.3m
         };
 
-        C2 cToRef = cTo;
-
         if (isDeep)
             cFrom.DeepCloneTo(cTo);
         else
             cFrom.ShallowCloneTo(cTo);
 
-        Assert.That(ReferenceEquals(cTo, cToRef), Is.True);
+        Assert.That(ReferenceEquals(cTo, cTo), Is.True);
         Assert.That(cTo.A, Is.EqualTo(11));
         Assert.That(((C1)cTo).A, Is.EqualTo(12));
         Assert.That(cTo.D, Is.EqualTo(42.3m));
@@ -545,7 +551,7 @@ public class CopyToObjectSpec
     {
         S1 sFrom = new S1 { A = 42 };
         S1 sTo = new S1();
-        I1? objTo = (I1)sTo;
+        I1? objTo = sTo;
         objTo.A = 23;
         if (isDeep)
             // ReSharper disable once ExpressionIsAlwaysNull
@@ -568,8 +574,8 @@ public class CopyToObjectSpec
     [TestCase(true)]
     public void Array_Should_Be_Cloned_Correct_Size(bool isDeep)
     {
-        int[] arrFrom = new[] { 1, 2, 3 };
-        int[] arrTo = new[] { 4, 5, 6 };
+        int[] arrFrom = [1, 2, 3];
+        int[] arrTo = [4, 5, 6];
         if (isDeep) arrFrom.DeepCloneTo(arrTo);
         else arrFrom.ShallowCloneTo(arrTo);
         Assert.That(arrTo.Length, Is.EqualTo(3));
@@ -583,8 +589,8 @@ public class CopyToObjectSpec
     [TestCase(true)]
     public void Array_Should_Be_Cloned_From_Is_Bigger(bool isDeep)
     {
-        int[] arrFrom = new[] { 1, 2, 3 };
-        int[] arrTo = new[] { 4, 5 };
+        int[] arrFrom = [1, 2, 3];
+        int[] arrTo = [4, 5];
         if (isDeep) arrFrom.DeepCloneTo(arrTo);
         else arrFrom.ShallowCloneTo(arrTo);
         Assert.That(arrTo.Length, Is.EqualTo(2));
@@ -597,8 +603,8 @@ public class CopyToObjectSpec
     [TestCase(true)]
     public void Array_Should_Be_Cloned_From_Is_Smaller(bool isDeep)
     {
-        int[] arrFrom = new[] { 1, 2 };
-        int[] arrTo = new[] { 4, 5, 6 };
+        int[] arrFrom = [1, 2];
+        int[] arrTo = [4, 5, 6];
         if (isDeep) arrFrom.DeepCloneTo(arrTo);
         else arrFrom.ShallowCloneTo(arrTo);
         Assert.That(arrTo.Length, Is.EqualTo(3));
@@ -611,7 +617,7 @@ public class CopyToObjectSpec
     public void Shallow_Array_Should_Be_Cloned()
     {
         C1 c1 = new C1();
-        C1[] arrFrom = new[] { c1, c1, c1 };
+        C1[] arrFrom = [c1, c1, c1];
         C1[] arrTo = new C1[4];
         arrFrom.ShallowCloneTo(arrTo);
         Assert.That(arrTo.Length, Is.EqualTo(4));
@@ -626,7 +632,7 @@ public class CopyToObjectSpec
     {
         C4 c1 = new C4();
         C3 c3 = new C3 { A = c1, B = c1 };
-        C3[] arrFrom = new[] { c3, c3, c3 };
+        C3[] arrFrom = [c3, c3, c3];
         C3[] arrTo = new C3[4];
         arrFrom.DeepCloneTo(arrTo);
         Assert.That(arrTo.Length, Is.EqualTo(4));
@@ -686,7 +692,7 @@ public class CopyToObjectSpec
     [TestCase(true)]
     public void TwoDim_Array_Should_Be_Cloned(bool isDeep)
     {
-        int[,] arrFrom = new[,] { { 1, 2 }, { 3, 4 } };
+        int[,] arrFrom = { { 1, 2 }, { 3, 4 } };
         // with offset. its ok
         int[,] arrTo = new int[3, 1];
         if (isDeep) arrFrom.DeepCloneTo(arrTo);
@@ -741,7 +747,7 @@ public class CopyToObjectSpec
     public void Shallow_Clone_Of_MultiDim_Array_Should_Not_Perform_Deep()
     {
         C1 c1 = new C1();
-        C1[,] arrFrom = new[,] { { c1, c1 }, { c1, c1 } };
+        C1[,] arrFrom = { { c1, c1 }, { c1, c1 } };
         // with offset. its ok
         C1[,] arrTo = new C1[3, 1];
         arrFrom.ShallowCloneTo(arrTo);
@@ -759,7 +765,7 @@ public class CopyToObjectSpec
     public void Deep_Clone_Of_MultiDim_Array_Should_Perform_Deep()
     {
         C1 c1 = new C1();
-        C1[,] arrFrom = new[,] { { c1, c1 }, { c1, c1 } };
+        C1[,] arrFrom = { { c1, c1 }, { c1, c1 } };
         // with offset. its ok
         C1[,] arrTo = new C1[3, 1];
         arrFrom.DeepCloneTo(arrTo);

@@ -18,7 +18,7 @@ public class SystemTypesSpec
         b.Append("test1");
         StringBuilder cloned = b.DeepClone();
         Assert.That(cloned.ToString(), Is.EqualTo("test1"));
-        int[] arr = new[] { 1, 2, 3 };
+        int[] arr = [1, 2, 3];
         IEnumerator enumerator = arr.GetEnumerator();
         enumerator.MoveNext();
         IEnumerator enumCloned = enumerator.DeepClone();
@@ -70,7 +70,7 @@ public class SystemTypesSpec
     [Test]
     public void Funcs_Should_Be_Cloned()
     {
-        string[] closure = new[] { "123" };
+        string[] closure = ["123"];
         Func<int, string> f = x => closure[0] + x.ToString(CultureInfo.InvariantCulture);
         Func<int, string> df = f.DeepClone();
         Func<int, string> cf = f.ShallowClone();

@@ -43,7 +43,7 @@ public class LoopCheckSpec
     public void Array_Of_Same_Objects_Should_Be_Cloned()
     {
         C1 c1 = new C1();
-        C1[] arr = new[] { c1, c1, c1 };
+        C1[] arr = [c1, c1, c1];
         c1.F = 1;
         C1[] cloned = arr.DeepClone();
 

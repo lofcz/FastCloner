@@ -158,7 +158,7 @@ public class InheritanceSpec
     {
         C1? c1 = new C1();
         C2? c2 = new C2();
-        C1[]? arr = new[] { c1, c2 };
+        C1[]? arr = [c1, c2];
 
         C1[]? cloned = arr.DeepClone();
         Assert.That(cloned[0], Is.TypeOf<C1>());
@@ -222,7 +222,7 @@ public class InheritanceSpec
     public void Array_Of_Struct_Casted_To_Interface_Should_Be_Cloned()
     {
         S1 s1 = new S1();
-        IDisposable[]? arr = new IDisposable[] { s1, s1 };
+        IDisposable[]? arr = [s1, s1];
         IDisposable[]? clonedArr = arr.DeepClone();
         Assert.That(clonedArr[0], Is.EqualTo(clonedArr[1]));
     }
