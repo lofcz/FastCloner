@@ -1,13 +1,12 @@
 ﻿using System.Collections.Concurrent;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 
-namespace FastCloner.Helpers;
+namespace FastCloner.Code;
 
 /// <summary>
 /// Safe types are types, which can be copied without real cloning. e.g. simple structs or strings (it is immutable)
 /// </summary>
-internal static class DeepClonerSafeTypes
+internal static class FastClonerSafeTypes
 {
     private static readonly ConcurrentDictionary<Type, bool> KnownTypes = new ConcurrentDictionary<Type, bool>
     {
@@ -37,7 +36,7 @@ internal static class DeepClonerSafeTypes
         [StringComparer.OrdinalIgnoreCase.GetType()] = true,
     };
 
-    static DeepClonerSafeTypes()
+    static FastClonerSafeTypes()
     {
         foreach (
             Type? x in

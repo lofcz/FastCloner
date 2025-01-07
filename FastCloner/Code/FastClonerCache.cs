@@ -1,8 +1,8 @@
 ﻿using System.Collections.Concurrent;
 
-namespace FastCloner.Helpers;
+namespace FastCloner.Code;
 
-internal static class DeepClonerCache
+internal static class FastClonerCache
 {
     private static readonly ConcurrentDictionary<Type, object> _typeCache = new ConcurrentDictionary<Type, object>();
 

@@ -1,21 +1,21 @@
 ﻿using System.Reflection;
 
-namespace FastCloner.Helpers;
+namespace FastCloner.Code;
 
 internal static class StaticMethodInfos
 {
     internal static class DeepCloneStateMethods
     {
-        internal static MethodInfo AddKnownRef { get; } = typeof(DeepCloneState).GetMethod(nameof(DeepCloneState.AddKnownRef))!;
+        internal static MethodInfo AddKnownRef { get; } = typeof(FastCloneState).GetMethod(nameof(FastCloneState.AddKnownRef))!;
     }
 
     internal static class DeepClonerGeneratorMethods
     {
         internal static MethodInfo CloneStructInternal { get; } =
-            typeof(DeepClonerGenerator).GetMethod(nameof(DeepClonerGenerator.CloneStructInternal),
+            typeof(FastClonerGenerator).GetMethod(nameof(FastClonerGenerator.CloneStructInternal),
                                                   BindingFlags.NonPublic | BindingFlags.Static)!;
         internal static MethodInfo CloneClassInternal { get; } =
-            typeof(DeepClonerGenerator).GetMethod(nameof(DeepClonerGenerator.CloneClassInternal),
+            typeof(FastClonerGenerator).GetMethod(nameof(FastClonerGenerator.CloneClassInternal),
                                                   BindingFlags.NonPublic | BindingFlags.Static)!;
 
         internal static MethodInfo MakeFieldCloneMethodInfo(Type fieldType) =>
@@ -24,7 +24,7 @@ internal static class StaticMethodInfos
                 : CloneClassInternal;
 
         internal static MethodInfo GetClonerForValueType { get; } =
-            typeof(DeepClonerGenerator).GetMethod(nameof(DeepClonerGenerator.GetClonerForValueType),
+            typeof(FastClonerGenerator).GetMethod(nameof(FastClonerGenerator.GetClonerForValueType),
                                                   BindingFlags.NonPublic | BindingFlags.Static)!;
     }
 }

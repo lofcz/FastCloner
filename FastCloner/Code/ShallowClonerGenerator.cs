@@ -1,4 +1,4 @@
-﻿namespace FastCloner.Helpers;
+﻿namespace FastCloner.Code;
 
 internal static class ShallowClonerGenerator
 {
@@ -18,7 +18,7 @@ internal static class ShallowClonerGenerator
         if (ReferenceEquals(obj, null))
             return (T?)(object?)null;
 
-        if (DeepClonerSafeTypes.CanReturnSameObject(obj.GetType()))
+        if (FastClonerSafeTypes.CanReturnSameObject(obj.GetType()))
             return obj;
 
         return (T)ShallowObjectCloner.CloneObject(obj);

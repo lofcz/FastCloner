@@ -1,8 +1,8 @@
 ﻿using System.Runtime.CompilerServices;
 
-namespace FastCloner.Helpers;
+namespace FastCloner.Code;
 
-internal class DeepCloneState
+internal class FastCloneState
 {
     private MiniDictionary? _loops;
 

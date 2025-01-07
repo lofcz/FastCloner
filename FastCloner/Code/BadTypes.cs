@@ -1,4 +1,4 @@
-namespace FastCloner.Helpers;
+namespace FastCloner.Code;
 
 internal class BadTypes
 {

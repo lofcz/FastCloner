@@ -1,9 +1,9 @@
 ﻿using System.Reflection;
 using System.Runtime.CompilerServices;
 
-namespace FastCloner.Helpers;
+namespace FastCloner.Code;
 
-internal static class DeepClonerGenerator
+internal static class FastClonerGenerator
 {
     public static T? CloneObject<T>(T? obj)
     {
@@ -15,7 +15,7 @@ internal static class DeepClonerGenerator
                 
                 if (typeof(T) == type)
                 {
-                    return DeepClonerSafeTypes.CanReturnSameObject(type) ? obj : CloneStructInternal(obj, new DeepCloneState());
+                    return FastClonerSafeTypes.CanReturnSameObject(type) ? obj : CloneStructInternal(obj, new FastCloneState());
                 }
 
                 break;
@@ -41,21 +41,21 @@ internal static class DeepClonerGenerator
         if (obj == null)
             return null;
 
-        Func<object, DeepCloneState, object>? cloner = (Func<object, DeepCloneState, object>)DeepClonerCache.GetOrAddClass(obj.GetType(), t => GenerateCloner(t, true));
+        Func<object, FastCloneState, object>? cloner = (Func<object, FastCloneState, object>)FastClonerCache.GetOrAddClass(obj.GetType(), t => GenerateCloner(t, true));
 
         // null -> should return same type
         if (cloner == null)
             return obj;
 
-        return cloner(obj, new DeepCloneState());
+        return cloner(obj, new FastCloneState());
     }
 
-    internal static object? CloneClassInternal(object? obj, DeepCloneState state)
+    internal static object? CloneClassInternal(object? obj, FastCloneState state)
     {
         if (obj == null)
             return null;
 
-        Func<object, DeepCloneState, object>? cloner = (Func<object, DeepCloneState, object>)DeepClonerCache.GetOrAddClass(obj.GetType(), t => GenerateCloner(t, true));
+        Func<object, FastCloneState, object>? cloner = (Func<object, FastCloneState, object>)FastClonerCache.GetOrAddClass(obj.GetType(), t => GenerateCloner(t, true));
 
         // safe object
         if (cloner == null)
@@ -69,10 +69,10 @@ internal static class DeepClonerGenerator
         return cloner(obj, state);
     }
 
-    internal static T CloneStructInternal<T>(T obj, DeepCloneState state) // where T : struct
+    internal static T CloneStructInternal<T>(T obj, FastCloneState state) // where T : struct
     {
         // no loops, no nulls, no inheritance
-        Func<T, DeepCloneState, T>? cloner = GetClonerForValueType<T>();
+        Func<T, FastCloneState, T>? cloner = GetClonerForValueType<T>();
 
         // safe ojbect
         if (cloner == null)
@@ -82,7 +82,7 @@ internal static class DeepClonerGenerator
     }
 
     // when we can't use code generation, we can use these methods
-    internal static T[] Clone1DimArraySafeInternal<T>(T[] obj, DeepCloneState state)
+    internal static T[] Clone1DimArraySafeInternal<T>(T[] obj, FastCloneState state)
     {
         int l = obj.Length;
         T[]? outArray = new T[l];
@@ -91,21 +91,21 @@ internal static class DeepClonerGenerator
         return outArray;
     }
 
-    internal static T[]? Clone1DimArrayStructInternal<T>(T[]? obj, DeepCloneState state)
+    internal static T[]? Clone1DimArrayStructInternal<T>(T[]? obj, FastCloneState state)
     {
         // not null from called method, but will check it anyway
         if (obj == null) return null;
         int l = obj.Length;
         T[]? outArray = new T[l];
         state.AddKnownRef(obj, outArray);
-        Func<T, DeepCloneState, T>? cloner = GetClonerForValueType<T>();
+        Func<T, FastCloneState, T>? cloner = GetClonerForValueType<T>();
         for (int i = 0; i < l; i++)
             outArray[i] = cloner(obj[i], state);
 
         return outArray;
     }
 
-    internal static T[]? Clone1DimArrayClassInternal<T>(T[]? obj, DeepCloneState state)
+    internal static T[]? Clone1DimArrayClassInternal<T>(T[]? obj, FastCloneState state)
     {
         // not null from called method, but will check it anyway
         if (obj == null) return null;
@@ -119,7 +119,7 @@ internal static class DeepClonerGenerator
     }
 
     // relatively frequent case. specially handled
-    internal static T[,]? Clone2DimArrayInternal<T>(T[,]? obj, DeepCloneState state)
+    internal static T[,]? Clone2DimArrayInternal<T>(T[,]? obj, FastCloneState state)
     {
         // not null from called method, but will check it anyway
         if (obj == null) return null;
@@ -135,7 +135,7 @@ internal static class DeepClonerGenerator
         int l2 = obj.GetLength(1);
         T[,]? outArray = new T[l1, l2];
         state.AddKnownRef(obj, outArray);
-        if (DeepClonerSafeTypes.CanReturnSameObject(typeof(T)))
+        if (FastClonerSafeTypes.CanReturnSameObject(typeof(T)))
         {
             Array.Copy(obj, outArray, obj.Length);
             return outArray;
@@ -143,7 +143,7 @@ internal static class DeepClonerGenerator
 
         if (typeof(T).IsValueType())
         {
-            Func<T, DeepCloneState, T>? cloner = GetClonerForValueType<T>();
+            Func<T, FastCloneState, T>? cloner = GetClonerForValueType<T>();
             for (int i = 0; i < l1; i++)
                 for (int k = 0; k < l2; k++)
                     outArray[i, k] = cloner(obj[i, k], state);
@@ -159,7 +159,7 @@ internal static class DeepClonerGenerator
     }
 
     // rare cases, very slow cloning. currently it's ok
-    internal static Array? CloneAbstractArrayInternal(Array? obj, DeepCloneState state)
+    internal static Array? CloneAbstractArrayInternal(Array? obj, FastCloneState state)
     {
         // not null from called method, but will check it anyway
         if (obj == null) return null;
@@ -179,7 +179,7 @@ internal static class DeepClonerGenerator
         if (lengths.Any(x => x == 0))
             return outArray;
 
-        if (DeepClonerSafeTypes.CanReturnSameObject(elementType))
+        if (FastClonerSafeTypes.CanReturnSameObject(elementType))
         {
             Array.Copy(obj, outArray, obj.Length);
             return outArray;
@@ -206,14 +206,14 @@ internal static class DeepClonerGenerator
         }
     }
 
-    internal static Func<T, DeepCloneState, T> GetClonerForValueType<T>() => (Func<T, DeepCloneState, T>)DeepClonerCache.GetOrAddStructAsObject(typeof(T), t => GenerateCloner(t, false));
+    internal static Func<T, FastCloneState, T> GetClonerForValueType<T>() => (Func<T, FastCloneState, T>)FastClonerCache.GetOrAddStructAsObject(typeof(T), t => GenerateCloner(t, false));
 
     private static object? GenerateCloner(Type t, bool asObject)
     {
-        if (DeepClonerSafeTypes.CanReturnSameObject(t) && (asObject && !t.IsValueType()))
+        if (FastClonerSafeTypes.CanReturnSameObject(t) && (asObject && !t.IsValueType()))
             return null;
 
-        return DeepClonerExprGenerator.GenerateClonerInternal(t, asObject);
+        return FastClonerExprGenerator.GenerateClonerInternal(t, asObject);
     }
 
     public static object? CloneObjectTo(object? objFrom, object? objTo, bool isDeep)
@@ -227,10 +227,10 @@ internal static class DeepClonerGenerator
             throw new InvalidOperationException("From object should be derived from From object, but From object has type " + objFrom.GetType().FullName + " and to " + objTo.GetType().FullName);
         if (objFrom is string)
             throw new InvalidOperationException("It is forbidden to clone strings");
-        Func<object, object, DeepCloneState, object>? cloner = (Func<object, object, DeepCloneState, object>)(isDeep
-            ? DeepClonerCache.GetOrAddDeepClassTo(type, t => ClonerToExprGenerator.GenerateClonerInternal(t, true))
-            : DeepClonerCache.GetOrAddShallowClassTo(type, t => ClonerToExprGenerator.GenerateClonerInternal(t, false)));
+        Func<object, object, FastCloneState, object>? cloner = (Func<object, object, FastCloneState, object>)(isDeep
+            ? FastClonerCache.GetOrAddDeepClassTo(type, t => ClonerToExprGenerator.GenerateClonerInternal(t, true))
+            : FastClonerCache.GetOrAddShallowClassTo(type, t => ClonerToExprGenerator.GenerateClonerInternal(t, false)));
         if (cloner == null) return objTo;
-        return cloner(objFrom, objTo, new DeepCloneState());
+        return cloner(objFrom, objTo, new FastCloneState());
     }
 }

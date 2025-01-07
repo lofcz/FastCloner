@@ -2,6 +2,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Diagnostics.Tracing;
 using System.Drawing;
+using System.Dynamic;
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 
@@ -216,6 +217,173 @@ public class SpecificScenariosTest
             Assert.That(clonedB.Next, Is.SameAs(clonedC), "References should point to new instances");
         });
     }
+    
+    [Test]
+    public void Dynamic_Object_Clone()
+    {
+        // Arrange
+        dynamic original = new ExpandoObject();
+        original.Name = "Test";
+        original.Number = 42;
+        original.Nested = new ExpandoObject();
+        original.Nested.Value = "Nested Value";
+        
+        // Act
+        dynamic cloned = FastCloner.DeepClone(original);
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Cloned object should be a new instance");
+            Assert.That(cloned.Name, Is.EqualTo("Test"), "String property should be copied");
+            Assert.That(cloned.Number, Is.EqualTo(42), "Number property should be copied");
+            Assert.That(cloned.Nested, Is.Not.SameAs(original.Nested), "Nested object should be cloned");
+            Assert.That(cloned.Nested.Value, Is.EqualTo("Nested Value"), "Nested value should be copied");
+        });
+    }
+    
+    [Test]
+    public void Dynamic_With_Delegate_Clone()
+    {
+        // Arrange
+        dynamic original = new ExpandoObject();
+        int counter = 0;
+        original.Name = "Test";
+        original.Increment = (Func<int>)(() => ++counter);
+    
+        // Act
+        dynamic cloned = FastCloner.DeepClone(original);
+    
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned.Name, Is.EqualTo("Test"), "String property should be copied");
+            
+            int originalResult = original.Increment();
+            int clonedResult = cloned.Increment();
+            Assert.That(originalResult, Is.EqualTo(1), "Original delegate should increment counter");
+            Assert.That(clonedResult, Is.EqualTo(2), "Cloned delegate should share the same counter");
+            Assert.That(counter, Is.EqualTo(2), "Counter should be incremented twice");
+            
+            originalResult = original.Increment();
+            clonedResult = cloned.Increment();
+            Assert.That(originalResult, Is.EqualTo(3), "Original delegate should continue counting");
+            Assert.That(clonedResult, Is.EqualTo(4), "Cloned delegate should continue counting");
+            Assert.That(counter, Is.EqualTo(4), "Counter should be incremented four times");
+        });
+    }
+    
+    [Test]
+    public void ExpandoObject_With_Collection_Clone()
+    {
+        // Arrange
+        dynamic original = new ExpandoObject();
+        original.List = new List<string> { "Item1", "Item2" };
+        original.Dictionary = new Dictionary<string, int> { ["Key1"] = 1, ["Key2"] = 2 };
+        
+        // Act
+        dynamic cloned = FastCloner.DeepClone(original);
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned.List, Is.Not.SameAs(original.List), "List should be cloned");
+            Assert.That(cloned.List, Is.EquivalentTo(original.List), "List items should be copied");
+            Assert.That(cloned.Dictionary, Is.Not.SameAs(original.Dictionary), "Dictionary should be cloned");
+            Assert.That(cloned.Dictionary["Key1"], Is.EqualTo(1), "Dictionary values should be copied");
+            Assert.That(cloned.Dictionary["Key2"], Is.EqualTo(2), "Dictionary values should be copied");
+        });
+    }
+
+    [Test]
+    public void ExpandoObject_With_Circular_Reference_Clone()
+    {
+        // Arrange
+        dynamic original = new ExpandoObject();
+        dynamic nested = new ExpandoObject();
+        original.Name = "Original";
+        original.Nested = nested;
+        nested.Parent = original; // Circular reference
+        
+        // Act
+        dynamic cloned = FastCloner.DeepClone(original);
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Cloned object should be a new instance");
+            Assert.That(cloned.Nested, Is.Not.SameAs(original.Nested), "Nested object should be cloned");
+            Assert.That(cloned.Name, Is.EqualTo("Original"), "Properties should be copied");
+            Assert.That(cloned.Nested.Parent, Is.SameAs(cloned), "Circular reference should point to cloned instance");
+        });
+    }
+
+    [Test]
+    public void Mixed_Dynamic_And_Static_Types_Clone()
+    {
+        // Arrange
+        StaticType staticObject = new StaticType { Value = "Static" };
+        dynamic dynamic = new ExpandoObject();
+        dynamic.Static = staticObject;
+        dynamic.Name = "Dynamic";
+        
+        // Act
+        dynamic cloned = FastCloner.DeepClone(dynamic);
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned.Static, Is.Not.SameAs(staticObject), "Static type should be cloned");
+            Assert.That(cloned.Static.Value, Is.EqualTo("Static"), "Static type properties should be copied");
+            Assert.That(cloned.Name, Is.EqualTo("Dynamic"), "Dynamic properties should be copied");
+        });
+    }
+
+    private class StaticType
+    {
+        public string Value { get; set; }
+    }
+
+    [Test]
+    public void ExpandoObject_With_Null_Values_Clone()
+    {
+        // Arrange
+        dynamic original = new ExpandoObject();
+        original.NullProperty = null;
+        original.ValidProperty = "NotNull";
+        
+        // Act
+        dynamic cloned = FastCloner.DeepClone(original);
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(((object)cloned.NullProperty), Is.Null, "Null properties should remain null");
+            Assert.That(cloned.ValidProperty, Is.EqualTo("NotNull"), "Non-null properties should be copied");
+        });
+    }
+
+    [Test]
+    public void Dynamic_Object_With_Complex_Types_Clone()
+    {
+        // Arrange
+        dynamic original = new ExpandoObject();
+        original.DateTime = DateTime.Now;
+        original.Guid = Guid.NewGuid();
+        original.TimeSpan = TimeSpan.FromHours(1);
+        
+        // Act
+        dynamic cloned = FastCloner.DeepClone(original);
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned.DateTime, Is.EqualTo(original.DateTime), "DateTime should be copied");
+            Assert.That(cloned.Guid, Is.EqualTo(original.Guid), "Guid should be copied");
+            Assert.That(cloned.TimeSpan, Is.EqualTo(original.TimeSpan), "TimeSpan should be copied");
+        });
+    }
+
 
     private class Node
     {

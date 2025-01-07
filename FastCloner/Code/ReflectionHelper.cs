@@ -1,6 +1,6 @@
 ﻿using System.Reflection;
 
-namespace FastCloner.Helpers;
+namespace FastCloner.Code;
 
 internal static class ReflectionHelper
 {

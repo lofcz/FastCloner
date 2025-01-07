@@ -1,7 +1,7 @@
 ﻿using System.Linq.Expressions;
 using System.Reflection;
 
-namespace FastCloner.Helpers;
+namespace FastCloner.Code;
 
 /// <summary>
 /// Internal class but due implementation restriction should be public
