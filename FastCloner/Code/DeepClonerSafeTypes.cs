@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace FastCloner.Helpers;
 
@@ -29,7 +30,7 @@ internal static class DeepClonerSafeTypes
         [typeof(IntPtr)] = true,
         [typeof(UIntPtr)] = true,
         [typeof(Guid)] = true,
-
+        
         // Others
         [typeof(DBNull)] = true,
         [StringComparer.Ordinal.GetType()] = true,
@@ -54,6 +55,13 @@ internal static class DeepClonerSafeTypes
         if (KnownTypes.TryGetValue(type, out bool isSafe))
             return isSafe;
 
+        if (typeof(Delegate).IsAssignableFrom(type))
+        {
+            KnownTypes.TryAdd(type, false);
+            return false;
+        }
+
+        
         // enums are safe
         // pointers (e.g. int*) are unsafe, but we cannot do anything with it except blind copy
         if (type.IsEnum() || type.IsPointer)

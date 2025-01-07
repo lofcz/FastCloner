@@ -1,18 +1,35 @@
-﻿namespace FastCloner.Helpers;
+﻿using System.Reflection;
+using System.Runtime.CompilerServices;
+
+namespace FastCloner.Helpers;
 
 internal static class DeepClonerGenerator
 {
     public static T? CloneObject<T>(T? obj)
     {
-        if (obj is ValueType)
+        switch (obj)
         {
-            Type? type = obj.GetType();
-            if (typeof(T) == type)
+            case ValueType:
             {
-                if (DeepClonerSafeTypes.CanReturnSameObject(type))
-                    return obj;
+                Type type = obj.GetType();
+                
+                if (typeof(T) == type)
+                {
+                    return DeepClonerSafeTypes.CanReturnSameObject(type) ? obj : CloneStructInternal(obj, new DeepCloneState());
+                }
 
-                return CloneStructInternal(obj, new DeepCloneState());
+                break;
+            }
+            case Delegate del:
+            {
+                Type? targetType = del.Target?.GetType();
+            
+                if (targetType?.GetCustomAttribute<CompilerGeneratedAttribute>() is not null)
+                {
+                    return (T?)CloneClassRoot(obj);
+                }
+            
+                return obj;
             }
         }
 

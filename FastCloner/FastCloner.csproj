@@ -25,7 +25,7 @@
     <Version>1.1.4</Version>
 
     <Title>FastCloner</Title>
-    <Description>Fast deep cloning library for .NET 8+</Description>
+    <Description>Fast deep cloning library for .NET 8+. Supports both deep and shallow cloning. Extensively tested, focused on performance and stability even on complicated object graphs.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     
     <Authors>Matěj Štágl, Adrian Mos, DeepCloner Collaborators</Authors>

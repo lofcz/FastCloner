@@ -14,7 +14,7 @@ internal class DeepCloneState
     {
         // this is faster than call Dictionary from begin
         // also, small poco objects does not have a lot of references
-        object[]? baseFromTo = _baseFromTo;
+        object[] baseFromTo = _baseFromTo;
         if (ReferenceEquals(from, baseFromTo[0])) return baseFromTo[3];
         if (ReferenceEquals(from, baseFromTo[1])) return baseFromTo[4];
         if (ReferenceEquals(from, baseFromTo[2])) return baseFromTo[5];
@@ -66,7 +66,7 @@ internal class DeepCloneState
             if (_buckets != null)
             {
                 int hashCode = RuntimeHelpers.GetHashCode(key) & 0x7FFFFFFF;
-                Entry[]? entries1 = _entries;
+                Entry[] entries1 = _entries;
                 for (int i = _buckets[hashCode % _buckets.Length]; i >= 0; i = entries1[i].Next)
                 {
                     if (entries1[i].HashCode == hashCode && ReferenceEquals(entries1[i].Key, key))
@@ -148,7 +148,7 @@ internal class DeepCloneState
             int hashCode = RuntimeHelpers.GetHashCode(key) & 0x7FFFFFFF;
             int targetBucket = hashCode % _buckets.Length;
 
-            Entry[]? entries1 = _entries;
+            Entry[] entries1 = _entries;
 
             if (_count == entries1.Length)
             {
@@ -171,10 +171,10 @@ internal class DeepCloneState
 
         private void Resize(int newSize)
         {
-            int[]? newBuckets = new int[newSize];
+            int[] newBuckets = new int[newSize];
             for (int i = 0; i < newBuckets.Length; i++)
                 newBuckets[i] = -1;
-            Entry[]? newEntries = new Entry[newSize];
+            Entry[] newEntries = new Entry[newSize];
             Array.Copy(_entries, 0, newEntries, 0, _count);
 
             for (int i = 0; i < _count; i++)
