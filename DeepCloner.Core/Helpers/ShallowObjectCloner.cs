@@ -17,15 +17,9 @@ public abstract class ShallowObjectCloner
     /// <summary>
     /// Performs real shallow object clone
     /// </summary>
-    public static object CloneObject(object obj)
-    {
-        return _instance.DoCloneObject(obj);
-    }
+    public static object CloneObject(object obj) => _instance.DoCloneObject(obj);
 
-    static ShallowObjectCloner()
-    {
-        _instance = new ShallowSafeObjectCloner();
-    }
+    static ShallowObjectCloner() => _instance = new ShallowSafeObjectCloner();
 
     private class ShallowSafeObjectCloner : ShallowObjectCloner
     {
@@ -39,9 +33,6 @@ public abstract class ShallowObjectCloner
             _cloneFunc = Expression.Lambda<Func<object, object>>(mce, p).Compile();
         }
 
-        protected override object DoCloneObject(object obj)
-        {
-            return _cloneFunc(obj);
-        }
+        protected override object DoCloneObject(object obj) => _cloneFunc(obj);
     }
 }

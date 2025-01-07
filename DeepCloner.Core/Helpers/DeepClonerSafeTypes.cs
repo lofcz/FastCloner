@@ -179,8 +179,5 @@ internal static class DeepClonerSafeTypes
         return true;
     }
 
-    public static bool CanReturnSameObject(Type type)
-    {
-        return CanReturnSameType(type, null);
-    }
+    public static bool CanReturnSameObject(Type type) => CanReturnSameType(type, null);
 }

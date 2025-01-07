@@ -13,20 +13,22 @@
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <DebugType>portable</DebugType>
     <DebugSymbols>true</DebugSymbols>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageId>Lofcz.Forks.DeepCloner.Core</PackageId>
   </PropertyGroup>
   
   <PropertyGroup>
-    <Version>0.1.0</Version>
+    <Version>0.1.2</Version>
 
     <Title>DeepCloner.Core</Title>
     <Description>A library for cloning objects, ported from DeepCloner.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     
-    <Authors>Adrian Mos</Authors>
+    <Authors>Adrian Mos, Matěj Štágl</Authors>
     <Company />
     <Product>IX Libraries</Product>
-    <Copyright>Adrian Mos, 2024</Copyright>
-    <PackageProjectUrl>https://github.com/adimosh/IX.Libraries/</PackageProjectUrl>
+    <Copyright>Adrian Mos, 2024, Matěj Štágl 2025</Copyright>
+    <PackageProjectUrl>https://github.com/lofcz/DeepCloner</PackageProjectUrl>
     <NeutralLanguage>en</NeutralLanguage>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
@@ -34,12 +36,6 @@
   <PropertyGroup Condition="'$(TargetFramework)'=='net462'">
     <DefineConstants>$(DefineConstants);OLDFRAMEWORK</DefineConstants>
   </PropertyGroup>
-  
-  <ItemGroup>
-    <PackageReference Include="JetBrains.Annotations" Version="2023.3.0">
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
-  </ItemGroup>
 
   <ItemGroup>
     <None Include="..\README.md" Pack="true" PackagePath="\" />

@@ -180,10 +180,7 @@ internal class DeepCloneState
             _buckets[targetBucket] = index;
         }
 
-        private void Resize()
-        {
-            Resize(ExpandPrime(_count));
-        }
+        private void Resize() => Resize(ExpandPrime(_count));
 
         private void Resize(int newSize)
         {

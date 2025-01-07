@@ -17,7 +17,7 @@ internal static class DeepClonerCache
     public static object GetOrAddClass<T>(Type type, Func<Type, T> adder)
     {
         // return _typeCache.GetOrAdd(type, x => adder(x));
-            
+
         // this implementation is slightly faster than getoradd
         if (_typeCache.TryGetValue(type, out var value)) return value;
 
@@ -33,7 +33,7 @@ internal static class DeepClonerCache
     public static object GetOrAddDeepClassTo<T>(Type type, Func<Type, T> adder)
     {
         if (_typeCacheDeepTo.TryGetValue(type, out var value)) return value;
-            
+
         // will lock by type object to ensure only one type generator is generated simultaneously
         lock (type)
         {
@@ -46,7 +46,7 @@ internal static class DeepClonerCache
     public static object GetOrAddShallowClassTo<T>(Type type, Func<Type, T> adder)
     {
         if (_typeCacheShallowTo.TryGetValue(type, out var value)) return value;
-            
+
         // will lock by type object to ensure only one type generator is generated simultaneously
         lock (type)
         {
@@ -62,7 +62,7 @@ internal static class DeepClonerCache
 
         // this implementation is slightly faster than getoradd
         if (_structAsObjectCache.TryGetValue(type, out var value)) return value;
-            
+
         // will lock by type object to ensure only one type generator is generated simultaneously
         lock (type)
         {
@@ -72,10 +72,7 @@ internal static class DeepClonerCache
         return value;
     }
 
-    public static T GetOrAddConvertor<T>(Type from, Type to, Func<Type, Type, T> adder)
-    {
-        return (T)_typeConvertCache.GetOrAdd(new(from, to), (tuple) => adder(tuple.Item1, tuple.Item2));
-    }
+    public static T GetOrAddConvertor<T>(Type from, Type to, Func<Type, Type, T> adder) => (T)_typeConvertCache.GetOrAdd(new(from, to), (tuple) => adder(tuple.Item1, tuple.Item2));
 
     /// <summary>
     /// This method can be used when we switch between safe / unsafe variants (for testing)

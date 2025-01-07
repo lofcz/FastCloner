@@ -9,15 +9,9 @@ internal static class DeepClonerExprGenerator
     private static readonly ConcurrentDictionary<FieldInfo, bool> _readonlyFields = new();
 
     private static readonly MethodInfo _fieldSetMethod;
-    static DeepClonerExprGenerator()
-    {
-        _fieldSetMethod = typeof(FieldInfo).GetMethod(nameof(FieldInfo.SetValue), [typeof(object), typeof(object)])!;
-    }
+    static DeepClonerExprGenerator() => _fieldSetMethod = typeof(FieldInfo).GetMethod(nameof(FieldInfo.SetValue), [typeof(object), typeof(object)])!;
 
-    internal static object GenerateClonerInternal(Type realType, bool asObject)
-    {
-        return GenerateProcessMethod(realType, asObject && realType.IsValueType());
-    }
+    internal static object GenerateClonerInternal(Type realType, bool asObject) => GenerateProcessMethod(realType, asObject && realType.IsValueType());
 
     // today, I found that it is not required to do such complex things. Just SetValue is enough
     // is it new runtime changes, or I made incorrect assumptions eariler
