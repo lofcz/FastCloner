@@ -109,13 +109,10 @@ public class SpecificScenariosTest
     public class LazyClass
     {
         public static int Counter;
-            
+
         private readonly LazyRef<object> _lazyValue = new LazyRef<object>(() => (object)(++Counter).ToString(CultureInfo.InvariantCulture));
 
-        public string GetValue()
-        {
-            return _lazyValue.Value.ToString();
-        }
+        public string GetValue() => _lazyValue.Value.ToString();
     }
 
     [Table("Currency", Schema = "Sales")]
@@ -140,10 +137,7 @@ public class SpecificScenariosTest
         public DbSet<Currency> Currencies { get; set; }
 
 #if !OLDFRAMEWORK
-            protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-            {
-                optionsBuilder.UseSqlServer(@"Server=.;Database=AdventureWorks;Trusted_Connection=true;MultipleActiveResultSets=true;Encrypt=False");
-            }
+            protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) => optionsBuilder.UseSqlServer(@"Server=.;Database=AdventureWorks;Trusted_Connection=true;MultipleActiveResultSets=true;Encrypt=False");
 #endif
     }
 
@@ -187,10 +181,7 @@ public class SpecificScenariosTest
         // make object unsafe to work
         private object _fieldX = new object();
 
-        public override int Compare(int x, int y)
-        {
-            return x.CompareTo(y);
-        }
+        public override int Compare(int x, int y) => x.CompareTo(y);
     }
 
 #if OLDFRAMEWORK
@@ -242,10 +233,7 @@ public class SpecificScenariosTest
                 _initializer = null;
             }
         }
-            
-        public LazyRef(Func<T> initializer)
-        {
-            _initializer = initializer;
-        }
+
+        public LazyRef(Func<T> initializer) => _initializer = initializer;
     }
 }

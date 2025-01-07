@@ -167,7 +167,7 @@ public class SimpleObjectSpec
             u.Int = &i;
             u.Void = &i;
         }
-            
+
         var cloned = u.DeepClone();
         unsafe
         {
@@ -198,10 +198,7 @@ public class SimpleObjectSpec
         private readonly StructWithObject z;
         #pragma warning restore 169
 
-        public object GetY()
-        {
-            return y;
-        }
+        public object GetY() => y;
     }
 
     public struct StructWithObject
@@ -242,7 +239,7 @@ public class SimpleObjectSpec
         var v2 = new VirtualClass2();
         v2.A = 1;
         v2.B = 2;
-        var v1 = v2 as VirtualClass1;
+        VirtualClass1 v1 = v2;
         v1.A = 3;
         var clone = v1.DeepClone() as VirtualClass2;
         v2.B = 0;
@@ -258,9 +255,9 @@ public class SimpleObjectSpec
         Assert.That(v == v.DeepClone(), Is.True);
         Assert.That(v == v.ShallowClone(), Is.True);
     }
-        
+
     public class EmptyClass {}
-        
+
     [Test(Description = "Empty class does not have any mutable properties, so, it safe to use same class in cloning"),
      Ignore("Think about logic, which is better to clone or not to clone, I do not know, but it changes current logic seriously")]
     // e.g. new object() frequently use for locks - if we leave same object - we'll receive same lock in different classes
@@ -271,7 +268,7 @@ public class SimpleObjectSpec
         Assert.That(ReferenceEquals(v, v.DeepClone()), Is.True);
         Assert.That(ReferenceEquals(v, v.ShallowClone()), Is.True);
     }
-        
+
     [Test(Description = "Reflection classes should not be cloned")]
     public void MethodInfo_Should_Not_Be_Cloned()
     {
@@ -287,13 +284,10 @@ public class SimpleObjectSpec
     public class Readonly1
     {
         public readonly object X;
-            
+
         public object Z = new object();
 
-        public Readonly1(string x)
-        {
-            X = x;
-        }
+        public Readonly1(string x) => X = x;
     }
 
     [Test]

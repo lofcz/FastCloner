@@ -8,7 +8,7 @@ namespace DeepCloner.Core.Helpers;
 /// </summary>
 internal static class DeepClonerSafeTypes
 {
-    internal static readonly ConcurrentDictionary<Type, bool> KnownTypes = new()
+    private static readonly ConcurrentDictionary<Type, bool> KnownTypes = new ConcurrentDictionary<Type, bool>
     {
         // Primitives
         [typeof(byte)] = true,
@@ -24,14 +24,12 @@ internal static class DeepClonerSafeTypes
         [typeof(string)] = true,
         [typeof(DateTime)] = true,
         [typeof(DateTimeOffset)] = true,
-#if !OLDFRAMEWORK
         [typeof(DateOnly)] = true,
         [typeof(TimeOnly)] = true,
-#endif
         [typeof(IntPtr)] = true,
         [typeof(UIntPtr)] = true,
         [typeof(Guid)] = true,
-        
+
         // Others
         [typeof(DBNull)] = true,
         [StringComparer.Ordinal.GetType()] = true,
@@ -64,23 +62,13 @@ internal static class DeepClonerSafeTypes
             return true;
         }
 
-#if OLDFRAMEWORK
-        // do not do anything with remoting. it is very dangerous to clone, bcs it relate to deep core of framework
-        if (type.FullName.StartsWith("System.Runtime.Remoting.")
-            && type.Assembly == typeof(System.Runtime.Remoting.CustomErrorsModes).Assembly)
-        {
-            KnownTypes.TryAdd(type, true);
-            return true;
-        }
-#endif
-
         if (type.FullName.StartsWith("System.Reflection.") && type.Assembly == typeof(PropertyInfo).Assembly)
         {
             KnownTypes.TryAdd(type, true);
             return true;
         }
 
-        // this types are serious native resources, it is better not to clone it
+        // these types are serious native resources, it is better not to clone it
         if (type.IsSubclassOf(typeof(System.Runtime.ConstrainedExecution.CriticalFinalizerObject)))
         {
             KnownTypes.TryAdd(type, true);
@@ -146,12 +134,12 @@ internal static class DeepClonerSafeTypes
             return false;
         }
 
-        processingTypes ??= new();
+        processingTypes ??= [];
 
         // structs cannot have a loops, but check it anyway
         processingTypes.Add(type);
 
-        List<FieldInfo> fi = new List<FieldInfo>();
+        List<FieldInfo> fi = [];
         var tp = type;
         do
         {

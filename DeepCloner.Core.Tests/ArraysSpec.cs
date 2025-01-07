@@ -35,12 +35,12 @@ public class ArraysSpec
         // strings should not be copied
         Assert.That(ReferenceEquals(arr[1], cloned[1]), Is.True);
 
-        arr = new[] { "1", "2", "3", "4" };
+        arr = ["1", "2", "3", "4"];
         cloned = arr.DeepClone();
         Assert.That(cloned.Length, Is.EqualTo(4));
         CollectionAssert.AreEqual(arr, cloned);
 
-        arr = new string[0];
+        arr = [];
         cloned = arr.DeepClone();
         Assert.That(cloned.Length, Is.EqualTo(0));
 
@@ -52,7 +52,7 @@ public class ArraysSpec
     public void StringArray_Casted_As_Object_Should_Be_Cloned()
     {
         // checking that cached object correctly clones arrays of different length
-        var arr = (object)new[] { "1", "2", "3" };
+        object arr = new[] { "1", "2", "3" };
         var cloned = arr.DeepClone() as string[];
         Assert.That(cloned.Length, Is.EqualTo(3));
         CollectionAssert.AreEqual((string[])arr, cloned);
@@ -75,10 +75,7 @@ public class ArraysSpec
 
     public class C1
     {
-        public C1(int x)
-        {
-            X = x;
-        }
+        public C1(int x) => X = x;
 
         public int X { get; set; }
 
@@ -99,10 +96,7 @@ public class ArraysSpec
 
     public struct S1
     {
-        public S1(int x)
-        {
-            X = x;
-        }
+        public S1(int x) => X = x;
 
         public int X;
     }
@@ -147,7 +141,7 @@ public class ArraysSpec
     [Test]
     public void NullAsArray_hould_Be_Cloned()
     {
-        var arr = (int[])null;
+        int[]? arr = null;
 // ReSharper disable ExpressionIsAlwaysNull
         var cloned = arr.DeepClone();
 // ReSharper restore ExpressionIsAlwaysNull
@@ -252,7 +246,7 @@ public class ArraysSpec
         Assert.That(clone[1, 0, 0], Is.EqualTo(3));
         Assert.That(clone[1, 1, 0], Is.EqualTo(4));
     }
-        
+
     [Test]
     public void MultiDim_Array_Should_Be_Cloned3()
     {
@@ -287,8 +281,10 @@ public class ArraysSpec
     [Test]
     public void NonZero_Based_Array_Should_Be_Cloned()
     {
-        var arr = Array.CreateInstance(typeof(int), new[] { 2 }, new[] { 1 });
-            
+        var arr = Array.CreateInstance(typeof(int),
+            [2],
+            [1]);
+
         arr.SetValue(1, 1);
         arr.SetValue(2, 2);
         var clone = arr.DeepClone();
@@ -299,7 +295,9 @@ public class ArraysSpec
     [Test]
     public void NonZero_Based_MultiDim_Array_Should_Be_Cloned()
     {
-        var arr = Array.CreateInstance(typeof(int), new[] { 2, 2 }, new[] { 1, 1 });
+        var arr = Array.CreateInstance(typeof(int),
+            [2, 2],
+            [1, 1]);
 
         arr.SetValue(1, 1, 1);
         arr.SetValue(2, 2, 2);
@@ -312,7 +310,7 @@ public class ArraysSpec
     public void Array_As_Generic_Array_Should_Be_Cloned()
     {
         var arr = new[] { 1, 2, 3 };
-        var genArr = (Array)arr;
+        Array genArr = arr;
         var clone = (int[])genArr.DeepClone();
         Assert.That(clone.Length, Is.EqualTo(3));
         Assert.That(clone[0], Is.EqualTo(1));
@@ -324,7 +322,7 @@ public class ArraysSpec
     public void Array_As_IEnumerable_Should_Be_Cloned()
     {
         var arr = new[] { 1, 2, 3 };
-        var genArr = (IEnumerable<int>)arr;
+        IEnumerable<int> genArr = arr;
         var clone = (int[])genArr.DeepClone();
 // ReSharper disable PossibleMultipleEnumeration
         Assert.That(clone.Length, Is.EqualTo(3));
@@ -342,7 +340,7 @@ public class ArraysSpec
         Array.CreateInstance(typeof(int), new[] { 1, 0 }).DeepClone();
         Array.CreateInstance(typeof(int), new[] { 0, 1 }).DeepClone();
         Array.CreateInstance(typeof(int), new[] { 1, 1 }).DeepClone();
-            
+
         Array.CreateInstance(typeof(int), new[] { 0, 0, 0 }).DeepClone();
         Array.CreateInstance(typeof(int), new[] { 1, 0, 0 }).DeepClone();
         Array.CreateInstance(typeof(int), new[] { 0, 1, 0 }).DeepClone();
@@ -367,7 +365,7 @@ public class ArraysSpec
 
         Assert.That(copyOfCloned.Contains("value"), Is.True);
     }
-        
+
     [Test]
     public void Check_Comparer_does_not_Clone()
     {
@@ -389,7 +387,7 @@ public class ArraysSpec
     {
         var comparer = EqualityComparer<T>.Default;
         var cloned = comparer.DeepClone();
-            
+
         // checking by reference
         Assert.That(comparer == cloned, Is.True);
     }

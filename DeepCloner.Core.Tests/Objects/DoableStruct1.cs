@@ -4,8 +4,5 @@ public struct DoableStruct1 : IDoable
 {
     public int X;
 
-    public int Do()
-    {
-        return ++X;
-    }
+    public int Do() => ++X;
 }

@@ -46,7 +46,7 @@ internal static class ClonerToExprGenerator
             }
         }
 
-        List<FieldInfo> fi = new List<FieldInfo>();
+        List<FieldInfo> fi = [];
         var tp = type;
         do
         {
@@ -68,7 +68,7 @@ internal static class ClonerToExprGenerator
                 var get = Expression.Field(fromLocal, fieldInfo);
 
                 // toLocal.Field = Clone...Internal(fromLocal.Field)
-                var call = (Expression) Expression.Call(methodInfo, get, state);
+                Expression call = Expression.Call(methodInfo, get, state);
                 if (!fieldInfo.FieldType.IsValueType())
                     call = Expression.Convert(call, fieldInfo.FieldType);
 
@@ -142,7 +142,7 @@ internal static class ClonerToExprGenerator
                 methodInfo = typeof(ClonerToExprGenerator).GetPrivateStaticMethod(nameof(Clone2DimArrayInternal))!.MakeGenericMethod(elementType);
             else
                 methodInfo = typeof(ClonerToExprGenerator).GetPrivateStaticMethod(nameof(CloneAbstractArrayInternal))!;
-                
+
             var callS = Expression.Call(methodInfo, Expression.Convert(from, type), Expression.Convert(to, type), state, Expression.Constant(isDeep));
             return Expression.Lambda(funcType, callS, from, to, state).Compile();
         }
@@ -197,7 +197,7 @@ internal static class ClonerToExprGenerator
         if (objFrom.GetLowerBound(0) != 0 || objFrom.GetLowerBound(1) != 0
                                           || objTo.GetLowerBound(0) != 0 || objTo.GetLowerBound(1) != 0)
             return (T[,]) CloneAbstractArrayInternal(objFrom, objTo, state, isDeep);
-            
+
         var l1 = Math.Min(objFrom.GetLength(0), objTo.GetLength(0));
         var l2 = Math.Min(objFrom.GetLength(1), objTo.GetLength(1));
         state.AddKnownRef(objFrom, objTo);
@@ -257,10 +257,12 @@ internal static class ClonerToExprGenerator
 
         while (true)
         {
-            if (isDeep)
-                objTo.SetValue(DeepClonerGenerator.CloneClassInternal(objFrom.GetValue(idxesFrom), state), idxesTo);
-            else
-                objTo.SetValue(objFrom.GetValue(idxesFrom), idxesTo);
+            objTo.SetValue(
+                isDeep
+                    ? DeepClonerGenerator.CloneClassInternal(
+                        objFrom.GetValue(idxesFrom),
+                        state)
+                    : objFrom.GetValue(idxesFrom), idxesTo);
             var ofs = rank - 1;
             while (true)
             {

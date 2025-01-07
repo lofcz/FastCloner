@@ -12,7 +12,7 @@ public class CopyToObjectSpec
             {
                 Data = new SampleActivityParsedData
                 {
-                    Steps = new List<string> { "A", "B", "C" }
+                    Steps = ["A", "B", "C"]
                 }
             }
         };
@@ -36,15 +36,9 @@ public class CopyToObjectSpec
 
         }
 
-        public SampleInterfaceClsWithProp(IActivityDataWithProp data)
-        {
-            SetActivityData(data);
-        }
+        public SampleInterfaceClsWithProp(IActivityDataWithProp data) => SetActivityData(data);
 
-        public void SetActivityData(IActivityDataWithProp data)
-        {
-            ActivityData = data;
-        }
+        public void SetActivityData(IActivityDataWithProp data) => ActivityData = data;
     }
 
     public class SampleActivityDataWithProp : IActivityDataWithProp
@@ -55,7 +49,7 @@ public class CopyToObjectSpec
 
     public class SampleActivityParsedData
     {
-        public List<string> Steps { get; set; } = new List<string>();
+        public List<string> Steps { get; set; } = [];
     }
 
     public class C1
@@ -104,14 +98,14 @@ public class CopyToObjectSpec
         {
             A = 12,
             B = "testestest",
-            C = new byte[] { 1, 2, 3 }
+            C = [1, 2, 3]
         };
 
         var cTo = new C1
         {
             A = 11,
             B = "tes",
-            C = new byte[] { 1 }
+            C = [1]
         };
 
         var cToRef = cTo;
@@ -137,7 +131,7 @@ public class CopyToObjectSpec
         {
             A = 12,
             B = "testestest",
-            C = new byte[] { 1, 2, 3 }
+            C = [1, 2, 3]
         };
 
         var cTo = new C2
@@ -328,9 +322,13 @@ public class CopyToObjectSpec
     [TestCase(true)]
     public void Non_Zero_Based_Array_Should_Be_Cloned(bool isDeep)
     {
-        var arrFrom = Array.CreateInstance(typeof(int), new[] { 2 }, new[] { 1 });
+        var arrFrom = Array.CreateInstance(typeof(int),
+            [2],
+            [1]);
         // with offset. its ok
-        var arrTo = Array.CreateInstance(typeof(int), new[] { 2 }, new[] { 0 });
+        var arrTo = Array.CreateInstance(typeof(int),
+            [2],
+            [0]);
         arrFrom.SetValue(1, 1);
         arrFrom.SetValue(2, 2);
         if (isDeep) arrFrom.DeepCloneTo(arrTo);
@@ -345,9 +343,13 @@ public class CopyToObjectSpec
     [TestCase(true)]
     public void MultiDim_Array_Should_Be_Cloned(bool isDeep)
     {
-        var arrFrom = Array.CreateInstance(typeof(int), new[] { 2, 2 }, new[] { 1, 1 });
+        var arrFrom = Array.CreateInstance(typeof(int),
+            [2, 2],
+            [1, 1]);
         // with offset. its ok
-        var arrTo = Array.CreateInstance(typeof(int), new[] { 1, 1 }, new[] { 0, 0 });
+        var arrTo = Array.CreateInstance(typeof(int),
+            [1, 1],
+            [0, 0]);
         arrFrom.SetValue(1, 1, 1);
         arrFrom.SetValue(2, 2, 2);
         if (isDeep) arrFrom.DeepCloneTo(arrTo);

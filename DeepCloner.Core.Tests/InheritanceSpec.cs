@@ -86,7 +86,7 @@ public class InheritanceSpec
         c2.X = 1;
         c2.Y = 2;
         c2.Z = 3;
-        var c1 = c2 as C1;
+        C1 c1 = c2;
         c1.X = 4;
         var cloned = c1.DeepClone();
         Assert.That(cloned, Is.TypeOf<C2>());
@@ -103,7 +103,7 @@ public class InheritanceSpec
         c2.X = 1;
         c2.Y = 2;
         c2.Z = 3;
-        var c1 = c2 as C1P;
+        C1P c1 = c2;
         c1.X = 4;
         var cloned = c2.DeepClone();
         c2.X = 100;
@@ -188,7 +188,7 @@ public class InheritanceSpec
     {
         var c3 = new C3();
         c3.X = new C1();
-        var obj = c3 as object;
+        object obj = c3;
         var cloned = obj.DeepClone();
         Assert.That(cloned, Is.TypeOf<C3>());
         Assert.That(c3, Is.Not.EqualTo(cloned));
@@ -200,7 +200,7 @@ public class InheritanceSpec
     public void Class_Casted_To_Interface_Should_Be_Cloned()
     {
         var c1 = new C1();
-        var disp = c1 as IDisposable;
+        IDisposable disp = c1;
         var cloned = disp.DeepClone();
         Assert.That(c1, Is.Not.EqualTo(cloned));
         Assert.That(cloned, Is.TypeOf<C1>());

@@ -1,4 +1,6 @@
-﻿namespace DeepCloner.Core.Tests;
+﻿using System.Collections.Concurrent;
+
+namespace DeepCloner.Core.Tests;
 
 [TestFixture]
 public class ConstructorsSpec
@@ -9,10 +11,7 @@ public class ConstructorsSpec
         {
         }
 
-        public static T1 Create()
-        {
-            return new T1();
-        }
+        public static T1 Create() => new T1();
 
         public int X { get; set; }
     }
@@ -28,51 +27,46 @@ public class ConstructorsSpec
 
     public class ExClass
     {
-        public ExClass()
-        {
-            throw new Exception();
-        }
+        public ExClass() => throw new Exception();
 
         public ExClass(string x)
         {
             // does not throw here
         }
 
-        public override bool Equals(object obj)
-        {
-            throw new Exception();
-        }
+        public override bool Equals(object obj) => throw new Exception();
 
-        public override int GetHashCode()
-        {
-            throw new Exception();
-        }
+        public override int GetHashCode() => throw new Exception();
 
-        public override string ToString()
-        {
-            throw new Exception();
-        }
+        public override string ToString() => throw new Exception();
     }
 
-#if OLDFRAMEWORK
-        public class ClonableClass : ICloneable
-        {
-            public object X { get; set; }
+    [Test]
+    public void GetOrAdd_ParallelAccess_ShouldBeThreadSafe()
+    {
+        // Arrange
+        var iterations = 1000;
+        var parallelTasks = new List<Task>();
+        ConcurrentDictionary<Type, string> typeCache = new ConcurrentDictionary<Type, string>();
 
-            public object Clone()
+        // Act
+        for (int i = 0; i < iterations; i++)
+        {
+            var task = Task.Run(() =>
             {
-                throw new NotImplementedException();
-            }
+                var value = typeCache.GetOrAdd(typeof(string), t =>
+                {
+                    Thread.Sleep(10);
+                    return "computed value";
+                });
+            });
+            parallelTasks.Add(task);
         }
 
-        [Test]
-        public void Cloner_Should_Not_Call_Any_Method_Of_Clonable_Class()
-        {
-            // just for check, ensure no hidden behaviour in MemberwiseClone
-            Assert.DoesNotThrow(() => new ClonableClass().DeepClone());
-            Assert.DoesNotThrow(() => new { X = new ClonableClass() }.DeepClone());
-        }
-#endif
+        // Assert
+        Assert.DoesNotThrowAsync(async () => await Task.WhenAll(parallelTasks));
+        Assert.That(typeCache.Count, Is.EqualTo(1));
+    }
 
     [Test]
     public void Object_With_Private_Constructor_Should_Be_Cloned()
@@ -102,34 +96,6 @@ public class ConstructorsSpec
         Assert.That(cloned.A, Is.EqualTo(1));
         Assert.That(cloned.B, Is.EqualTo("x"));
     }
-
-#if OLDFRAMEWORK
-    private class C3 : ContextBoundObject
-    {
-    }
-
-    private class C4 : MarshalByRefObject
-    {
-    }
-
-    [Test]
-    public void ContextBound_Object_Should_Be_Cloned()
-    {
-        // FormatterServices.CreateUninitializedObject cannot use context-bound objects
-        var c = new C3();
-        var cloned = c.DeepClone();
-        Assert.That(cloned, Is.Not.Null);
-    }
-
-    [Test]
-    public void MarshalByRef_Object_Should_Be_Cloned()
-    {
-        // FormatterServices.CreateUninitializedObject cannot use context-bound objects
-        var c = new C4();
-        var cloned = c.DeepClone();
-        Assert.That(cloned, Is.Not.Null);
-    }
-#endif
 
     [Test]
     public void Cloner_Should_Not_Call_Any_Method_Of_Class_Be_Cloned()

@@ -83,7 +83,7 @@ public class ShallowClonerSpec
         Assert.That(c1.Do(), Is.EqualTo(3));
         Assert.That(clone.Do(), Is.EqualTo(3));
     }
-        
+
     [Test]
     public void Struct_As_Interface_Should_Be_Cloned_For_DeepClone_Too()
     {
@@ -107,7 +107,7 @@ public class ShallowClonerSpec
         // shallow clone do not copy object
         Assert.That(clone.Item1.Do(), Is.EqualTo(4));
     }
-        
+
     [Test]
     public void Struct_As_Interface_Should_Be_Cloned_For_DeepClone_Too_In_Object()
     {
@@ -120,7 +120,7 @@ public class ShallowClonerSpec
         // deep clone copy object
         Assert.That(clone.Item1.Do(), Is.EqualTo(3));
     }
-        
+
     [Test]
     public void Primitive_Should_Be_Cloned()
     {

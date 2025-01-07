@@ -6,7 +6,7 @@ namespace DeepCloner.Core.Helpers;
 
 internal static class DeepClonerExprGenerator
 {
-    private static readonly ConcurrentDictionary<FieldInfo, bool> _readonlyFields = new();
+    private static readonly ConcurrentDictionary<FieldInfo, bool> _readonlyFields = new ConcurrentDictionary<FieldInfo, bool>();
 
     private static readonly MethodInfo _fieldSetMethod;
     static DeepClonerExprGenerator() => _fieldSetMethod = typeof(FieldInfo).GetMethod(nameof(FieldInfo.SetValue), [typeof(object), typeof(object)])!;
@@ -14,7 +14,7 @@ internal static class DeepClonerExprGenerator
     internal static object GenerateClonerInternal(Type realType, bool asObject) => GenerateProcessMethod(realType, asObject && realType.IsValueType());
 
     // today, I found that it is not required to do such complex things. Just SetValue is enough
-    // is it new runtime changes, or I made incorrect assumptions eariler
+    // is it new runtime changes, or I made incorrect assumptions earlier
     // slow, but hardcore method to set readonly field
     internal static void ForceSetField(FieldInfo field, object obj, object value)
     {
@@ -100,7 +100,7 @@ internal static class DeepClonerExprGenerator
             }
         }
 
-        List<FieldInfo> fi = new List<FieldInfo>();
+        List<FieldInfo> fi = [];
         var tp = type;
         do
         {
@@ -124,7 +124,7 @@ internal static class DeepClonerExprGenerator
                 var get = Expression.Field(fromLocal, fieldInfo);
 
                 // toLocal.Field = Clone...Internal(fromLocal.Field)
-                var call = (Expression)Expression.Call(methodInfo, get, state);
+                Expression call = Expression.Call(methodInfo, get, state);
                 if (!fieldInfo.FieldType.IsValueType())
                     call = Expression.Convert(call, fieldInfo.FieldType);
 
@@ -215,7 +215,8 @@ internal static class DeepClonerExprGenerator
 
         return Expression.Lambda(
             funcType,
-            Expression.Block(new[] { local },
+            Expression.Block(
+                [local],
                              assign, constructor, Expression.Call(state, StaticMethodInfos.DeepCloneStateMethods.AddKnownRef, from, local),
                              from),
             from, state).Compile();

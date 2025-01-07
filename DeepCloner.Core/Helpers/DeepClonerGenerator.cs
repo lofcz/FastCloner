@@ -12,7 +12,7 @@ internal static class DeepClonerGenerator
                 if (DeepClonerSafeTypes.CanReturnSameObject(type))
                     return obj;
 
-                return CloneStructInternal(obj, new());
+                return CloneStructInternal(obj, new DeepCloneState());
             }
         }
 
@@ -30,7 +30,7 @@ internal static class DeepClonerGenerator
         if (cloner == null)
             return obj;
 
-        return cloner(obj, new());
+        return cloner(obj, new DeepCloneState());
     }
 
     internal static object? CloneClassInternal(object? obj, DeepCloneState state)
@@ -204,7 +204,7 @@ internal static class DeepClonerGenerator
         if (objTo == null) return null;
 
         if (objFrom == null)
-            throw new ArgumentNullException("objFrom", "Cannot copy null object to another");
+            throw new ArgumentNullException(nameof(objFrom), "Cannot copy null object to another");
         var type = objFrom.GetType();
         if (!type.IsInstanceOfType(objTo))
             throw new InvalidOperationException("From object should be derived from From object, but From object has type " + objFrom.GetType().FullName + " and to " + objTo.GetType().FullName);
@@ -214,6 +214,6 @@ internal static class DeepClonerGenerator
             ? DeepClonerCache.GetOrAddDeepClassTo(type, t => ClonerToExprGenerator.GenerateClonerInternal(t, true))
             : DeepClonerCache.GetOrAddShallowClassTo(type, t => ClonerToExprGenerator.GenerateClonerInternal(t, false)));
         if (cloner == null) return objTo;
-        return cloner(objFrom, objTo, new());
+        return cloner(objFrom, objTo, new DeepCloneState());
     }
 }

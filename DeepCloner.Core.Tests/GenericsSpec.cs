@@ -13,7 +13,7 @@ public class GenericsSpec
         c = new Tuple<int, int>(1, 2).ShallowClone();
         Assert.That(c.Item1, Is.EqualTo(1));
         Assert.That(c.Item2, Is.EqualTo(2));
-            
+
         var cc = new Tuple<int, int, int, int, int, int, int>(1, 2, 3, 4, 5, 6, 7).DeepClone();
         Assert.That(cc.Item7, Is.EqualTo(7));
 
