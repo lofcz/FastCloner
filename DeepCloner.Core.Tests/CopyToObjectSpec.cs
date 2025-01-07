@@ -145,7 +145,7 @@ public class CopyToObjectSpec
             Assert.That(clonedContainer.Set1, Does.Contain(clonedItem1));
             Assert.That(clonedContainer.Set2, Does.Contain(clonedItem2));
             Assert.That(clonedContainer.Set3, Does.Contain(clonedItem3));
-            
+
             Assert.That(container.Set1, Has.Count.EqualTo(1));
             Assert.That(container.Set2, Has.Count.EqualTo(1));
             Assert.That(container.Set3, Has.Count.EqualTo(1));
@@ -252,6 +252,42 @@ public class CopyToObjectSpec
             Assert.That(clonedKey.Value is "TestKey", Is.True);
             Assert.That(clonedDict[clonedKey], Is.EqualTo("TestValue"));
         });
+    }
+
+    [Test]
+    public void TaskCancelledExceptionCloningTest()
+    {
+        // Arrange
+        var cts = new CancellationTokenSource();
+        TaskCanceledException? originalException = null;
+    
+        try
+        {
+            // Create a cancelled task that will throw TaskCancelledException
+            cts.Cancel();
+            Task.Delay(100, cts.Token).GetAwaiter().GetResult();
+        }
+        catch (TaskCanceledException ex)
+        {
+            originalException = ex;
+        }
+
+        // Act & Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(originalException, Is.Not.Null);
+            
+            Assert.DoesNotThrow(() =>
+            {
+                var clonedException = originalException.DeepClone();
+                Assert.That(clonedException, Is.Not.Null);
+                Assert.That(clonedException.Message, Is.EqualTo(originalException.Message));
+                Assert.That(ReferenceEquals(originalException, clonedException), Is.False);
+                Assert.That(clonedException.Task, Is.Not.Null);
+            });
+        });
+        
+        cts.Dispose();
     }
 
     [Test]
