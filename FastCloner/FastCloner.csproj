@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    
+    <Deterministic>true</Deterministic>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <DebugType>portable</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageId>FastCloner</PackageId>
+    <PackageIcon>icon.jpg</PackageIcon>
+    <RepositoryUrl>https://github.com/lofcz/FastCloner</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>deepclone,clone,fastclone,cloner,replicate,duplicate</PackageTags>
+  </PropertyGroup>
+  
+  <PropertyGroup>
+    <Version>1.1.4</Version>
+
+    <Title>FastCloner</Title>
+    <Description>Fast deep cloning library for .NET 8+</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    
+    <Authors>Matěj Štágl, Adrian Mos, DeepCloner Collaborators</Authors>
+    <Company />
+    <Product>FastCloner</Product>
+    <Copyright> Matěj Štágl - 2025, Adrian Mos - 2024</Copyright>
+    <PackageProjectUrl>https://github.com/lofcz/FastCloner</PackageProjectUrl>
+    <NeutralLanguage>en</NeutralLanguage>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="icon.jpg" Pack="true" PackagePath=""/>
+  </ItemGroup>
+</Project>
