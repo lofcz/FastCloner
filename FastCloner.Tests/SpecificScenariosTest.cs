@@ -151,7 +151,78 @@ public class SpecificScenariosTest
             Console.WriteLine(input);
         }
     }
+    
+    [Test]
+    public void Circular_Reference_Clone()
+    {
+        // Arrange
+        CircularClass original = new CircularClass
+        {
+            Name = "Test"
+        };
+        
+        original.Reference = original;
+    
+        // Act
+        CircularClass cloned = original.DeepClone();
+    
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Cloned object should be a new instance");
+            Assert.That(cloned.Name, Is.EqualTo(original.Name), "Properties should be copied");
+            Assert.That(cloned.Reference, Is.SameAs(cloned), "Circular reference should point to the cloned instance");
+            Assert.That(cloned.Reference.Reference, Is.SameAs(cloned), "Nested circular reference should point to the cloned instance");
+        });
+    }
 
+    private class CircularClass
+    {
+        public string Name { get; set; }
+        public CircularClass Reference { get; set; }
+    }
+
+    [Test]
+    public void Complex_Circular_Reference_Clone()
+    {
+        // Arrange
+        Node nodeA = new Node { Name = "A" };
+        Node nodeB = new Node { Name = "B" };
+        Node nodeC = new Node { Name = "C" };
+    
+        // A -> B -> C -> A
+        nodeA.Next = nodeB;
+        nodeB.Next = nodeC;
+        nodeC.Next = nodeA;
+    
+        // Act
+        Node clonedA = nodeA.DeepClone();
+        Node clonedB = clonedA.Next;
+        Node clonedC = clonedB.Next;
+    
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clonedA, Is.Not.SameAs(nodeA), "Node A should be cloned");
+            Assert.That(clonedB, Is.Not.SameAs(nodeB), "Node B should be cloned");
+            Assert.That(clonedC, Is.Not.SameAs(nodeC), "Node C should be cloned");
+            
+            Assert.That(clonedA.Name, Is.EqualTo("A"), "Node A name should be copied");
+            Assert.That(clonedB.Name, Is.EqualTo("B"), "Node B name should be copied");
+            Assert.That(clonedC.Name, Is.EqualTo("C"), "Node C name should be copied");
+            
+            Assert.That(clonedC.Next, Is.SameAs(clonedA), "Cycle should be preserved");
+            Assert.That(clonedA.Next, Is.SameAs(clonedB), "References should point to new instances");
+            Assert.That(clonedB.Next, Is.SameAs(clonedC), "References should point to new instances");
+        });
+    }
+
+    private class Node
+    {
+        public string Name { get; set; }
+        public Node Next { get; set; }
+    }
+    
     [Test]
     public void Test_ExpressionTree_OrderBy2()
     {
