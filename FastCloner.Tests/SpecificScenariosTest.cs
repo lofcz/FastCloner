@@ -80,6 +80,134 @@ public class SpecificScenariosTest
             Assert.That(cloned.internals[i].myUint3, Is.EqualTo(original.internals[i].myUint3));
         }
     }
+    
+    [Test]
+    public void Test_InitOnlyProperties_ObjectInitialization()
+    {
+        // Arrange & Act
+        PersonWithInitProperties person = new PersonWithInitProperties
+        {
+            Name = "John Doe",
+            Age = 30,
+            BirthDate = new DateTime(1993, 1, 1),
+            HomeAddress = new Address
+            {
+                Street = "123 Main St",
+                City = "New York",
+                ZipCode = "10001"
+            }
+        };
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(person.Name, Is.EqualTo("John Doe"));
+            Assert.That(person.Age, Is.EqualTo(30));
+            Assert.That(person.BirthDate, Is.EqualTo(new DateTime(1993, 1, 1)));
+            Assert.That(person.HomeAddress.Street, Is.EqualTo("123 Main St"));
+        });
+    }
+
+    [Test]
+    public void Test_InitOnlyProperties_WithCloning()
+    {
+        // Arrange
+        PersonWithInitProperties original = new PersonWithInitProperties
+        {
+            Name = "John Doe",
+            Age = 30,
+            HomeAddress = new Address
+            {
+                Street = "123 Main St",
+                City = "New York",
+                ZipCode = "10001"
+            }
+        };
+
+        // Act
+        PersonWithInitProperties modified = original with { Age = 31 };
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(modified.Name, Is.EqualTo(original.Name));
+            Assert.That(modified.Age, Is.EqualTo(31));
+            Assert.That(modified.HomeAddress, Is.EqualTo(original.HomeAddress));
+            Assert.That(modified, Is.Not.SameAs(original));
+        });
+    }
+
+    [Test]
+    public void Test_InitOnlyProperties_RecordEquality()
+    {
+        // Arrange
+        PersonWithInitProperties person1 = new PersonWithInitProperties
+        {
+            Name = "John Doe",
+            Age = 30,
+            HomeAddress = new Address
+            {
+                Street = "123 Main St",
+                City = "New York",
+                ZipCode = "10001"
+            }
+        };
+
+        PersonWithInitProperties person2 = new PersonWithInitProperties
+        {
+            Name = "John Doe",
+            Age = 30,
+            HomeAddress = new Address
+            {
+                Street = "123 Main St",
+                City = "New York",
+                ZipCode = "10001"
+            }
+        };
+
+        // Act & Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(person1, Is.EqualTo(person2));
+            Assert.That(person1.GetHashCode(), Is.EqualTo(person2.GetHashCode()));
+            Assert.That(person1, Is.EqualTo(person2));
+        });
+    }
+    
+    public record PersonWithInitProperties
+    {
+        public string Name { get; init; }
+        public int Age { get; init; }
+        public DateTime BirthDate { get; init; }
+        public Address HomeAddress { get; init; }
+    }
+
+    public record Address
+    {
+        public string Street { get; init; }
+        public string City { get; init; }
+        public string ZipCode { get; init; }
+    }
+
+    [Test]
+    public void Test_InitOnlyProperties_WithNullValues()
+    {
+        // Arrange & Act
+        PersonWithInitProperties person = new PersonWithInitProperties
+        {
+            Name = null,
+            Age = 30,
+            HomeAddress = null
+        };
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(person.Name, Is.Null);
+            Assert.That(person.Age, Is.EqualTo(30));
+            Assert.That(person.HomeAddress, Is.Null);
+        });
+    }
 
     public class CBase<TKey>
     {
