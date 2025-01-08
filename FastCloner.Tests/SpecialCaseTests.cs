@@ -1892,4 +1892,42 @@ public class SpecialCaseTests
 
         public LazyRef(Func<T> initializer) => _initializer = initializer;
     }
+    
+    [Test]
+    public void CanCopyInterfaceField()
+    {
+        MyObject o = new MyObject();
+
+        MyIClass original = new MyIClass 
+        {
+            Field1 = o,
+            Field2 = o
+        };
+
+        MyIClass result = original.DeepClone();
+        
+        Assert.Multiple(() =>
+        {
+            Assert.That(original.Field1, Is.SameAs(original.Field2), "Original objects should be same");
+            Assert.That(result.Field1, Is.SameAs(result.Field2), "Cloned objects should be same");
+        });
+    }
+
+    public class MyIClass
+    {
+        public IMyInterface1 Field1;
+        public IMyInterface2 Field2;
+    }
+
+    public interface IMyInterface1
+    {
+    }
+
+    public interface IMyInterface2
+    {
+    }
+
+    public class MyObject : IMyInterface1, IMyInterface2
+    {
+    }
 }
