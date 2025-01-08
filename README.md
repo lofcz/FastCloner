@@ -1,125 +1,41 @@
-# DeepCloner.Core
+# FastCloner
 
-Library with extenstion to clone objects for .NET. It can deep or shallow copy objects. In deep cloning all object graph is maintained. Library actively uses code-generation in runtime as result object cloning is blazingly fast.
-Also, there are some performance tricks to increase cloning speed (see tests below).
-Objects are copied by its' internal structure, **no** methods or constructuctors are called for cloning objects. As result, you can copy **any** object, but we don't recommend to copy objects which are binded to native resources or pointers. It can cause unpredictable results (but object will be cloned).
+<img align="left" width="128" height="128" alt="Te Reo Icon" src="https://github.com/user-attachments/assets/54f5be37-543a-411d-b6e6-90a77414926c" />
+Fast deep cloning library for .NET 8+. Supports both deep and shallow cloning. Extensively tested, focused on performance and stability even on complicated object graphs. FastCloner is designed to work with as few gotchas as possible out of the box. The mapping is zero-config by default. Clone your objects and be done with it <em>fast</em>. FastCloner builds upon <a href="https://github.com/force-net/DeepCloner">DeepClone</a>.
 
-You don't need to mark objects somehow, like Serializable-attribute, or restrict to specific interface. Absolutely any object can be cloned by this library. And this object doesn't have any ability to determine that he is clone (except with very specific methods).
+<br/><br/>
 
-Also, there is no requirement to specify object type for cloning. Object can be casted to inteface or as an abstract object, you can clone array of ints as abstract Array or IEnumerable, even null can be cloned without any errors.
+## Getting Started
 
-Installation through Nuget:
+Install the package via NuGet:
 
 ```powershell
-Install-Package DeepCloner.Core
+dotnet add package FastCloner
+dotnet add package FastCloner.Contrib # only required for some special types, such as Fonts
 ```
 
-This library is a fork of [DeepCloner](https://github.com/force-net/DeepCloner/) that has been made for the purpose of modernizing DeepCloner and bringing it in line with the rest of the world (.NET Standard 1.3? .NET 4.0? Who can't afford to upgrade from those to a supported standard, really?). It is needed in at least one of my commercial projects.
-
-## Supported Frameworks
-
-DeepCloner.Core works for .NET 4.6.2 or higher or for .NET 6.
-
-## Usage
-
-Deep cloning any object:
+Clone your objects:
 
 ```csharp
-var clone = new { Id = 1, Name = "222" }.DeepClone();
+using FastCloner.Code;
+var clone = FastCloner.DeepClone(new { Hello = "world", MyList = new List<int> { 1 } });
 ```
 
-With a reference to same object:
+⭐ **That's it!** _Feel free to map this method to your extension so if you need to migrate in the future it's a matter of just switching that method. We intentionally don't ship our own `.DeepClone()` extension method._
+
+## Advanced usage
+
+Appart from deep cloning, FastCloner supports shallow cloning and deep cloning _to_ target:
 
 ```csharp
-// public class Tree { public Tree ParentTree; }
-var t = new Tree();
-t.ParentTree = t;
-var cloned = t.DeepClone();
-Console.WriteLine(cloned.ParentTree == cloned); // True
+// the list is shared between the two instances
+var clone = FastCloner.ShallowClone(new { Hello = "world", MyList = new List<int> { 1 } });
 ```
 
-Or as object:
+## Limitations
 
-```csharp
-var date = DateTime.Now;
-var obj = (object)date;
-obj.DeepClone().GetType(); // DateTime
-```
-
-Shallow cloning (clone only same object, not objects that object relate to) 
-
-```csharp
-var clone = new { Id = 1, Name = "222" }.ShallowClone();
-```
-
-Cloning to existing object (can be useful for _copying_ constructors, creating wrappers or for keeping references to same object)
-
-```csharp
-public class Derived : BaseClass
-{
-    public Derived(BaseClass parent)
-    {
-        parent.DeepCloneTo(this); // now this has every field from parent
-    }
-}
-```
-
-Please, note, that _DeepCloneTo_ and _ShallowCloneTo_ requre that object should be class (it is useless for structures) and derived class must be real descendant of parent class (or same type). In another words, this code will not work:
-
-```csharp
-public class Base {}
-public class Derived1 : Base {}
-public class Derived2 : Base {}
-
-var b = (Base)new Derived1(); // casting derived to parent
-var derived2 = new Derived2();
-// will compile, but will throw an exception in runtime, Derived1 is not parent for Derived2
-b.DeepCloneTo(derived2); 
-```
-
-## Details
-
-You can use deep clone of objects for a lot of situations, e.g.:
-* Emulation of external service or _deserialization elimination_ (e.g. in Unit Testing). When code has received object from external source, code can change it (because object for code is *own*).
-* ReadOnly object replace. Instead of wrapping your object to readonly object, you can clone object and target code can do anything with it without any restriction.
-* Caching. You can cache data locally and want to ensurce that cached object hadn't been changed by other code
- 
-You can use shallow clone as fast, light version of deep clone (if your situation allows that). Main difference between deep and shallow clone in code below:
-
-```csharp
-// public class A { public B B; }
-// public class B { public int X; }
-var b = new B { X = 1 };
-var a = new A { B = b };
-var deepClone = a.DeepClone();
-deepClone.B.X = 2;
-Console.WriteLine(a.B.X); // 1
-var shallowClone = a.ShallowClone();
-shallowClone.B.X = 2;
-Console.WriteLine(a.B.X); // 2
-```
-
-So, deep cloning is guarantee that all changes of cloned object does not affect original. Shallow clone does not guarantee this. But it faster, because deep clone of object can copy big graph of related objects and related objects of related objects and related related related objects, and... so on...
-
-This library does not call any method of cloning object: constructors, Equals, GetHashCode, propertes - nothing is called. So, it is impossible for cloning object to receive information about cloning, throw an exception or return invalid data. 
-If you need to call some methods after cloning, you can wrap cloning call to another method which will perform required actions.
-
-Extension methods in library are generic, but it is not require to specifify type for cloning. You can cast your objects to System.Object, or to an interface, add fields will be carefully copied to new object.
-
-## Performance tricks
-
-We perform a lot of performance tricks to ensure cloning is really fast. Here is some of them:
-
-* Using a shallow cloning instead of deep cloning if object is safe for this operation
-* Copying an whole object and updating only required fields
-* Special handling for structs (can be copied without any cloning code, if possible)
-* Cloners caching
-* Optimizations for copying simple objects (reduced number of checks to ensure good performance)
-* Special handling of reference count for simple objects, that is faster than default dictionary
-* Constructors analyzing to select best variant of object construction
-* Direct copying of arrays if possible
-* Custom handling of one-dimensional and two-dimensional zero-based arrays (most of arrays in usual code)
+FastCloner uses caching by default which makes evaluating properties harder. Unmanaged resources, such as `IntPtr`s can't be cloned as there are no metadata for length. `ReadOnly` collections are tested to behave well as long as they follow basic conventions. Many other features, such as cloning `Dictionary`ies properly while keeping hashcodes, `INotifyPropertyChanged`, `delegate`s, `event`s, `HttpRequest`s / responses, and others are supported. If something doesn't work out of the box let me know in the [issues](https://github.com/lofcz/FastCloner/issues), the repository is actively maintained.
 
 ## License
 
-[MIT](https://github.com/adimosh/DeepCloner/blob/develop/LICENSE) license - original fork license also [MIT](https://github.com/force-net/DeepCloner/blob/develop/LICENSE) license.
+[MIT](https://github.com/lofcz/FastCloner/blob/next/LICENSE), simple 💜
