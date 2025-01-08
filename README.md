@@ -25,7 +25,20 @@ var clone = FastCloner.DeepClone(new { Hello = "world", MyList = new List<int> {
 
 ## Advanced usage
 
-Appart from deep cloning, FastCloner supports shallow cloning and deep cloning _to_ target:
+Sometimes you might want to exclude certain fields & properties from cloning:
+```csharp
+private class TestPropsWithIgnored
+{
+    public int A { get; set; } = 10;
+    [DeepCloneIgnore] // <-- decorate such members with [DeepCloneIgnore] 
+    public string B { get; set; } = "My string";
+}
+
+TestPropsWithIgnored original = new TestPropsWithIgnored { A = 42, B = "Test value" };
+TestPropsWithIgnored clone = original.DeepClone(); // clone.B is null (default value of a given type)
+```
+
+Apart from deep cloning, FastCloner supports shallow cloning and deep cloning _to_ target:
 
 ```csharp
 // the list is shared between the two instances
