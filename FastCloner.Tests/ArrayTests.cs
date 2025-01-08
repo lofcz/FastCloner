@@ -191,7 +191,7 @@ public class ArrayTests
         Assert.That(ReferenceEquals(cloned[1], cloned[4]), Is.True);
     }
 
-    public class AC
+    public class Ac
     {
         public int[] A { get; set; }
 
@@ -201,9 +201,9 @@ public class ArrayTests
     [Test]
     public void Class_With_Same_Arrays_Should_Be_Cloned()
     {
-        AC ac = new AC();
+        Ac ac = new Ac();
         ac.A = ac.B = new int[3];
-        AC clone = ac.DeepClone();
+        Ac clone = ac.DeepClone();
         Assert.That(ReferenceEquals(ac.A, clone.A), Is.False);
         Assert.That(ReferenceEquals(clone.A, clone.B), Is.True);
     }
@@ -211,8 +211,8 @@ public class ArrayTests
     [Test]
     public void Class_With_Null_Array_hould_Be_Cloned()
     {
-        AC ac = new AC();
-        AC cloned = ac.DeepClone();
+        Ac ac = new Ac();
+        Ac cloned = ac.DeepClone();
         Assert.That(cloned.A, Is.Null);
         Assert.That(cloned.B, Is.Null);
     }
@@ -271,9 +271,9 @@ public class ArrayTests
     [Test]
     public void MultiDim_Array_Of_Classes_Should_Be_Cloned()
     {
-        AC[,] arr = new AC[2, 2];
-        arr[0, 0] = arr[1, 1] = new AC();
-        AC[,] clone = arr.DeepClone();
+        Ac[,] arr = new Ac[2, 2];
+        arr[0, 0] = arr[1, 1] = new Ac();
+        Ac[,] clone = arr.DeepClone();
         Assert.That(clone[0, 0], Is.Not.Null);
         Assert.That(clone[1, 1], Is.Not.Null);
         Assert.That(ReferenceEquals(clone[1, 1], clone[0, 0]));

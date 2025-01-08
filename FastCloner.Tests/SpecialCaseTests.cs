@@ -225,12 +225,12 @@ public class SpecialCaseTests
     public class C2 : CBase<int>
     {
 
-        public C3 c3 { get; set; } = new C3();
+        public C3 C3 { get; set; } = new C3();
     }
 
     public class C1 : CBase<int>
     {
-        public C2 c2 { get; set; } = new C2();
+        public C2 C2 { get; set; } = new C2();
     }
     
     [Test]
@@ -240,10 +240,10 @@ public class SpecialCaseTests
         C1 original = new C1
         {
             Id = 1,
-            c2 = new C2
+            C2 = new C2
             {
                 Id = 2,
-                c3 = new C3
+                C3 = new C3
                 {
                     Id = 3
                 }
@@ -258,10 +258,10 @@ public class SpecialCaseTests
         {
             Assert.That(cloned1, Is.Not.SameAs(original));
             Assert.That(cloned1.Id, Is.EqualTo(original.Id));
-            Assert.That(cloned1.c2, Is.Not.SameAs(original.c2));
-            Assert.That(cloned1.c2.Id, Is.EqualTo(original.c2.Id));
-            Assert.That(cloned1.c2.c3, Is.Not.SameAs(original.c2.c3));
-            Assert.That(cloned1.c2.c3.Id, Is.EqualTo(original.c2.c3.Id));
+            Assert.That(cloned1.C2, Is.Not.SameAs(original.C2));
+            Assert.That(cloned1.C2.Id, Is.EqualTo(original.C2.Id));
+            Assert.That(cloned1.C2.C3, Is.Not.SameAs(original.C2.C3));
+            Assert.That(cloned1.C2.C3.Id, Is.EqualTo(original.C2.C3.Id));
         });
     }
 
@@ -313,11 +313,11 @@ public class SpecialCaseTests
         public string B { get; private set; } = "My string";
         public int C => A * 2;
         
-        private int _d;
+        private int d;
         public int D
         {
-            get => _d;
-            set => _d = value;
+            get => d;
+            set => d = value;
         }
     }
 
@@ -377,8 +377,8 @@ public class SpecialCaseTests
 
     private class ClassWithReadOnlyField
     {
-        private readonly string _readOnlyField = "test";
-        public string ReadOnlyValue => _readOnlyField;
+        private readonly string readOnlyField = "test";
+        public string ReadOnlyValue => readOnlyField;
     }
 
 
@@ -391,12 +391,12 @@ public class SpecialCaseTests
         
         public int C => A * 2;
         
-        private int _d;
+        private int d;
         [FastClonerIgnore]
         public int D
         {
-            get => _d;
-            set => _d = value;
+            get => d;
+            set => d = value;
         }
     }
 
@@ -1086,18 +1086,18 @@ public class SpecialCaseTests
         });
     }
 
-    public class INotifyTest : INotifyPropertyChanged
+    public class NotifyTest : INotifyPropertyChanged
     {
         public event PropertyChangedEventHandler PropertyChanged;
 
-        private string _prop;
+        private string prop;
         public string Prop
         {
-            get => _prop;
+            get => prop;
 
             set
             {
-                _prop = value;
+                prop = value;
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Prop)));
             }
         }
@@ -1278,15 +1278,15 @@ public class SpecialCaseTests
     {
         // Arrange
         List<string> output = [];
-        INotifyTest a = new INotifyTest();
+        NotifyTest a = new NotifyTest();
         a.PropertyChanged += (sender, args) =>
         {
-            output.Add(((INotifyTest)sender).Prop);
+            output.Add(((NotifyTest)sender).Prop);
         };
 
         // Act
         a.Prop = "A changed";
-        INotifyTest b = a.DeepClone();
+        NotifyTest b = a.DeepClone();
         b.Prop = "B changed";
         b.Prop = "B changed again";
 
@@ -1297,49 +1297,49 @@ public class SpecialCaseTests
 
     public class NotifyingPerson : INotifyPropertyChanged
     {
-        private string _name;
-        private int _age;
-        private NotifyingAddress _address;
-        private ObservableCollection<NotifyingPerson> _children;
+        private string name;
+        private int age;
+        private NotifyingAddress address;
+        private ObservableCollection<NotifyingPerson> children;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
         public string Name
         {
-            get => _name;
+            get => name;
             set
             {
-                _name = value;
+                name = value;
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
             }
         }
 
         public int Age
         {
-            get => _age;
+            get => age;
             set
             {
-                _age = value;
+                age = value;
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Age)));
             }
         }
 
         public NotifyingAddress Address
         {
-            get => _address;
+            get => address;
             set
             {
-                _address = value;
+                address = value;
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Address)));
             }
         }
 
         public ObservableCollection<NotifyingPerson> Children
         {
-            get => _children;
+            get => children;
             set
             {
-                _children = value;
+                children = value;
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Children)));
             }
         }
@@ -1347,27 +1347,27 @@ public class SpecialCaseTests
 
     public class NotifyingAddress : INotifyPropertyChanged
     {
-        private string _street;
-        private string _city;
+        private string street;
+        private string city;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
         public string Street
         {
-            get => _street;
+            get => street;
             set
             {
-                _street = value;
+                street = value;
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Street)));
             }
         }
 
         public string City
         {
-            get => _city;
+            get => city;
             set
             {
-                _city = value;
+                city = value;
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(City)));
             }
         }
@@ -1525,22 +1525,22 @@ public class SpecialCaseTests
 
     public class ReadOnlySet<T> : IReadOnlySet<T>
     {
-        private readonly ISet<T> _set;
+        private readonly ISet<T> set;
 
         public ReadOnlySet(ISet<T> set)
         {
-            _set = set ?? throw new ArgumentNullException(nameof(set));
+            this.set = set ?? throw new ArgumentNullException(nameof(set));
         }
 
-        public int Count => _set.Count;
-        public bool Contains(T item) => _set.Contains(item);
-        public bool IsProperSubsetOf(IEnumerable<T> other) => _set.IsProperSubsetOf(other);
-        public bool IsProperSupersetOf(IEnumerable<T> other) => _set.IsProperSupersetOf(other);
-        public bool IsSubsetOf(IEnumerable<T> other) => _set.IsSubsetOf(other);
-        public bool IsSupersetOf(IEnumerable<T> other) => _set.IsSupersetOf(other);
-        public bool Overlaps(IEnumerable<T> other) => _set.Overlaps(other);
-        public bool SetEquals(IEnumerable<T> other) => _set.SetEquals(other);
-        public IEnumerator<T> GetEnumerator() => _set.GetEnumerator();
+        public int Count => set.Count;
+        public bool Contains(T item) => set.Contains(item);
+        public bool IsProperSubsetOf(IEnumerable<T> other) => set.IsProperSubsetOf(other);
+        public bool IsProperSupersetOf(IEnumerable<T> other) => set.IsProperSupersetOf(other);
+        public bool IsSubsetOf(IEnumerable<T> other) => set.IsSubsetOf(other);
+        public bool IsSupersetOf(IEnumerable<T> other) => set.IsSupersetOf(other);
+        public bool Overlaps(IEnumerable<T> other) => set.Overlaps(other);
+        public bool SetEquals(IEnumerable<T> other) => set.SetEquals(other);
+        public IEnumerator<T> GetEnumerator() => set.GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator()
         {
             return GetEnumerator();
@@ -1811,9 +1811,9 @@ public class SpecialCaseTests
     {
         public static int Counter;
 
-        private readonly LazyRef<object> _lazyValue = new LazyRef<object>(() => (++Counter).ToString(CultureInfo.InvariantCulture));
+        private readonly LazyRef<object> lazyValue = new LazyRef<object>(() => (++Counter).ToString(CultureInfo.InvariantCulture));
 
-        public string GetValue() => _lazyValue.Value.ToString();
+        public string GetValue() => lazyValue.Value.ToString();
     }
 
     [Table("Currency", Schema = "Sales")]
@@ -1858,15 +1858,15 @@ public class SpecialCaseTests
     private class TestComparer : Comparer<int>
     {
         // make object unsafe to work
-        private object _fieldX = new object();
+        private object fieldX = new object();
 
         public override int Compare(int x, int y) => x.CompareTo(y);
     }
     
     public sealed class LazyRef<T>
     {
-        private Func<T> _initializer;
-        private T _value;
+        private Func<T> initializer;
+        private T value;
 
         /// <summary>
         ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
@@ -1876,21 +1876,21 @@ public class SpecialCaseTests
         {
             get
             {
-                if (_initializer != null)
+                if (initializer != null)
                 {
-                    _value = _initializer();
-                    _initializer = null;
+                    value = initializer();
+                    initializer = null;
                 }
-                return _value;
+                return value;
             }
             set
             {
-                _value = value;
-                _initializer = null;
+                this.value = value;
+                initializer = null;
             }
         }
 
-        public LazyRef(Func<T> initializer) => _initializer = initializer;
+        public LazyRef(Func<T> initializer) => this.initializer = initializer;
     }
     
     [Test]

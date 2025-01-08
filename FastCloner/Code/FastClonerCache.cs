@@ -4,15 +4,15 @@ namespace FastCloner.Code;
 
 internal static class FastClonerCache
 {
-    private static readonly ConcurrentDictionary<Type, Lazy<object>> classCache = new ConcurrentDictionary<Type, Lazy<object>>();
+    private static readonly ConcurrentDictionary<Type, Lazy<object?>> classCache = new ConcurrentDictionary<Type, Lazy<object?>>();
     private static readonly ConcurrentDictionary<Type, Lazy<object>> structCache = new ConcurrentDictionary<Type, Lazy<object>>();
     private static readonly ConcurrentDictionary<Type, Lazy<object>> deepClassToCache = new ConcurrentDictionary<Type, Lazy<object>>();
     private static readonly ConcurrentDictionary<Type, Lazy<object>> shallowClassToCache = new ConcurrentDictionary<Type, Lazy<object>>();
     private static readonly ConcurrentDictionary<Tuple<Type, Type>, Lazy<object>> typeConvertCache = new ConcurrentDictionary<Tuple<Type, Type>, Lazy<object>>();
     
-    public static object GetOrAddClass(Type type, Func<Type, object> valueFactory)
+    public static object? GetOrAddClass(Type type, Func<Type, object?> valueFactory)
     {
-        Lazy<object> lazy = classCache.GetOrAdd(type, t => new Lazy<object>(() => valueFactory(t), LazyThreadSafetyMode.ExecutionAndPublication));
+        Lazy<object?> lazy = classCache.GetOrAdd(type, t => new Lazy<object?>(() => valueFactory(t), LazyThreadSafetyMode.ExecutionAndPublication));
         return lazy.Value;
     }
 

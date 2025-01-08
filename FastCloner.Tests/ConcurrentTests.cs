@@ -55,12 +55,12 @@ public class ConcurrentTests
     
     private class CountHolder
     {
-        private int _count;
-        public int Count => _count;
+        private int count;
+        public int Count => count;
     
         public void Increment()
         {
-            Interlocked.Increment(ref _count);
+            Interlocked.Increment(ref count);
         }
     }
     

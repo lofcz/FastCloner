@@ -179,7 +179,7 @@ public class InheritanceTests
         Assert.That(((S1)cloned).F, Is.EqualTo(1));
     }
 
-    public IDisposable CCC(IDisposable xx)
+    public IDisposable Ccc(IDisposable xx)
     {
         S1 x = (S1)xx;
         return x;

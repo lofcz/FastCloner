@@ -13,27 +13,27 @@ public abstract class ShallowObjectCloner
     /// </summary>
     protected abstract object DoCloneObject(object obj);
 
-    private static readonly ShallowObjectCloner _instance;
+    private static readonly ShallowObjectCloner instance;
 
     /// <summary>
     /// Performs real shallow object clone
     /// </summary>
-    public static object CloneObject(object obj) => _instance.DoCloneObject(obj);
+    public static object CloneObject(object obj) => instance.DoCloneObject(obj);
 
-    static ShallowObjectCloner() => _instance = new ShallowSafeObjectCloner();
+    static ShallowObjectCloner() => instance = new ShallowSafeObjectCloner();
 
     private class ShallowSafeObjectCloner : ShallowObjectCloner
     {
-        private static readonly Func<object, object> _cloneFunc;
+        private static readonly Func<object, object> cloneFunc;
 
         static ShallowSafeObjectCloner()
         {
             MethodInfo? methodInfo = typeof(object).GetPrivateMethod(nameof(MemberwiseClone));
             ParameterExpression p = Expression.Parameter(typeof(object));
             MethodCallExpression mce = Expression.Call(p, methodInfo);
-            _cloneFunc = Expression.Lambda<Func<object, object>>(mce, p).Compile();
+            cloneFunc = Expression.Lambda<Func<object, object>>(mce, p).Compile();
         }
 
-        protected override object DoCloneObject(object obj) => _cloneFunc(obj);
+        protected override object DoCloneObject(object obj) => cloneFunc(obj);
     }
 }

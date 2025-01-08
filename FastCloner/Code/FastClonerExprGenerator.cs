@@ -13,10 +13,10 @@ internal static class FastClonerExprGenerator
 {
     internal static readonly ConcurrentDictionary<Type, Func<Type, bool, ExpressionPosition, object>> CustomTypeHandlers = [];
     
-    private static readonly ConcurrentDictionary<FieldInfo, bool> _readonlyFields = new ConcurrentDictionary<FieldInfo, bool>();
+    private static readonly ConcurrentDictionary<FieldInfo, bool> readonlyFields = new ConcurrentDictionary<FieldInfo, bool>();
 
-    private static readonly MethodInfo _fieldSetMethod;
-    static FastClonerExprGenerator() => _fieldSetMethod = typeof(FieldInfo).GetMethod(nameof(FieldInfo.SetValue), [typeof(object), typeof(object)])!;
+    private static readonly MethodInfo fieldSetMethod;
+    static FastClonerExprGenerator() => fieldSetMethod = typeof(FieldInfo).GetMethod(nameof(FieldInfo.SetValue), [typeof(object), typeof(object)])!;
 
     internal static object GenerateClonerInternal(Type realType, bool asObject) => GenerateProcessMethod(realType, asObject && realType.IsValueType());
 
@@ -67,7 +67,7 @@ internal static class FastClonerExprGenerator
 
     private delegate object ProcessMethodDelegate(Type type, bool unboxStruct, ExpressionPosition position);
 
-    private static readonly FrozenDictionary<Type, ProcessMethodDelegate> KnownTypeProcessors = 
+    private static readonly FrozenDictionary<Type, ProcessMethodDelegate> knownTypeProcessors = 
         new Dictionary<Type, ProcessMethodDelegate>
         {
             [typeof(ExpandoObject)] = (_, _, position) => GenerateExpandoObjectProcessor(position),
@@ -75,7 +75,7 @@ internal static class FastClonerExprGenerator
             [typeof(Array)] = (type, _, _) => GenerateProcessArrayMethod(type),
         }.ToFrozenDictionary();
     
-    private static readonly AhoCorasick BadTypes = new AhoCorasick([
+    private static readonly AhoCorasick badTypes = new AhoCorasick([
         "Castle.Proxies.",
         "System.Data.Entity.DynamicProxies.",
         "NHibernate.Proxy."
@@ -88,7 +88,7 @@ internal static class FastClonerExprGenerator
             return false;
         }
         
-        return !BadTypes.ContainsAnyPattern(type.FullName);
+        return !badTypes.ContainsAnyPattern(type.FullName);
     }
     
     private static List<MemberInfo> GetAllMembers(Type type)
@@ -111,7 +111,7 @@ internal static class FastClonerExprGenerator
         if (!IsCloneable(type))
             return null;
         
-        if (KnownTypeProcessors.TryGetValue(type, out ProcessMethodDelegate? handler))
+        if (knownTypeProcessors.TryGetValue(type, out ProcessMethodDelegate? handler))
         {
             return handler.Invoke(type, unboxStruct, position);
         }
@@ -242,11 +242,11 @@ internal static class FastClonerExprGenerator
                 if (!memberType.IsValueType())
                     call = Expression.Convert(call, memberType);
 
-                if (member is FieldInfo fieldInfo && _readonlyFields.GetOrAdd(fieldInfo, f => f.IsInitOnly))
+                if (member is FieldInfo fieldInfo && readonlyFields.GetOrAdd(fieldInfo, f => f.IsInitOnly))
                 {
                     expressionList.Add(Expression.Call(
                         Expression.Constant(fieldInfo),
-                        _fieldSetMethod,
+                        fieldSetMethod,
                         Expression.Convert(toLocal, typeof(object)),
                         Expression.Convert(call, typeof(object))));
                 }
