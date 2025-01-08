@@ -10,6 +10,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using FastCloner.Contrib;
 using Microsoft.EntityFrameworkCore;
 
 namespace FastCloner.Tests;
@@ -17,6 +18,12 @@ namespace FastCloner.Tests;
 [TestFixture]
 public class SpecificScenariosTest
 {
+    [OneTimeSetUp]
+    public void Setup()
+    {
+        ContribTypeHandlers.Register();
+    }
+    
     [Test]
     public void Test_ExpressionTree_OrderBy1()
     {
@@ -456,6 +463,30 @@ public class SpecificScenariosTest
         });
     }
 
+    [Test]
+    [Platform("win")]
+    public void Font_Clone()
+    {
+        // Arrange
+        Font original = new Font("Arial", 12, FontStyle.Bold | FontStyle.Italic);
+
+        // Act
+        Font? cloned = FastCloner.DeepClone(original);
+    
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Should be different instance");
+            Assert.That(cloned.Name, Is.EqualTo("Arial"), "Font name should be copied");
+            Assert.That(cloned.Size, Is.EqualTo(12), "Font size should be copied");
+            Assert.That(cloned.Style, Is.EqualTo(FontStyle.Bold | FontStyle.Italic), "Font style should be copied");
+            Assert.That(cloned.Unit, Is.EqualTo(original.Unit), "Font unit should be copied");
+            Assert.That(cloned.GdiCharSet, Is.EqualTo(original.GdiCharSet), "GDI charset should be copied");
+            Assert.That(cloned.GdiVerticalFont, Is.EqualTo(original.GdiVerticalFont), "GDI vertical font should be copied");
+        });
+    }
+
+    
     [Test]
     public void HttpRequest_With_StreamContent_Clone()
     {

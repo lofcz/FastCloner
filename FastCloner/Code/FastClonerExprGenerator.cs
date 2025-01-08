@@ -9,6 +9,8 @@ namespace FastCloner.Code;
 
 internal static class FastClonerExprGenerator
 {
+    internal static readonly ConcurrentDictionary<Type, Func<Type, bool, ExpressionPosition, object>> CustomTypeHandlers = [];
+    
     private static readonly ConcurrentDictionary<FieldInfo, bool> _readonlyFields = new ConcurrentDictionary<FieldInfo, bool>();
 
     private static readonly MethodInfo _fieldSetMethod;
@@ -39,7 +41,7 @@ internal static class FastClonerExprGenerator
         }
     }
 
-    private readonly record struct ExpressionPosition(int Depth, int Index)
+    internal readonly record struct ExpressionPosition(int Depth, int Index)
     {
         public ExpressionPosition Next() => this with { Index = Index + 1 };
         public ExpressionPosition Nested() => new ExpressionPosition(Depth + 1, 0);
@@ -62,7 +64,7 @@ internal static class FastClonerExprGenerator
         {
             [typeof(ExpandoObject)] = (_, _, position) => GenerateExpandoObjectProcessor(position),
             [typeof(HttpRequestOptions)] = (_, _, position) => GenerateHttpRequestOptionsProcessor(position),
-            [typeof(Array)] = (type, _, _) => GenerateProcessArrayMethod(type)
+            [typeof(Array)] = (type, _, _) => GenerateProcessArrayMethod(type),
         }.ToFrozenDictionary();
     
     private static object GenerateProcessMethod(Type type, bool unboxStruct, ExpressionPosition position)
@@ -70,6 +72,11 @@ internal static class FastClonerExprGenerator
         if (KnownTypeProcessors.TryGetValue(type, out ProcessMethodDelegate? handler))
         {
             return handler.Invoke(type, unboxStruct, position);
+        }
+
+        if (CustomTypeHandlers.TryGetValue(type, out Func<Type, bool, ExpressionPosition, object>? contribHandler))
+        {
+            return contribHandler.Invoke(type, unboxStruct, position);
         }
         
         if (IsDictionaryType(type))

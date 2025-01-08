@@ -52,6 +52,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\FastCloner.Contrib\FastCloner.Contrib.csproj" />
     <ProjectReference Include="..\FastCloner\FastCloner.csproj" />
   </ItemGroup>
 
