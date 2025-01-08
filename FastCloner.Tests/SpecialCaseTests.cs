@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -347,6 +348,39 @@ public class SpecialCaseTests
             Assert.That(clone, Is.Not.SameAs(original));
         });
     }
+    
+    [Test]
+    public void ParallelCloning_WithReadOnlyFields_ShouldBeThreadSafe()
+    {
+        // Arrange
+        ClassWithReadOnlyField testObject = new ClassWithReadOnlyField();
+        const int iterations = 1000;
+        ConcurrentBag<Exception> exceptions = [];
+
+        // Act
+        Parallel.For(0, iterations, i =>
+        {
+            try
+            {
+                ClassWithReadOnlyField clone = testObject.DeepClone();
+                Assert.That(clone, Is.Not.SameAs(testObject));
+            }
+            catch (Exception ex)
+            {
+                exceptions.Add(ex);
+            }
+        });
+
+        // Assert
+        Assert.That(exceptions, Is.Empty, "Parallel cloning should not throw any exceptions");
+    }
+
+    private class ClassWithReadOnlyField
+    {
+        private readonly string _readOnlyField = "test";
+        public string ReadOnlyValue => _readOnlyField;
+    }
+
 
     private class TestAutoPropsWithIgnored
     {
