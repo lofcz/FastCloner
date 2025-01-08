@@ -923,6 +923,45 @@ public class SpecialCaseTests
         });
     }
 
+    public class INotifyTest : INotifyPropertyChanged
+    {
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        private string _prop;
+        public string Prop
+        {
+            get => _prop;
+
+            set
+            {
+                _prop = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Prop)));
+            }
+        }
+    }
+    
+    [Test]
+    public void Test_Notify_Triggered_Correctly()
+    {
+        // Arrange
+        List<string> output = [];
+        INotifyTest a = new INotifyTest();
+        a.PropertyChanged += (sender, args) =>
+        {
+            output.Add(((INotifyTest)sender).Prop);
+        };
+
+        // Act
+        a.Prop = "A changed";
+        INotifyTest b = a.DeepClone();
+        b.Prop = "B changed";
+        b.Prop = "B changed again";
+
+        // Assert
+        Assert.That(output, Has.Count.EqualTo(1));
+        Assert.That(output[0], Is.EqualTo("A changed"));
+    }
+
     public class NotifyingPerson : INotifyPropertyChanged
     {
         private string _name;
