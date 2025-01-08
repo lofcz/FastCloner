@@ -1,23 +1,26 @@
-﻿using System.Runtime.CompilerServices;
+﻿namespace FastCloner.Code;
 
-namespace FastCloner.Code;
+using System.Runtime.CompilerServices;
 
-internal class FastCloneState
+internal sealed class FastCloneState
 {
     private MiniDictionary? loops;
     private readonly object[] baseFromTo = new object[6];
     private int idx;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public object? GetKnownRef(object from)
     {
-        // this is faster than call Dictionary from begin
-        // also, small poco objects does not have a lot of references
-        object[] baseFromTo = this.baseFromTo;
-        if (ReferenceEquals(from, baseFromTo[0])) return baseFromTo[3];
-        if (ReferenceEquals(from, baseFromTo[1])) return baseFromTo[4];
-        if (ReferenceEquals(from, baseFromTo[2])) return baseFromTo[5];
-
-        return loops?.FindEntry(from);
+        return idx switch
+        {
+            1 when ReferenceEquals(from, baseFromTo[0]) => baseFromTo[3],
+            2 when ReferenceEquals(from, baseFromTo[0]) => baseFromTo[3],
+            2 when ReferenceEquals(from, baseFromTo[1]) => baseFromTo[4],
+            3 when ReferenceEquals(from, baseFromTo[0]) => baseFromTo[3],
+            3 when ReferenceEquals(from, baseFromTo[1]) => baseFromTo[4],
+            3 when ReferenceEquals(from, baseFromTo[2]) => baseFromTo[5],
+            _ => loops?.FindEntry(from)
+        };
     }
 
     public void AddKnownRef(object from, object to)
@@ -34,22 +37,22 @@ internal class FastCloneState
         loops.Insert(from, to);
     }
 
-    private class MiniDictionary
+    private sealed class MiniDictionary
     {
-        private struct Entry
+        private readonly struct Entry(int hashCode, int next, object key, object value)
         {
-            public int HashCode;
-            public int Next;
-            public object Key;
-            public object Value;
+            public readonly int HashCode = hashCode;
+            public readonly int Next = next;
+            public readonly object Key = key;
+            public readonly object Value = value;
         }
 
         private int[]? buckets;
         private Entry[] entries;
         private int count;
+        private const int DefaultCapacity = 5;
 
-
-        public MiniDictionary() : this(5)
+        public MiniDictionary() : this(DefaultCapacity)
         {
         }
 
@@ -59,22 +62,29 @@ internal class FastCloneState
                 Initialize(capacity);
         }
 
-        public object FindEntry(object key)
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public object? FindEntry(object key)
         {
-            if (buckets != null)
+            if (buckets is null)
             {
-                int hashCode = RuntimeHelpers.GetHashCode(key) & 0x7FFFFFFF;
-                Entry[] entries1 = entries;
-                for (int i = buckets[hashCode % buckets.Length]; i >= 0; i = entries1[i].Next)
-                {
-                    if (entries1[i].HashCode == hashCode && ReferenceEquals(entries1[i].Key, key))
-                        return entries1[i].Value;
-                }
+                return null;
+            }
+
+            int hashCode = RuntimeHelpers.GetHashCode(key) & 0x7FFFFFFF;
+            int bucketIndex = hashCode % buckets.Length;
+            
+            Entry[] entriesLocal = entries;
+            for (int i = buckets[bucketIndex]; i >= 0; i = entriesLocal[i].Next)
+            {
+                ref readonly Entry entry = ref entriesLocal[i];
+                if (entry.HashCode == hashCode && ReferenceEquals(entry.Key, key))
+                    return entry.Value;
             }
 
             return null;
         }
 
+        // Hash Table Primes, stabilizes to ~1.2x increase
         private static readonly int[] primes =
         [
             3, 7, 11, 17, 23, 29, 37, 47, 59, 71, 89, 107, 131, 163, 197, 239, 293, 353, 431, 521, 631, 761, 919,
@@ -84,84 +94,89 @@ internal class FastCloneState
             1674319, 2009191, 2411033, 2893249, 3471899, 4166287, 4999559, 5999471, 7199369
         ];
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static int GetPrime(int min)
         {
-            for (int i = 0; i < primes.Length; i++)
+            int left = 0;
+            int right = primes.Length - 1;
+            
+            while (left <= right)
             {
-                int prime = primes[i];
-                if (prime >= min) return prime;
+                int mid = left + (right - left) / 2;
+                if (primes[mid] >= min)
+                {
+                    right = mid - 1;
+                }
+                else
+                {
+                    left = mid + 1;
+                }
             }
+            
+            return left < primes.Length ? primes[left] : GeneratePrime(min);
+        }
 
-            //outside of our predefined table.
-            //compute the hard way.
+        private static int GeneratePrime(int min)
+        {
             for (int i = min | 1; i < int.MaxValue; i += 2)
             {
-                if (IsPrime(i) && (i - 1) % 101 != 0)
+                if (IsPrime(i) && (i - 1) % 101 is not 0)
                     return i;
             }
-
             return min;
         }
 
         private static bool IsPrime(int candidate)
         {
-            if ((candidate & 1) != 0)
+            if ((candidate & 1) is 0)
+                return candidate is 2;
+            
+            int limit = (int)Math.Sqrt(candidate);
+            for (int divisor = 3; divisor <= limit; divisor += 2)
             {
-                int limit = (int)Math.Sqrt(candidate);
-                for (int divisor = 3; divisor <= limit; divisor += 2)
-                {
-                    if ((candidate % divisor) == 0)
-                        return false;
-                }
-
-                return true;
+                if (candidate % divisor is 0)
+                    return false;
             }
-
-            return candidate == 2;
+            return true;
         }
 
         private static int ExpandPrime(int oldSize)
         {
             int newSize = 2 * oldSize;
-
             if ((uint)newSize > 0x7FEFFFFD && 0x7FEFFFFD > oldSize)
-            {
                 return 0x7FEFFFFD;
-            }
-
             return GetPrime(newSize);
         }
 
         private void Initialize(int size)
         {
             buckets = new int[size];
-            for (int i = 0; i < buckets.Length; i++)
-                buckets[i] = -1;
+            Array.Fill(buckets, -1);
             entries = new Entry[size];
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Insert(object key, object value)
         {
-            if (buckets == null) Initialize(0);
+            if (buckets is null)
+                Initialize(DefaultCapacity);
+            
             int hashCode = RuntimeHelpers.GetHashCode(key) & 0x7FFFFFFF;
-            int targetBucket = hashCode % buckets.Length;
+            int targetBucket = hashCode % buckets!.Length;
 
-            Entry[] entries1 = entries;
-
-            if (count == entries1.Length)
+            if (count == entries.Length)
             {
                 Resize();
-                entries1 = entries;
                 targetBucket = hashCode % buckets.Length;
             }
 
-            int index = count;
-            count++;
-
-            entries1[index].HashCode = hashCode;
-            entries1[index].Next = buckets[targetBucket];
-            entries1[index].Key = key;
-            entries1[index].Value = value;
+            int index = count++;
+            entries[index] = new Entry(
+                hashCode,
+                buckets[targetBucket],
+                key,
+                value
+            );
             buckets[targetBucket] = index;
         }
 
@@ -170,19 +185,26 @@ internal class FastCloneState
         private void Resize(int newSize)
         {
             int[] newBuckets = new int[newSize];
-            for (int i = 0; i < newBuckets.Length; i++)
-                newBuckets[i] = -1;
+            Array.Fill(newBuckets, -1);
+            
             Entry[] newEntries = new Entry[newSize];
             Array.Copy(entries, 0, newEntries, 0, count);
 
             for (int i = 0; i < count; i++)
             {
-                if (newEntries[i].HashCode >= 0)
+                if (newEntries[i].HashCode < 0)
                 {
-                    int bucket = newEntries[i].HashCode % newSize;
-                    newEntries[i].Next = newBuckets[bucket];
-                    newBuckets[bucket] = i;
+                    continue;
                 }
+                
+                int bucket = newEntries[i].HashCode % newSize;
+                newEntries[i] = new Entry(
+                    newEntries[i].HashCode,
+                    newBuckets[bucket],
+                    newEntries[i].Key,
+                    newEntries[i].Value
+                );
+                newBuckets[bucket] = i;
             }
 
             buckets = newBuckets;

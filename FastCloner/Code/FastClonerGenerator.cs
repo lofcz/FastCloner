@@ -52,21 +52,22 @@ internal static class FastClonerGenerator
 
     internal static object? CloneClassInternal(object? obj, FastCloneState state)
     {
-        if (obj == null)
+        if (obj is null)
+        {
             return null;
+        }
 
         Func<object, FastCloneState, object>? cloner = (Func<object, FastCloneState, object>)FastClonerCache.GetOrAddClass(obj.GetType(), t => GenerateCloner(t, true));
 
         // safe object
-        if (cloner == null)
+        if (cloner is null)
+        {
             return obj;
+        }
 
         // loop
         object? knownRef = state.GetKnownRef(obj);
-        if (knownRef != null)
-            return knownRef;
-
-        return cloner(obj, state);
+        return knownRef ?? cloner(obj, state);
     }
 
     internal static T CloneStructInternal<T>(T obj, FastCloneState state) // where T : struct
