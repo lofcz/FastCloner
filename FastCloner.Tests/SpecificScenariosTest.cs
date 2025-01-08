@@ -7,6 +7,9 @@ using System.Diagnostics.Tracing;
 using System.Drawing;
 using System.Dynamic;
 using System.Globalization;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 
 namespace FastCloner.Tests;
@@ -304,6 +307,118 @@ public class SpecificScenariosTest
         });
     }
 
+    [Test]
+    public void HttpRequest_Clone()
+    {
+        // Arrange
+        HttpRequestMessage original = new HttpRequestMessage
+        {
+            Method = HttpMethod.Post,
+            RequestUri = new Uri("https://api.example.com/data"),
+            Version = new Version(2, 0),
+            Content = new StringContent(
+                "{\"key\":\"value\"}", 
+                Encoding.UTF8, 
+                "application/json")
+        };
+        
+        original.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        original.Headers.Add("Custom-Header", "test-value");
+        original.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "test-token");
+        
+        // Act
+        HttpRequestMessage? cloned = FastCloner.DeepClone(original);
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned.Method, Is.EqualTo(HttpMethod.Post), "Method should be copied");
+            Assert.That(cloned.RequestUri?.ToString(), Is.EqualTo("https://api.example.com/data"), "URI should be copied");
+            Assert.That(cloned.Version, Is.EqualTo(new Version(2, 0)), "Version should be copied");
+            
+            Assert.That(cloned.Headers.Accept.First().MediaType, Is.EqualTo("application/json"), "Accept header should be copied");
+            Assert.That(cloned.Headers.GetValues("Custom-Header").First(), Is.EqualTo("test-value"), "Custom header should be copied");
+            Assert.That(cloned.Headers.Authorization?.Scheme, Is.EqualTo("Bearer"), "Authorization scheme should be copied");
+            Assert.That(cloned.Headers.Authorization?.Parameter, Is.EqualTo("test-token"), "Authorization parameter should be copied");
+            
+            Assert.That(cloned.Content, Is.Not.Null, "Content should be cloned");
+            Assert.That(cloned.Content, Is.TypeOf<StringContent>(), "Content type should be preserved");
+            
+            string originalContent = original.Content.ReadAsStringAsync().Result;
+            string clonedContent = cloned.Content.ReadAsStringAsync().Result;
+            Assert.That(clonedContent, Is.EqualTo(originalContent), "Content value should be copied");
+            Assert.That(cloned.Content.Headers.ContentType?.MediaType, Is.EqualTo("application/json"), "Content-Type should be copied");
+        });
+    }
+
+    [Test]
+    public void HttpRequest_With_MultipartContent_Clone()
+    {
+        // Arrange
+        HttpRequestMessage original = new HttpRequestMessage
+        {
+            Method = HttpMethod.Post,
+            RequestUri = new Uri("https://api.example.com/upload")
+        };
+
+        MultipartFormDataContent multipartContent = new MultipartFormDataContent();
+        
+        StringContent stringContent = new StringContent("text data", Encoding.UTF8);
+        multipartContent.Add(stringContent, "text");
+        
+        byte[] binaryData = "binary data"u8.ToArray();
+        ByteArrayContent byteContent = new ByteArrayContent(binaryData);
+        byteContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        multipartContent.Add(byteContent, "file", "test.bin");
+        
+        original.Content = multipartContent;
+
+        // Act
+        HttpRequestMessage? cloned = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned.Content, Is.TypeOf<MultipartFormDataContent>(), "Content type should be preserved");
+            
+            MultipartFormDataContent? originalMultipart = (MultipartFormDataContent)original.Content;
+            MultipartFormDataContent? clonedMultipart = (MultipartFormDataContent)cloned.Content;
+            
+            string originalParts = originalMultipart.ReadAsStringAsync().Result;
+            string clonedParts = clonedMultipart.ReadAsStringAsync().Result;
+            
+            Assert.That(clonedParts, Is.EqualTo(originalParts), "Multipart content should be identical");
+            Assert.That(clonedMultipart.Headers.ContentType?.Parameters.First(p => p.Name == "boundary").Value, Is.Not.Null, "Boundary should be present");
+        });
+    }
+
+    [Test]
+    public void HttpRequest_With_Handlers_Clone()
+    {
+        // Arrange
+        HttpRequestMessage original = new HttpRequestMessage(HttpMethod.Get, "https://api.example.com");
+        HttpClientHandler handler = new HttpClientHandler
+        {
+            AllowAutoRedirect = false,
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+            UseCookies = false
+        };
+        
+        original.Properties.Add("AllowAutoRedirect", handler.AllowAutoRedirect);
+        original.Properties.Add("AutomaticDecompression", handler.AutomaticDecompression);
+        original.Properties.Add("UseCookies", handler.UseCookies);
+        
+        HttpRequestMessage? cloned = FastCloner.DeepClone(original);
+        
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned.Properties, Is.Not.Empty, "Properties should be copied");
+            Assert.That(cloned.Properties["AllowAutoRedirect"], Is.EqualTo(false), "Handler property should be copied");
+            Assert.That(cloned.Properties["AutomaticDecompression"], Is.EqualTo(DecompressionMethods.GZip | DecompressionMethods.Deflate), "Handler compression settings should be copied");
+            Assert.That(cloned.Properties["UseCookies"], Is.EqualTo(false), "Handler cookie settings should be copied");
+        });
+    }
+    
     [Test]
     public void Dynamic_With_Dictionary_Clone()
     {

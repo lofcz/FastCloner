@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using System.Collections.Concurrent;
+using System.Collections.Frozen;
 using System.Dynamic;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -54,11 +55,21 @@ internal static class FastClonerExprGenerator
     public static bool IsSetType(Type type) => type.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ISet<>));
     private static bool IsDictionaryType(Type type) => typeof(IDictionary).IsAssignableFrom(type) || type.GetInterfaces().Any(i => i.IsGenericType && (i.GetGenericTypeDefinition() == typeof(IDictionary<,>) || i.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)));
 
+    private delegate object ProcessMethodDelegate(Type type, bool unboxStruct, ExpressionPosition position);
+
+    private static readonly FrozenDictionary<Type, ProcessMethodDelegate> KnownTypeProcessors = 
+        new Dictionary<Type, ProcessMethodDelegate>
+        {
+            [typeof(ExpandoObject)] = (_, _, position) => GenerateExpandoObjectProcessor(position),
+            [typeof(HttpRequestOptions)] = (_, _, position) => GenerateHttpRequestOptionsProcessor(position),
+            [typeof(Array)] = (type, _, _) => GenerateProcessArrayMethod(type)
+        }.ToFrozenDictionary();
+    
     private static object GenerateProcessMethod(Type type, bool unboxStruct, ExpressionPosition position)
     {
-        if (type == typeof(ExpandoObject))
+        if (KnownTypeProcessors.TryGetValue(type, out ProcessMethodDelegate? handler))
         {
-            return GenerateExpandoObjectProcessor(position);
+            return handler.Invoke(type, unboxStruct, position);
         }
         
         if (IsDictionaryType(type))
@@ -192,6 +203,33 @@ internal static class FastClonerExprGenerator
         blockParams.Add(toLocal);
 
         return Expression.Lambda(funcType, Expression.Block(blockParams, expressionList), from, state).Compile();
+    }
+    
+    private static object GenerateHttpRequestOptionsProcessor(ExpressionPosition position)
+    {
+        ParameterExpression from = Expression.Parameter(typeof(object));
+        ParameterExpression state = Expression.Parameter(typeof(FastCloneState));
+        ParameterExpression result = Expression.Variable(typeof(HttpRequestOptions));
+        ParameterExpression tempMessage = Expression.Variable(typeof(HttpRequestMessage));
+        ParameterExpression fromOptions = Expression.Variable(typeof(HttpRequestOptions));
+        
+        ConstructorInfo constructor = typeof(HttpRequestMessage).GetConstructor(Type.EmptyTypes)!;
+
+        BlockExpression block = Expression.Block(
+            [result, tempMessage, fromOptions],
+            Expression.Assign(fromOptions, Expression.Convert(from, typeof(HttpRequestOptions))),
+            Expression.Assign(tempMessage, Expression.New(constructor)),
+            Expression.Assign(result, Expression.Property(tempMessage, "Options")),
+            Expression.Call(state, StaticMethodInfos.DeepCloneStateMethods.AddKnownRef, from, result),
+            Expression.Assign(result, Expression.Convert(
+                Expression.Call(fromOptions, typeof(object).GetMethod("MemberwiseClone", BindingFlags.NonPublic | BindingFlags.Instance)!),
+                typeof(HttpRequestOptions)
+            )),
+            Expression.Call(tempMessage, typeof(IDisposable).GetMethod("Dispose")!),
+            result
+        );
+
+        return Expression.Lambda<Func<object, FastCloneState, object>>(block, from, state).Compile();
     }
     
     private static object GenerateExpandoObjectProcessor(ExpressionPosition position)
