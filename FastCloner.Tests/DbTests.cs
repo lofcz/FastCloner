@@ -22,7 +22,6 @@ public class DbTests
     [OneTimeSetUp]
     public void SetUp()
     {
-        // Smažeme existující databázi, pokud existuje
         if (File.Exists(DbFile))
         {
             File.Delete(DbFile);
@@ -30,8 +29,7 @@ public class DbTests
 
         Configuration configuration = CreateConfiguration();
         sessionFactory = configuration.BuildSessionFactory();
-
-        // Vytvoříme schéma databáze
+        
         using (ISession? session = sessionFactory.OpenSession())
         {
             SchemaExport export = new SchemaExport(configuration);
@@ -42,7 +40,7 @@ public class DbTests
     [OneTimeTearDown]
     public void TearDown()
     {
-        sessionFactory?.Dispose();
+        sessionFactory.Dispose();
         
         if (File.Exists(DbFile))
         {
@@ -80,7 +78,7 @@ public class DbTests
     {
         public EntityMap()
         {
-            Table("Entities"); // Změněno z "Entity"
+            Table("Entities");
             Id(x => x.Id).GeneratedBy.Identity();
             Map(x => x.Name);
             HasMany(x => x.Children)
@@ -94,7 +92,7 @@ public class DbTests
     {
         public ChildEntityMap()
         {
-            Table("ChildEntities"); // Změněno z "ChildEntity"
+            Table("ChildEntities");
             Id(x => x.Id).GeneratedBy.Identity();
             Map(x => x.Name);
             References(x => x.Entity)
@@ -153,17 +151,13 @@ public class DbTests
 
 public static class NHibernateHelper
 {
-    public static T Unproxy<T>(T entity) where T : class
+    public static T? Unproxy<T>(T? entity) where T : class
     {
-        if (entity == null)
-            return null;
-
-        // Pokud je to proxy objekt
-        if (entity is INHibernateProxy proxy)
+        return entity switch
         {
-            return (T)proxy.HibernateLazyInitializer.GetImplementation();
-        }
-
-        return entity;
+            null => null,
+            INHibernateProxy proxy => (T)proxy.HibernateLazyInitializer.GetImplementation(),
+            _ => entity
+        };
     }
 }
