@@ -81,6 +81,58 @@ public class SpecificScenariosTest
         }
     }
 
+    public class CBase<TKey>
+    {
+        public TKey Id { get; set; }
+    }
+    
+    public class C3 : CBase<int>
+    {
+        public new int Id { get; set; }
+    }
+
+    public class C2 : CBase<int>
+    {
+
+        public C3 c3 { get; set; } = new C3();
+    }
+
+    public class C1 : CBase<int>
+    {
+        public C2 c2 { get; set; } = new C2();
+    }
+    
+    [Test]
+    public void Test_DeepClone_ClassHierarchy()
+    {
+        // Arrange
+        C1 original = new C1
+        {
+            Id = 1,
+            c2 = new C2
+            {
+                Id = 2,
+                c3 = new C3
+                {
+                    Id = 3
+                }
+            }
+        };
+
+        // Act
+        C1 cloned1 = original.DeepClone();
+    
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned1, Is.Not.SameAs(original));
+            Assert.That(cloned1.Id, Is.EqualTo(original.Id));
+            Assert.That(cloned1.c2, Is.Not.SameAs(original.c2));
+            Assert.That(cloned1.c2.Id, Is.EqualTo(original.c2.Id));
+            Assert.That(cloned1.c2.c3, Is.Not.SameAs(original.c2.c3));
+            Assert.That(cloned1.c2.c3.Id, Is.EqualTo(original.c2.c3.Id));
+        });
+    }
     
     [Test]
     public void Test_ExpressionTree_OrderBy1()
