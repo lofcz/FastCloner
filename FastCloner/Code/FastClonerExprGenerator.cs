@@ -20,6 +20,12 @@ internal static class FastClonerExprGenerator
 
     internal static object GenerateClonerInternal(Type realType, bool asObject) => GenerateProcessMethod(realType, asObject && realType.IsValueType());
 
+    private static bool MemberIsIgnored(MemberInfo memberInfo)
+    {
+        DeepCloneIgnoreAttribute? attribute = memberInfo.GetCustomAttribute<DeepCloneIgnoreAttribute>();
+        return attribute?.Ignored ?? false;
+    }
+    
     // today, I found that it is not required to do such complex things. Just SetValue is enough
     // is it new runtime changes, or I made incorrect assumptions earlier
     // slow, but hardcore method to set readonly field
@@ -83,6 +89,21 @@ internal static class FastClonerExprGenerator
         }
         
         return !BadTypes.ContainsAnyPattern(type.FullName);
+    }
+    
+    private static List<MemberInfo> GetAllMembers(Type type)
+    {
+        List<MemberInfo> members = [];
+        Type? currentType = type;
+        
+        while (currentType != null && currentType != typeof(ContextBoundObject))
+        {
+            members.AddRange(currentType.GetDeclaredFields());
+            members.AddRange(currentType.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Where(p => p is { CanRead: true, CanWrite: true } && p.GetIndexParameters().Length == 0)); // Exclude indexers
+            currentType = currentType.BaseType();
+        }
+        
+        return members;
     }
     
     private static object? GenerateProcessMethod(Type type, bool unboxStruct, ExpressionPosition position)
@@ -172,50 +193,66 @@ internal static class FastClonerExprGenerator
             }
         }
 
-        List<FieldInfo> fi = [];
-        Type? tp = type;
-        do
-        {
-            // don't do anything with this dark magic!
-            if (tp == typeof(ContextBoundObject)) break;
-
-            fi.AddRange(tp.GetDeclaredFields());
-            tp = tp.BaseType();
-        }
-        while (tp != null);
-
         ExpressionPosition currentPosition = position;
-
-        foreach (FieldInfo fieldInfo in fi)
+        IEnumerable<MemberInfo> members = GetAllMembers(type);
+        
+        foreach (MemberInfo member in members)
         {
-            if (!FastClonerSafeTypes.CanReturnSameObject(fieldInfo.FieldType))
+            Type memberType = member switch
             {
-                MethodInfo methodInfo = fieldInfo.FieldType.IsValueType()
+                FieldInfo fi => fi.FieldType,
+                PropertyInfo pi => pi.PropertyType,
+                _ => throw new ArgumentException($"Unsupported member type: {member.GetType()}")
+            };
+
+            if (member is PropertyInfo piLocal)
+            {
+                DeepCloneIgnoreAttribute? attribute = piLocal.GetCustomAttribute<DeepCloneIgnoreAttribute>();
+                
+                if (attribute?.Ignored ?? false)
+                {
+                    expressionList.Add(Expression.Assign(
+                        Expression.Property(toLocal, piLocal),
+                        Expression.Default(piLocal.PropertyType)
+                    ));
+                }
+
+                continue;
+            }
+
+            if (!FastClonerSafeTypes.CanReturnSameObject(memberType))
+            {
+                if (MemberIsIgnored(member))
+                {
+                    expressionList.Add(Expression.Assign(
+                        Expression.MakeMemberAccess(toLocal, member),
+                        Expression.Default(memberType)
+                    ));
+                    continue;
+                }
+
+                MethodInfo methodInfo = memberType.IsValueType()
                     ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!
-                        .MakeGenericMethod(fieldInfo.FieldType)
+                        .MakeGenericMethod(memberType)
                     : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
 
-                MemberExpression get = Expression.Field(fromLocal, fieldInfo);
-
-                // toLocal.Field = Clone...Internal(fromLocal.Field)
+                MemberExpression get = Expression.MakeMemberAccess(fromLocal, member);
                 Expression call = Expression.Call(methodInfo, get, state);
-                if (!fieldInfo.FieldType.IsValueType())
-                    call = Expression.Convert(call, fieldInfo.FieldType);
+            
+                if (!memberType.IsValueType())
+                    call = Expression.Convert(call, memberType);
 
-                // should handle specially
-                // todo: think about optimization, but it rare case
-                bool isReadonly = _readonlyFields.GetOrAdd(fieldInfo, f => f.IsInitOnly);
-                if (isReadonly)
+                if (member is FieldInfo fieldInfo && _readonlyFields.GetOrAdd(fieldInfo, f => f.IsInitOnly))
                 {
                     expressionList.Add(Expression.Call(
-                                           Expression.Constant(fieldInfo),
-                                           _fieldSetMethod,
-                                           Expression.Convert(toLocal, typeof(object)),
-                                           Expression.Convert(call, typeof(object))));
+                        Expression.Constant(fieldInfo),
+                        _fieldSetMethod,
+                        Expression.Convert(toLocal, typeof(object)),
+                        Expression.Convert(call, typeof(object))));
                 }
                 else
                 {
-                    expressionList.Add(Expression.Assign(Expression.Field(toLocal, fieldInfo), call));
+                    expressionList.Add(Expression.Assign(Expression.MakeMemberAccess(toLocal, member), call));
                 }
 
                 currentPosition = currentPosition.Next();

@@ -12,6 +12,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
 using System.Text;
+using FastCloner.Code;
 using FastCloner.Contrib;
 using Microsoft.EntityFrameworkCore;
 
@@ -262,6 +263,134 @@ public class SpecialCaseTests
             Assert.That(cloned1.c2.c3.Id, Is.EqualTo(original.c2.c3.Id));
         });
     }
+
+    private class TestProps
+    {
+        public int A { get; set; } = 10;
+        public string B { get; set; } = "My string";
+    }
+
+    private class TestPropsWithIgnored
+    {
+        public int A { get; set; } = 10;
+    
+        [DeepCloneIgnore]
+        public string B { get; set; } = "My string";
+    }
+
+    [Test]
+    public void Test_Clone_Props()
+    {
+        TestProps original = new TestProps { A = 42, B = "Test value" };
+        TestProps clone = original.DeepClone();
+    
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone.A, Is.EqualTo(42));
+            Assert.That(clone.B, Is.EqualTo("Test value"));
+            Assert.That(clone, Is.Not.SameAs(original));
+        });
+    }
+
+    [Test]
+    public void Test_Clone_Props_With_Ignored()
+    {
+        TestPropsWithIgnored original = new TestPropsWithIgnored { A = 42, B = "Test value" };
+        TestPropsWithIgnored clone = original.DeepClone();
+    
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone.A, Is.EqualTo(42));
+            Assert.That(clone.B, Is.EqualTo(null)); // default value
+            Assert.That(clone, Is.Not.SameAs(original));
+        });
+    }
+
+    private class TestAutoProps
+    {
+        public int A { get; set; } = 10;
+        public string B { get; private set; } = "My string";
+        public int C => A * 2;
+        
+        private int _d;
+        public int D
+        {
+            get => _d;
+            set => _d = value;
+        }
+    }
+
+    [Test]
+    public void Test_Clone_Auto_Properties()
+    {
+        // Arrange
+        TestAutoProps original = new TestAutoProps 
+        { 
+            A = 42,
+            D = 100
+        };
+        
+        // Set private setter property via reflection
+        original.GetType().GetProperty("B")!
+            .SetValue(original, "Test value", null);
+        
+        // Act
+        TestAutoProps clone = original.DeepClone();
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone.A, Is.EqualTo(42));
+            Assert.That(clone.B, Is.EqualTo("Test value"));
+            Assert.That(clone.C, Is.EqualTo(84));
+            Assert.That(clone.D, Is.EqualTo(100));
+            Assert.That(clone, Is.Not.SameAs(original));
+        });
+    }
+
+    private class TestAutoPropsWithIgnored
+    {
+        public int A { get; set; } = 10;
+        
+        [DeepCloneIgnore]
+        public string B { get; private set; } = "My string";
+        
+        public int C => A * 2;
+        
+        private int _d;
+        [DeepCloneIgnore]
+        public int D
+        {
+            get => _d;
+            set => _d = value;
+        }
+    }
+
+    [Test]
+    public void Test_Clone_Auto_Properties_With_Ignored()
+    {
+        // Arrange
+        TestAutoPropsWithIgnored original = new TestAutoPropsWithIgnored 
+        { 
+            A = 42,
+            D = 100
+        };
+        original.GetType().GetProperty("B")!
+            .SetValue(original, "Test value", null);
+        
+        // Act
+        TestAutoPropsWithIgnored clone = original.DeepClone();
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone.A, Is.EqualTo(42));
+            Assert.That(clone.B, Is.EqualTo(null));
+            Assert.That(clone.C, Is.EqualTo(84));
+            Assert.That(clone.D, Is.EqualTo(0));
+            Assert.That(clone, Is.Not.SameAs(original));
+        });
+    }
     
     [Test]
     public void Test_ExpressionTree_OrderBy1()
@@ -269,7 +398,7 @@ public class SpecialCaseTests
         IOrderedQueryable<int> q = Enumerable.Range(1, 5).Reverse().AsQueryable().OrderBy(x => x);
         IOrderedQueryable<int> q2 = q.DeepClone();
         Assert.That(q2.ToArray()[0], Is.EqualTo(1));
-        Assert.That(q.ToArray().Length, Is.EqualTo(5));
+        Assert.That(q.ToArray(), Has.Length.EqualTo(5));
     }
     
     [Test]
