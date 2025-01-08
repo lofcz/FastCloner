@@ -420,6 +420,113 @@ public class SpecificScenariosTest
     }
     
     [Test]
+    public void HttpResponse_Clone()
+    {
+        // Arrange
+        HttpResponseMessage original = new HttpResponseMessage
+        {
+            StatusCode = HttpStatusCode.OK,
+            Version = new Version(2, 0),
+            Content = new StringContent(
+                "{\"result\":\"success\"}", 
+                Encoding.UTF8, 
+                "application/json"),
+            ReasonPhrase = "Custom OK Message"
+        };
+        
+        original.Headers.CacheControl = new CacheControlHeaderValue { MaxAge = TimeSpan.FromHours(1) };
+        original.Headers.Add("X-Custom-Response", "test-response");
+        
+        // Act
+        HttpResponseMessage? cloned = FastCloner.DeepClone(original);
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned.StatusCode, Is.EqualTo(HttpStatusCode.OK), "Status code should be copied");
+            Assert.That(cloned.Version, Is.EqualTo(new Version(2, 0)), "Version should be copied");
+            Assert.That(cloned.ReasonPhrase, Is.EqualTo("Custom OK Message"), "Reason phrase should be copied");
+            
+            Assert.That(cloned.Headers.CacheControl?.MaxAge, Is.EqualTo(TimeSpan.FromHours(1)), "Cache control should be copied");
+            Assert.That(cloned.Headers.GetValues("X-Custom-Response").First(), Is.EqualTo("test-response"), "Custom header should be copied");
+            
+            string originalContent = original.Content.ReadAsStringAsync().Result;
+            string clonedContent = cloned.Content.ReadAsStringAsync().Result;
+            Assert.That(clonedContent, Is.EqualTo(originalContent), "Content should be copied");
+        });
+    }
+
+    [Test]
+    public void HttpRequest_With_StreamContent_Clone()
+    {
+        // Arrange
+        HttpRequestMessage original = new HttpRequestMessage(HttpMethod.Post, "https://api.example.com/stream");
+        MemoryStream streamData = new MemoryStream("stream test data"u8.ToArray());
+        StreamContent streamContent = new StreamContent(streamData);
+        streamContent.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
+        original.Content = streamContent;
+
+        // Act
+        HttpRequestMessage? cloned = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned.Content, Is.TypeOf<StreamContent>(), "Content type should be preserved");
+            
+            string originalContent = original.Content.ReadAsStringAsync().Result;
+            string clonedContent = cloned.Content.ReadAsStringAsync().Result;
+            Assert.That(clonedContent, Is.EqualTo(originalContent), "Stream content should be copied");
+            Assert.That(cloned.Content.Headers.ContentType?.MediaType, Is.EqualTo("text/plain"), "Content type should be copied");
+        });
+    }
+
+    [Test]
+    public void HttpRequest_With_ComplexHeaders_Clone()
+    {
+        // Arrange
+        HttpRequestMessage original = new HttpRequestMessage(HttpMethod.Get, "https://api.example.com");
+        
+        original.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json", 1.0));
+        original.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/xml", 0.8));
+        
+        original.Headers.AcceptLanguage.Add(new StringWithQualityHeaderValue("en-US", 1.0));
+        original.Headers.AcceptLanguage.Add(new StringWithQualityHeaderValue("cs-CZ", 0.8));
+        
+        original.Headers.Add("If-Match", ["\"123\"", "\"456\""]);
+        original.Headers.Add("X-Custom-Multi", ["value1", "value2"]);
+
+        // Act
+        HttpRequestMessage? cloned = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            List<MediaTypeWithQualityHeaderValue> acceptHeaders = cloned.Headers.Accept.OrderBy(x => x.MediaType).ToList();
+            Assert.That(acceptHeaders[0].MediaType, Is.EqualTo("application/json"), "First accept header should be copied");
+            Assert.That(acceptHeaders[0].Quality, Is.EqualTo(1.0), "First accept header quality should be copied");
+            Assert.That(acceptHeaders[1].MediaType, Is.EqualTo("text/xml"), "Second accept header should be copied");
+            Assert.That(acceptHeaders[1].Quality, Is.EqualTo(0.8), "Second accept header quality should be copied");
+
+            List<StringWithQualityHeaderValue> languageHeaders = cloned.Headers.AcceptLanguage.OrderBy(x => x.Value).ToList();
+            Assert.That(languageHeaders[0].Value, Is.EqualTo("cs-CZ"), "First language header should be copied");
+            Assert.That(languageHeaders[0].Quality, Is.EqualTo(0.8), "First language header quality should be copied");
+            Assert.That(languageHeaders[1].Value, Is.EqualTo("en-US"), "Second language header should be copied");
+            Assert.That(languageHeaders[1].Quality, Is.EqualTo(1.0), "Second language header quality should be copied");
+
+            List<string> ifMatchValues = cloned.Headers.GetValues("If-Match").ToList();
+            Assert.That(ifMatchValues, Has.Count.EqualTo(2), "If-Match headers count should match");
+            Assert.That(ifMatchValues, Contains.Item("\"123\""), "First If-Match value should be copied");
+            Assert.That(ifMatchValues, Contains.Item("\"456\""), "Second If-Match value should be copied");
+
+            List<string> customMultiValues = cloned.Headers.GetValues("X-Custom-Multi").ToList();
+            Assert.That(customMultiValues, Has.Count.EqualTo(2), "Custom multi-value header count should match");
+            Assert.That(customMultiValues, Contains.Item("value1"), "First custom multi-value should be copied");
+            Assert.That(customMultiValues, Contains.Item("value2"), "Second custom multi-value should be copied");
+        });
+    }
+    
+    [Test]
     public void Dynamic_With_Dictionary_Clone()
     {
         // Arrange

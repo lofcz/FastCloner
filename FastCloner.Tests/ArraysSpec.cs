@@ -64,11 +64,11 @@ public class ArraysSpec
     public void ByteArray_Should_Be_Cloned()
     {
         // checking that cached object correctly clones arrays of different length
-        byte[] arr = Encoding.ASCII.GetBytes("test");
+        byte[] arr = "test"u8.ToArray();
         byte[] cloned = arr.DeepClone();
         CollectionAssert.AreEqual(arr, cloned);
 
-        arr = Encoding.ASCII.GetBytes("test testtest testtest testtest testtest testtest testtest testtest testtest testtest testtest testtest testtest testte");
+        arr = "test testtest testtest testtest testtest testtest testtest testtest testtest testtest testtest testtest testtest testte"u8.ToArray();
         cloned = arr.DeepClone();
         CollectionAssert.AreEqual(arr, cloned);
     }
