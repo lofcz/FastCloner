@@ -1,3 +1,7 @@
+[![FastCloner](https://badgen.net/nuget/v/FastCloner?v=302&icon=nuget&label=FastCloner)](https://www.nuget.org/packages/FastCloner)
+[![FastCloner.Contrib](https://badgen.net/nuget/v/FastCloner.Contrib?v=302&icon=nuget&label=FastCloner.Contrib)](https://www.nuget.org/packages/FastCloner.Contrib)
+
+
 # FastCloner
 
 <img align="left" width="128" height="128" alt="Te Reo Icon" src="https://github.com/user-attachments/assets/54f5be37-543a-411d-b6e6-90a77414926c" />
