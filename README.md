@@ -52,7 +52,7 @@ var clone = FastCloner.ShallowClone(new { Hello = "world", MyList = new List<int
 
 ## Limitations
 
-FastCloner uses caching by default which makes evaluating properties harder. Unmanaged resources, such as `IntPtr`s can't be cloned as there are no metadata for length. `ReadOnly` collections are tested to behave well as long as they follow basic conventions. Many other features, such as cloning `Dictionary`ies properly while keeping hashcodes, `INotifyPropertyChanged`, `delegate`s, `event`s, `HttpRequest`s / responses, and others are supported. If something doesn't work out of the box let me know in the [issues](https://github.com/lofcz/FastCloner/issues), the repository is actively maintained.
+FastCloner uses caching by default which makes evaluating properties harder. Cloning unmanaged resources, such as `IntPtr`s may result in side-effects, as there is no metadata for the length of buffers such pointers often point to. `ReadOnly` collections are tested to behave well as long as they follow basic conventions. Many other features, such as cloning `Dictionary`ies properly while keeping hashcodes, `INotifyPropertyChanged`, `delegate`s, `event`s, `HttpRequest`s / responses, and others are supported. If something doesn't work out of the box let me know in the [issues](https://github.com/lofcz/FastCloner/issues), the repository is actively maintained.
 
 ## License
 
