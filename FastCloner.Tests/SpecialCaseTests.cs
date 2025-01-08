@@ -974,6 +974,52 @@ public class SpecialCaseTests
     }
     
     [Test]
+    public void Test_Rune()
+    {
+        // Arrange
+        Rune obj = new Rune(0x1F44D);
+    
+        // Act
+        Rune result = obj.DeepClone();
+    
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.EqualTo(obj));
+            Assert.That(result, Is.EqualTo(obj));
+            Assert.That(result.Value, Is.EqualTo(obj.Value));
+            Assert.That(result.ToString(), Is.EqualTo("👍"));
+        });
+    }
+
+    [Test]
+    public void Test_RuneContainer()
+    {
+        // Arrange
+        RuneContainer container = new RuneContainer
+        {
+            // Emoji '🚀' (ROCKET) - Unicode U+1F680
+            RuneValue = new Rune(0x1F680)
+        };
+    
+        // Act
+        RuneContainer result = container.DeepClone();
+    
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(ReferenceEquals(result, container), Is.False);
+            Assert.That(result.RuneValue, Is.EqualTo(container.RuneValue));
+            Assert.That(result.RuneValue.ToString(), Is.EqualTo("🚀"));
+        });
+    }
+
+    public class RuneContainer
+    {
+        public Rune RuneValue { get; set; }
+    }
+    
+    [Test]
     public void Test_TimeSpan()
     {
         // Arrange

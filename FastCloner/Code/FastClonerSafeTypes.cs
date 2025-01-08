@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using System.Reflection;
+using System.Text;
 
 namespace FastCloner.Code;
 
@@ -28,6 +29,7 @@ internal static class FastClonerSafeTypes
         [typeof(nint)] = true,
         [typeof(nuint)] = true,
         [typeof(Guid)] = true,
+        [typeof(Rune)] = true,
         
         // Time-related types
         [typeof(TimeSpan)] = true,
