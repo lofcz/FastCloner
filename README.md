@@ -30,7 +30,7 @@ Sometimes you might want to exclude certain fields & properties from cloning:
 private class TestPropsWithIgnored
 {
     public int A { get; set; } = 10;
-    [DeepCloneIgnore] // <-- decorate such members with [DeepCloneIgnore] 
+    [FastClonerIgnore] // <-- decorate such members with [FastClonerIgnore]
     public string B { get; set; } = "My string";
 }
 
