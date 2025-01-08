@@ -33,9 +33,10 @@ Sometimes you might want to exclude certain fields & properties from cloning:
 ```csharp
 private class TestPropsWithIgnored
 {
-    public int A { get; set; } = 10;
     [FastClonerIgnore] // <-- decorate such members with [FastClonerIgnore]
     public string B { get; set; } = "My string";
+
+    public int A { get; set; } = 10;
 }
 
 TestPropsWithIgnored original = new TestPropsWithIgnored { A = 42, B = "Test value" };
