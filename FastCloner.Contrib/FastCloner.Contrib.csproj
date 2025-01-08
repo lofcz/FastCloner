@@ -23,12 +23,8 @@
     <ItemGroup>
       <PackageReference Include="System.Drawing.Common" Version="[8.0.3,)" />
     </ItemGroup>
-
+    
     <ItemGroup>
-      <None Update="icon.jpg">
-        <Pack>true</Pack>
-        <PackagePath></PackagePath>
-      </None>
+        <None Include="icon.jpg" Pack="true" PackagePath=""/>
     </ItemGroup>
-
 </Project>
