@@ -22,48 +22,70 @@ internal static class FastClonerSafeTypes
         [typeof(double)] = true,
         [typeof(decimal)] = true,
         [typeof(string)] = true,
+        [typeof(char)] = true,
+        [typeof(bool)] = true,
+        [typeof(sbyte)] = true,
+        [typeof(nint)] = true,
+        [typeof(nuint)] = true,
+        [typeof(Guid)] = true,
+        
+        // Time-related types
+        [typeof(TimeSpan)] = true,
+        [typeof(TimeZoneInfo)] = true,
         [typeof(DateTime)] = true,
         [typeof(DateTimeOffset)] = true,
         [typeof(DateOnly)] = true,
         [typeof(TimeOnly)] = true,
-        [typeof(IntPtr)] = true,
-        [typeof(UIntPtr)] = true,
-        [typeof(Guid)] = true,
+        
+        // Numeric types
+        [typeof(Half)] = true,
+        [typeof(Int128)] = true,
+        [typeof(UInt128)] = true,
         
         // Others
         [typeof(DBNull)] = true,
         [StringComparer.Ordinal.GetType()] = true,
         [StringComparer.OrdinalIgnoreCase.GetType()] = true,
+        [StringComparer.InvariantCulture.GetType()] = true,
+        [StringComparer.InvariantCultureIgnoreCase.GetType()] = true
     };
 
     static FastClonerSafeTypes()
     {
-        foreach (
-            Type? x in
-            new[]
-            {
-                Type.GetType("System.RuntimeType"),
-                Type.GetType("System.RuntimeTypeHandle"),
-                StringComparer.InvariantCulture.GetType(),
-                StringComparer.InvariantCultureIgnoreCase.GetType(),
-            }) KnownTypes.TryAdd(x, true);
+        List<Type?> safeTypes =
+        [
+            Type.GetType("System.RuntimeType"),
+            Type.GetType("System.RuntimeTypeHandle")
+        ];
+
+        foreach (Type? x in safeTypes.OfType<Type>())
+        {
+            KnownTypes.TryAdd(x, true);
+        }
     }
 
     private static bool CanReturnSameType(Type type, HashSet<Type>? processingTypes)
     {
         if (KnownTypes.TryGetValue(type, out bool isSafe))
+        {
             return isSafe;
+        }
 
         if (typeof(Delegate).IsAssignableFrom(type))
         {
             KnownTypes.TryAdd(type, false);
             return false;
         }
-
         
         // enums are safe
         // pointers (e.g. int*) are unsafe, but we cannot do anything with it except blind copy
         if (type.IsEnum() || type.IsPointer)
+        {
+            KnownTypes.TryAdd(type, true);
+            return true;
+        }
+        
+        if (type.FullName is null)
         {
             KnownTypes.TryAdd(type, true);
             return true;

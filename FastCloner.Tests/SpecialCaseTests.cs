@@ -940,6 +940,130 @@ public class SpecialCaseTests
         }
     }
     
+    private unsafe class UnnamedTypeContainer
+    {
+        public int Value;
+        public object? Object;
+        public delegate*<IServiceProvider, object> Builder;
+    }
+
+    [Test]
+    public unsafe void Test_Unnamed_Type()
+    {
+        // Arrange
+        int[] array = [1, 2, 3];
+        IntPtr builder = (IntPtr)GCHandle.Alloc(array, GCHandleType.Pinned);
+        UnnamedTypeContainer obj = new UnnamedTypeContainer
+        {
+            Value = 1,
+            Object = new object(),
+            Builder = (delegate*<IServiceProvider, object>)builder
+        };
+        
+        // Act
+        UnnamedTypeContainer result = obj.DeepClone();
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(result, Is.Not.EqualTo(obj));
+            Assert.That(result.Value, Is.EqualTo(obj.Value));
+            Assert.That(result.Object, Is.Not.EqualTo(obj.Object));
+            Assert.That(result.Builder == obj.Builder, Is.True);
+        });
+    }
+    
+    [Test]
+    public void Test_TimeSpan()
+    {
+        // Arrange
+        TimeSpan obj = TimeSpan.FromHours(42.5);
+    
+        // Act
+        TimeSpan result = obj.DeepClone();
+    
+        // Assert
+        Assert.That(result, Is.EqualTo(obj));
+    }
+
+    [Test]
+    public void Test_TimeZoneInfo()
+    {
+        // Arrange
+        TimeZoneInfo obj = TimeZoneInfo.Local;
+    
+        // Act
+        TimeZoneInfo result = obj.DeepClone();
+    
+        // Assert
+        Assert.That(result, Is.EqualTo(obj));
+    }
+
+    [Test]
+    public void Test_Half()
+    {
+        // Arrange
+        Half obj = (Half)42.5f;
+    
+        // Act
+        Half result = obj.DeepClone();
+    
+        // Assert
+        Assert.That(result, Is.EqualTo(obj));
+    }
+
+    [Test]
+    public void Test_Int128()
+    {
+        // Arrange
+        Int128 obj = Int128.Parse("123456789012345678901234567890");
+    
+        // Act
+        Int128 result = obj.DeepClone();
+    
+        // Assert
+        Assert.That(result, Is.EqualTo(obj));
+    }
+
+    [Test]
+    public void Test_UInt128()
+    {
+        // Arrange
+        UInt128 obj = UInt128.Parse("123456789012345678901234567890");
+    
+        // Act
+        UInt128 result = obj.DeepClone();
+    
+        // Assert
+        Assert.That(result, Is.EqualTo(obj));
+    }
+
+    [Test]
+    public void Test_Char()
+    {
+        // Arrange
+        char obj = 'Ž';
+    
+        // Act
+        char result = obj.DeepClone();
+    
+        // Assert
+        Assert.That(result, Is.EqualTo(obj));
+    }
+
+    [Test]
+    public void Test_Bool()
+    {
+        // Arrange
+        bool obj = true;
+    
+        // Act
+        bool result = obj.DeepClone();
+    
+        // Assert
+        Assert.That(result, Is.EqualTo(obj));
+    }
+    
     [Test]
     public void Test_Notify_Triggered_Correctly()
     {
