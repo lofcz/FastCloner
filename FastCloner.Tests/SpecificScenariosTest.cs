@@ -9,6 +9,7 @@ using System.Dynamic;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 using System.Text;
 using FastCloner.Contrib;
 using Microsoft.EntityFrameworkCore;
@@ -23,6 +24,63 @@ public class SpecificScenariosTest
     {
         ContribTypeHandlers.Register();
     }
+    
+    [StructLayout(LayoutKind.Sequential, Pack = 0)]
+    public class MyClass
+    {
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
+        public short[] shortsArray= new short[4];
+        [MarshalAs(UnmanagedType.ByValArray, ArraySubType = UnmanagedType.Struct, SizeConst = 4)]
+        public InternalClass[] internals = new InternalClass[4];
+    }
+    
+    [StructLayout(LayoutKind.Sequential, Pack = 0)]
+    public class InternalClass
+    {
+        public byte myByte;
+        public uint myUint1;
+        public uint myUint2;
+        public uint myUint3;
+    }
+    
+    [Test]
+    public void Test_DeepClone_Marshal()
+    {
+        // Arrange
+        MyClass original = new MyClass
+        {
+            shortsArray = [1, 2, 3, 4],
+            internals =
+            [
+                new InternalClass { myByte = 1, myUint1 = 10, myUint2 = 20, myUint3 = 30 },
+                new InternalClass { myByte = 2, myUint1 = 11, myUint2 = 21, myUint3 = 31 },
+                new InternalClass { myByte = 3, myUint1 = 12, myUint2 = 22, myUint3 = 32 },
+                new InternalClass { myByte = 4, myUint1 = 13, myUint2 = 23, myUint3 = 33 }
+            ]
+        };
+
+        // Act
+        MyClass cloned = original.DeepClone();
+
+        // Assert
+        Assert.That(cloned, Is.Not.SameAs(original));
+        
+        Assert.That(cloned.shortsArray, Is.Not.SameAs(original.shortsArray));
+        Assert.That(cloned.shortsArray, Is.EqualTo(original.shortsArray));
+        
+        Assert.That(cloned.internals, Is.Not.SameAs(original.internals));
+        Assert.That(cloned.internals.Length, Is.EqualTo(original.internals.Length));
+        
+        for (int i = 0; i < original.internals.Length; i++)
+        {
+            Assert.That(cloned.internals[i], Is.Not.SameAs(original.internals[i]));
+            Assert.That(cloned.internals[i].myByte, Is.EqualTo(original.internals[i].myByte));
+            Assert.That(cloned.internals[i].myUint1, Is.EqualTo(original.internals[i].myUint1));
+            Assert.That(cloned.internals[i].myUint2, Is.EqualTo(original.internals[i].myUint2));
+            Assert.That(cloned.internals[i].myUint3, Is.EqualTo(original.internals[i].myUint3));
+        }
+    }
+
     
     [Test]
     public void Test_ExpressionTree_OrderBy1()
