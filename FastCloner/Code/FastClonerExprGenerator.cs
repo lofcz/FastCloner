@@ -1,9 +1,11 @@
 ﻿using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Frozen;
+using System.Collections.ObjectModel;
 using System.Dynamic;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace FastCloner.Code;
 
@@ -67,8 +69,27 @@ internal static class FastClonerExprGenerator
             [typeof(Array)] = (type, _, _) => GenerateProcessArrayMethod(type),
         }.ToFrozenDictionary();
     
-    private static object GenerateProcessMethod(Type type, bool unboxStruct, ExpressionPosition position)
+    private static readonly AhoCorasick BadTypes = new AhoCorasick([
+        "Castle.Proxies.",
+        "System.Data.Entity.DynamicProxies.",
+        "NHibernate.Proxy."
+    ]);
+    
+    private static bool IsCloneable(Type type)
     {
+        if (type.FullName is null)
+        {
+            return false;
+        }
+        
+        return !BadTypes.ContainsAnyPattern(type.FullName);
+    }
+    
+    private static object? GenerateProcessMethod(Type type, bool unboxStruct, ExpressionPosition position)
+    {
+        if (!IsCloneable(type))
+            return null;
+        
         if (KnownTypeProcessors.TryGetValue(type, out ProcessMethodDelegate? handler))
         {
             return handler.Invoke(type, unboxStruct, position);
@@ -339,13 +360,80 @@ internal static class FastClonerExprGenerator
     {
         ParameterExpression from = Expression.Parameter(typeof(object));
         ParameterExpression state = Expression.Parameter(typeof(FastCloneState));
-        ParameterExpression local = Expression.Variable(dictType);
+        
+        LabelTarget returnNullLabel = Expression.Label(typeof(object));
+        ConditionalExpression nullCheck = Expression.IfThen(
+            Expression.Equal(from, Expression.Constant(null)),
+            Expression.Return(returnNullLabel, Expression.Constant(null))
+        );
+        
+        // For read-only collections
+        bool isReadOnly = dictType.Name.Contains("ReadOnly", StringComparison.InvariantCultureIgnoreCase) || 
+                          (dictType.IsGenericType && dictType.GetGenericTypeDefinition() == typeof(ReadOnlyDictionary<,>));
 
-        // Initialize dictionary
-        BinaryExpression assign = Expression.Assign(local, Expression.New(dictType.GetConstructor(Type.EmptyTypes)!));
+        Type innerDictType = isReadOnly
+            ? typeof(Dictionary<,>).MakeGenericType(keyType, valueType)
+            : dictType;
+        
+        // Check constructors
+        ConstructorInfo? ctor = isReadOnly 
+            ? dictType.GetConstructor([innerDictType])  // Get constructor that takes dictionary
+            : dictType.GetConstructor(Type.EmptyTypes); // Get parameterless constructor
+
+        // If we can't find appropriate constructor, bail out
+        if (ctor is null)
+        {
+            return Expression.Lambda<Func<object, FastCloneState, object>>(
+                from,
+                from, 
+                state
+            ).Compile();
+        }
+
+        ParameterExpression result = Expression.Variable(dictType);
+        ParameterExpression innerDict = isReadOnly 
+            ? Expression.Variable(innerDictType)
+            : result;
+
+        // Create instance of inner dictionary
+        BinaryExpression createInnerDict = Expression.Assign(
+            innerDict,
+            Expression.New(innerDictType.GetConstructor(Type.EmptyTypes)!)
+        );
+
+        // If ReadOnlyDictionary, use inner Dictionary
+        Expression createResult = isReadOnly
+            ? Expression.Assign(
+                result,
+                Expression.New(
+                    dictType.GetConstructor([innerDictType])!,
+                    innerDict
+                )
+            )
+            : createInnerDict;
+        
+        // Add reference to state for cycle detection
+        Expression addRef = Expression.Call(
+            state,
+            StaticMethodInfos.DeepCloneStateMethods.AddKnownRef,
+            from,
+            result
+        );
 
         // Get Add/TryAdd method
-        MethodInfo? addMethod = (dictType.IsGenericType ? dictType.GetMethod("Add", [keyType, valueType]) : typeof(IDictionary).GetMethod("Add")) ?? dictType.GetMethods().FirstOrDefault(m => m.Name == "TryAdd" && m.GetParameters().Length == 2 && m.GetParameters()[0].ParameterType == keyType && m.GetParameters()[1].ParameterType == valueType);
+        MethodInfo? addMethod = (innerDictType.IsGenericType
+                                    ? innerDictType.GetMethod("Add", [keyType, valueType])
+                                    : typeof(IDictionary).GetMethod("Add"))
+                                ?? innerDictType.GetMethods()
+                                    .FirstOrDefault(m => m.Name == "TryAdd" &&
+                                                         m.GetParameters().Length == 2 &&
+                                                         m.GetParameters()[0].ParameterType == keyType &&
+                                                         m.GetParameters()[1].ParameterType == valueType);
+
+        if (addMethod == null)
+        {
+            throw new InvalidOperationException($"Cannot find Add or TryAdd method for type {innerDictType.FullName}");
+        }
 
         // Setup enumerator
         Type enumeratorType = isGeneric
@@ -363,39 +451,49 @@ internal static class FastClonerExprGenerator
             ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(valueType)
             : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
 
-        // Generate iteration logic
-        BlockExpression iterationBlock = isGeneric
-            ? GenerateGenericDictionaryIteration(enumerator, keyType, valueType, keyCloneMethod, valueCloneMethod, local, addMethod, state, position)
-            : GenerateNonGenericDictionaryIteration(enumerator, keyCloneMethod, valueCloneMethod, local, addMethod, state, position);
 
+        BlockExpression iterationBlock = isGeneric
+            ? GenerateGenericDictionaryIteration(enumerator, keyType, valueType, keyCloneMethod, valueCloneMethod, innerDict, addMethod, state, position)
+            : GenerateNonGenericDictionaryIteration(enumerator, keyCloneMethod, valueCloneMethod, innerDict, addMethod, state, position);
+
+        Type enumerableType = isGeneric
+            ? typeof(IEnumerable<>).MakeGenericType(typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType))
+            : typeof(IDictionary);
+
+        MethodInfo? getEnumeratorMethod = enumerableType.GetMethod("GetEnumerator");
+        if (getEnumeratorMethod == null)
+        {
+            throw new InvalidOperationException($"Cannot find GetEnumerator method for type {enumerableType.FullName}");
+        }
+        
+        Expression getEnumerator = Expression.Assign(
+            enumerator,
+            Expression.Convert(
+                Expression.Call(
+                    Expression.Convert(from, enumerableType),
+                    getEnumeratorMethod
+                ),
+                enumeratorType
+            )
+        );
+        
         // Combine into final expression
         BlockExpression block = Expression.Block(
-            [local, enumerator],
-            assign,
-            Expression.Assign(enumerator, GetEnumeratorExpression(from, dictType, isGeneric, enumeratorType)),
+            isReadOnly ? [result, innerDict, enumerator] : new[] { result, enumerator },
+            nullCheck,
+            createInnerDict,
+            createResult,
+            addRef,
+            getEnumerator,
             iterationBlock,
-            local);
-
-        Type funcType = typeof(Func<object, FastCloneState, object>);
-        return Expression.Lambda(funcType, block, from, state).Compile();
-    }
-
-    private static Expression GetEnumeratorExpression(ParameterExpression from, Type dictType, bool isGeneric, Type enumeratorType)
-    {
-        if (isGeneric)
-        {
-            return Expression.Convert(
-                Expression.Call(
-                    Expression.Convert(from, typeof(IEnumerable)),
-                    typeof(IEnumerable).GetMethod(nameof(IEnumerable.GetEnumerator))!),
-                enumeratorType);
-        }
-
-        return Expression.Convert(
-            Expression.Call(
-                Expression.Convert(from, typeof(IDictionary)),
-                typeof(IDictionary).GetMethod(nameof(IDictionary.GetEnumerator))!),
-            typeof(IDictionaryEnumerator));
+            Expression.Label(returnNullLabel, Expression.Convert(result, typeof(object)))
+        );
+        
+        return Expression.Lambda<Func<object, FastCloneState, object>>(
+            block,
+            from,
+            state
+        ).Compile();
     }
 
     private static BlockExpression GenerateGenericDictionaryIteration(ParameterExpression enumerator, Type keyType, Type valueType, MethodInfo keyCloneMethod, MethodInfo valueCloneMethod, ParameterExpression local, MethodInfo addMethod, ParameterExpression state, ExpressionPosition position)
@@ -516,17 +614,75 @@ internal static class FastClonerExprGenerator
 
         ParameterExpression from = Expression.Parameter(typeof(object));
         ParameterExpression state = Expression.Parameter(typeof(FastCloneState));
-
         ParameterExpression local = Expression.Variable(type);
-        BinaryExpression assign = Expression.Assign(local, Expression.New(type.GetConstructor(Type.EmptyTypes)!));
+        
+        bool isReadOnly = type.Name.Contains("ReadOnly", StringComparison.InvariantCultureIgnoreCase);
 
-        MethodInfo? addMethod = type.GetMethod("Add", [elementType]) ?? typeof(ISet<>).GetMethod("Add") ?? type.GetMethod("Add") ?? type.GetMethod("TryAdd");
+        // Use HashSet as inner collection
+        Type innerSetType = isReadOnly 
+            ? typeof(HashSet<>).MakeGenericType(elementType)
+            : type;
 
-        BlockExpression foreachBlock = GenerateForeachBlock(from, elementType, null, cloneElementMethod, null, local, addMethod, state, position);
+        ParameterExpression innerSet = isReadOnly 
+            ? Expression.Variable(innerSetType)
+            : local;
+
+        // Initialize set
+        BinaryExpression assign = Expression.Assign(
+            innerSet, 
+            Expression.New(innerSetType.GetConstructor(Type.EmptyTypes)!)
+        );
+
+        // Get Add method from inner set
+        MethodInfo? addMethod = innerSetType.GetMethod("Add", [elementType]) ?? 
+                               typeof(ISet<>).MakeGenericType(elementType).GetMethod("Add") ?? 
+                               innerSetType.GetMethod("Add") ?? 
+                               innerSetType.GetMethod("TryAdd");
+
+        if (addMethod == null)
+        {
+            throw new InvalidOperationException($"Cannot find Add or TryAdd method for type {innerSetType.FullName}");
+        }
+
+        // Generate foreach block using inner set
+        BlockExpression foreachBlock = GenerateForeachBlock(
+            from, 
+            elementType, 
+            null, 
+            cloneElementMethod, 
+            null, 
+            innerSet, 
+            addMethod, 
+            state, 
+            position
+        );
+
+        // Create final ReadOnlySet if needed
+        Expression finalAssign = isReadOnly
+            ? Expression.Assign(
+                local,
+                Expression.New(
+                    type.GetConstructor([innerSetType])!,
+                    innerSet
+                ))
+            : Expression.Empty();
+
         Type funcType = typeof(Func<object, FastCloneState, object>);
 
-        return Expression.Lambda(funcType, Expression.Block([local], assign, foreachBlock, local), from, state).Compile();
+        return Expression.Lambda(
+            funcType, 
+            Expression.Block(
+                isReadOnly ? [local, innerSet] : new[] { local },
+                assign,
+                foreachBlock,
+                finalAssign,
+                local
+            ), 
+            from, 
+            state
+        ).Compile();
     }
+
 
     private static object GenerateProcessArrayMethod(Type type)
     {

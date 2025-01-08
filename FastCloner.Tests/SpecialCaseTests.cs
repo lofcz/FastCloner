@@ -1053,6 +1053,131 @@ public class SpecialCaseTests
         });
     }
 
+     [Test]
+    public void ReadOnlyDictionary_Clone_ShouldCreateNewInstance()
+    {
+        // Arrange
+        Dictionary<string, int> originalDict = new Dictionary<string, int> { ["One"] = 1, ["Two"] = 2 };
+        ReadOnlyDictionary<string, int> original = new ReadOnlyDictionary<string, int>(originalDict);
+
+        // Act
+        ReadOnlyDictionary<string, int>? cloned = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
+            Assert.That(cloned, Is.TypeOf<ReadOnlyDictionary<string, int>>(), "Should preserve type");
+            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
+            Assert.That(cloned["One"], Is.EqualTo(1), "Should preserve values");
+            Assert.That(cloned["Two"], Is.EqualTo(2), "Should preserve values");
+        });
+    }
+
+    [Test]
+    public void IReadOnlyDictionary_Clone_ShouldCreateNewInstance()
+    {
+        // Arrange
+        IReadOnlyDictionary<string, int> original = 
+            new Dictionary<string, int> { ["One"] = 1, ["Two"] = 2 }.AsReadOnly();
+
+        // Act
+        IReadOnlyDictionary<string, int>? cloned = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
+            Assert.That(cloned, Is.AssignableTo<IReadOnlyDictionary<string, int>>(), "Should preserve interface");
+            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
+            Assert.That(cloned["One"], Is.EqualTo(1), "Should preserve values");
+            Assert.That(cloned["Two"], Is.EqualTo(2), "Should preserve values");
+        });
+    }
+
+    [Test]
+    public void ReadOnlyDictionary_WithComplexValues_Clone_ShouldDeepClone()
+    {
+        // Arrange
+        Dictionary<string, List<string>> originalDict = new Dictionary<string, List<string>>
+        {
+            ["List1"] = ["A", "B"],
+            ["List2"] = ["C", "D"]
+        };
+        ReadOnlyDictionary<string, List<string>> original = new ReadOnlyDictionary<string, List<string>>(originalDict);
+
+        // Act
+        ReadOnlyDictionary<string, List<string>>? cloned = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
+            Assert.That(cloned["List1"], Is.Not.SameAs(original["List1"]), "Should deep clone values");
+            Assert.That(cloned["List2"], Is.Not.SameAs(original["List2"]), "Should deep clone values");
+            Assert.That(cloned["List1"], Is.EquivalentTo(original["List1"]), "Should preserve value contents");
+            Assert.That(cloned["List2"], Is.EquivalentTo(original["List2"]), "Should preserve value contents");
+        });
+    }
+
+    [Test]
+    public void ReadOnlyDictionary_WithNullValues_Clone_ShouldPreserveNulls()
+    {
+        // Arrange
+        Dictionary<string, string> originalDict = new Dictionary<string, string>
+        {
+            ["NotNull"] = "Value",
+            ["Null"] = null
+        };
+        ReadOnlyDictionary<string, string> original = new ReadOnlyDictionary<string, string>(originalDict);
+
+        // Act
+        ReadOnlyDictionary<string, string>? cloned = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned["NotNull"], Is.EqualTo("Value"), "Should preserve non-null values");
+            Assert.That(cloned["Null"], Is.Null, "Should preserve null values");
+        });
+    }
+
+    [Test]
+    public void ReadOnlyDictionary_Empty_Clone_ShouldCreateEmptyInstance()
+    {
+        // Arrange
+        ReadOnlyDictionary<string, int> original = new ReadOnlyDictionary<string, int>(new Dictionary<string, int>());
+
+        // Act
+        ReadOnlyDictionary<string, int>? cloned = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
+            Assert.That(cloned.Count, Is.EqualTo(0), "Should be empty");
+        });
+    }
+
+    [Test]
+    public void ReadOnlyDictionary_WithKeyValuePairs_Clone_ShouldPreserveEnumeration()
+    {
+        // Arrange
+        Dictionary<int, string> originalDict = new Dictionary<int, string> { [1] = "One", [2] = "Two" };
+        ReadOnlyDictionary<int, string> original = new ReadOnlyDictionary<int, string>(originalDict);
+
+        // Act
+        ReadOnlyDictionary<int, string>? cloned = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned.Keys, Is.EquivalentTo(original.Keys), "Should preserve keys");
+            Assert.That(cloned.Values, Is.EquivalentTo(original.Values), "Should preserve values");
+            Assert.That(cloned, Is.EquivalentTo(original), "Should preserve key-value pairs");
+        });
+    }
+    
     [Test]
     public void ExpandoObject_With_Circular_Reference_Clone()
     {
