@@ -83,7 +83,7 @@ public class ConcurrentTests
         {
             foreach (Task<TestClass> task in tasks)
             {
-                TestClass? clone = task.Result;
+                TestClass clone = task.Result;
                 Assert.That(clone.Value, Is.EqualTo(42));
             }
         });

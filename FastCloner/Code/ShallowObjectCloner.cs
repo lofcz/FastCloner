@@ -29,8 +29,8 @@ public abstract class ShallowObjectCloner
         static ShallowSafeObjectCloner()
         {
             MethodInfo? methodInfo = typeof(object).GetPrivateMethod(nameof(MemberwiseClone));
-            ParameterExpression? p = Expression.Parameter(typeof(object));
-            MethodCallExpression? mce = Expression.Call(p, methodInfo);
+            ParameterExpression p = Expression.Parameter(typeof(object));
+            MethodCallExpression mce = Expression.Call(p, methodInfo);
             _cloneFunc = Expression.Lambda<Func<object, object>>(mce, p).Compile();
         }
 

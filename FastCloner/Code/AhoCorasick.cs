@@ -40,7 +40,7 @@ public class AhoCorasick
 
     private void BuildFailureLinks()
     {
-        Queue<Node>? queue = new Queue<Node>();
+        Queue<Node> queue = new Queue<Node>();
         foreach (Node? node in root.Children.Values)
         {
             node.Failure = root;
@@ -49,10 +49,10 @@ public class AhoCorasick
 
         while (queue.Count > 0)
         {
-            Node? current = queue.Dequeue();
+            Node current = queue.Dequeue();
             foreach (KeyValuePair<char, Node> kvp in current.Children)
             {
-                Node? child = kvp.Value;
+                Node child = kvp.Value;
                 char character = kvp.Key;
                 queue.Enqueue(child);
 

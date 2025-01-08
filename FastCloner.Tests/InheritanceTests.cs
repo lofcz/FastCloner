@@ -82,13 +82,13 @@ public class InheritanceTests
     [Test]
     public void Descendant_Should_Be_Cloned()
     {
-        C2? c2 = new C2();
+        C2 c2 = new C2();
         c2.X = 1;
         c2.Y = 2;
         c2.Z = 3;
         C1 c1 = c2;
         c1.X = 4;
-        C1? cloned = c1.DeepClone();
+        C1 cloned = c1.DeepClone();
         Assert.That(cloned, Is.TypeOf<C2>());
         Assert.That(cloned.X, Is.EqualTo(4));
         Assert.That(cloned.Y, Is.EqualTo(2));
@@ -99,13 +99,13 @@ public class InheritanceTests
     [Test]
     public void Class_Should_Be_Cloned_With_Parents()
     {
-        C2P? c2 = new C2P();
+        C2P c2 = new C2P();
         c2.X = 1;
         c2.Y = 2;
         c2.Z = 3;
         C1P c1 = c2;
         c1.X = 4;
-        C2P? cloned = c2.DeepClone();
+        C2P cloned = c2.DeepClone();
         c2.X = 100;
         c2.Y = 100;
         c2.Z = 100;
@@ -158,11 +158,11 @@ public class InheritanceTests
     [Test]
     public void Descendant_In_Array_Should_Be_Cloned()
     {
-        C1? c1 = new C1();
-        C2? c2 = new C2();
-        C1[]? arr = [c1, c2];
+        C1 c1 = new C1();
+        C2 c2 = new C2();
+        C1[] arr = [c1, c2];
 
-        C1[]? cloned = arr.DeepClone();
+        C1[] cloned = arr.DeepClone();
         Assert.That(cloned[0], Is.TypeOf<C1>());
         Assert.That(cloned[1], Is.TypeOf<C2>());
     }
@@ -188,12 +188,12 @@ public class InheritanceTests
     [Test]
     public void Class_Casted_To_Object_Should_Be_Cloned()
     {
-        C3? c3 = new C3
+        C3 c3 = new C3
         {
             X = new C1()
         };
         object obj = c3;
-        object? cloned = obj.DeepClone();
+        object cloned = obj.DeepClone();
         Assert.That(cloned, Is.TypeOf<C3>());
         Assert.That(c3, Is.Not.EqualTo(cloned));
         Assert.That(((C3)cloned).X, Is.Not.Null);
@@ -203,9 +203,9 @@ public class InheritanceTests
     [Test]
     public void Class_Casted_To_Interface_Should_Be_Cloned()
     {
-        C1? c1 = new C1();
+        C1 c1 = new C1();
         IDisposable disp = c1;
-        IDisposable? cloned = disp.DeepClone();
+        IDisposable cloned = disp.DeepClone();
         Assert.That(c1, Is.Not.EqualTo(cloned));
         Assert.That(cloned, Is.TypeOf<C1>());
     }
@@ -226,8 +226,8 @@ public class InheritanceTests
     public void Array_Of_Struct_Casted_To_Interface_Should_Be_Cloned()
     {
         S1 s1 = new S1();
-        IDisposable[]? arr = [s1, s1];
-        IDisposable[]? clonedArr = arr.DeepClone();
+        IDisposable[] arr = [s1, s1];
+        IDisposable[] clonedArr = arr.DeepClone();
         Assert.That(clonedArr[0], Is.EqualTo(clonedArr[1]));
     }
 
@@ -265,33 +265,33 @@ public class InheritanceTests
     [Test]
     public void Class_With_Safe_Class_Should_Be_Cloned()
     {
-        V1? v = new V1
+        V1 v = new V1
         {
             Safe = new Safe1()
         };
-        V1? v2 = v.DeepClone();
+        V1 v2 = v.DeepClone();
         Assert.That(v.Safe == v2.Safe, Is.False);
     }
 
     [Test]
     public void Class_With_Safe_Class_Should_Be_Cloned_No_Default_Constructor()
     {
-        V2? v = new V2("X")
+        V2 v = new V2("X")
         {
             Safe = new Safe1()
         };
-        V2? v2 = v.DeepClone();
+        V2 v2 = v.DeepClone();
         Assert.That(v.Safe == v2.Safe, Is.False);
     }
 
     [Test]
     public void Class_With_UnSafe_Class_Should_Be_Cloned()
     {
-        V1? v = new V1
+        V1 v = new V1
         {
             Safe = new Unsafe1()
         };
-        V1? v2 = v.DeepClone();
+        V1 v2 = v.DeepClone();
         Assert.That(v.Safe == v2.Safe, Is.False);
         Assert.That(v2.Safe.GetType(), Is.EqualTo(typeof(Unsafe1)));
     }
@@ -299,11 +299,11 @@ public class InheritanceTests
     [Test]
     public void Class_With_UnSafe_Class_Should_Be_Cloned_No_Default_Constructor()
     {
-        V2? v = new V2("X")
+        V2 v = new V2("X")
         {
             Safe = new Unsafe1()
         };
-        V2? v2 = v.DeepClone();
+        V2 v2 = v.DeepClone();
         Assert.That(v.Safe == v2.Safe, Is.False);
         Assert.That(v2.Safe.GetType(), Is.EqualTo(typeof(Unsafe1)));
     }

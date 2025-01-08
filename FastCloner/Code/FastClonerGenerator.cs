@@ -85,7 +85,7 @@ internal static class FastClonerGenerator
     internal static T[] Clone1DimArraySafeInternal<T>(T[] obj, FastCloneState state)
     {
         int l = obj.Length;
-        T[]? outArray = new T[l];
+        T[] outArray = new T[l];
         state.AddKnownRef(obj, outArray);
         Array.Copy(obj, outArray, obj.Length);
         return outArray;
@@ -96,9 +96,9 @@ internal static class FastClonerGenerator
         // not null from called method, but will check it anyway
         if (obj == null) return null;
         int l = obj.Length;
-        T[]? outArray = new T[l];
+        T[] outArray = new T[l];
         state.AddKnownRef(obj, outArray);
-        Func<T, FastCloneState, T>? cloner = GetClonerForValueType<T>();
+        Func<T, FastCloneState, T> cloner = GetClonerForValueType<T>();
         for (int i = 0; i < l; i++)
             outArray[i] = cloner(obj[i], state);
 
@@ -110,7 +110,7 @@ internal static class FastClonerGenerator
         // not null from called method, but will check it anyway
         if (obj == null) return null;
         int l = obj.Length;
-        T[]? outArray = new T[l];
+        T[] outArray = new T[l];
         state.AddKnownRef(obj, outArray);
         for (int i = 0; i < l; i++)
             outArray[i] = (T)CloneClassInternal(obj[i], state);
@@ -133,7 +133,7 @@ internal static class FastClonerGenerator
 
         int l1 = obj.GetLength(0);
         int l2 = obj.GetLength(1);
-        T[,]? outArray = new T[l1, l2];
+        T[,] outArray = new T[l1, l2];
         state.AddKnownRef(obj, outArray);
         if (FastClonerSafeTypes.CanReturnSameObject(typeof(T)))
         {
@@ -143,7 +143,7 @@ internal static class FastClonerGenerator
 
         if (typeof(T).IsValueType())
         {
-            Func<T, FastCloneState, T>? cloner = GetClonerForValueType<T>();
+            Func<T, FastCloneState, T> cloner = GetClonerForValueType<T>();
             for (int i = 0; i < l1; i++)
                 for (int k = 0; k < l2; k++)
                     outArray[i, k] = cloner(obj[i, k], state);
@@ -165,13 +165,13 @@ internal static class FastClonerGenerator
         if (obj == null) return null;
         int rank = obj.Rank;
 
-        int[]? lengths = Enumerable.Range(0, rank).Select(obj.GetLength).ToArray();
+        int[] lengths = Enumerable.Range(0, rank).Select(obj.GetLength).ToArray();
 
-        int[]? lowerBounds = Enumerable.Range(0, rank).Select(obj.GetLowerBound).ToArray();
-        int[]? idxes = Enumerable.Range(0, rank).Select(obj.GetLowerBound).ToArray();
+        int[] lowerBounds = Enumerable.Range(0, rank).Select(obj.GetLowerBound).ToArray();
+        int[] idxes = Enumerable.Range(0, rank).Select(obj.GetLowerBound).ToArray();
 
         Type? elementType = obj.GetType().GetElementType();
-        Array? outArray = Array.CreateInstance(elementType, lengths, lowerBounds);
+        Array outArray = Array.CreateInstance(elementType, lengths, lowerBounds);
 
         state.AddKnownRef(obj, outArray);
 
@@ -222,7 +222,7 @@ internal static class FastClonerGenerator
 
         if (objFrom == null)
             throw new ArgumentNullException(nameof(objFrom), "Cannot copy null object to another");
-        Type? type = objFrom.GetType();
+        Type type = objFrom.GetType();
         if (!type.IsInstanceOfType(objTo))
             throw new InvalidOperationException("From object should be derived from From object, but From object has type " + objFrom.GetType().FullName + " and to " + objTo.GetType().FullName);
         if (objFrom is string)
