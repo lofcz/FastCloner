@@ -3,7 +3,7 @@
 namespace FastCloner.Tests;
 
 [TestFixture]
-public class ShallowClonerSpec
+public class ShallowCloneTests
 {
     [Test]
     public void SimpleObject_Should_Be_Cloned()

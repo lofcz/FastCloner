@@ -1,7 +1,7 @@
 ﻿namespace FastCloner.Tests;
 
 [TestFixture]
-public class GenericsSpec
+public class GenericTests
 {
     [Test]
     public void Tuple_Should_Be_Cloned()

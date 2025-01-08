@@ -17,7 +17,7 @@ using Microsoft.EntityFrameworkCore;
 namespace FastCloner.Tests;
 
 [TestFixture]
-public class SpecificScenariosTest
+public class SpecialCaseTests
 {
     [OneTimeSetUp]
     public void Setup()

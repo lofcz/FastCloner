@@ -4,7 +4,7 @@ using System.Text;
 namespace FastCloner.Tests;
 
 [TestFixture]
-public class ArraysSpec
+public class ArrayTests
 {
     [Test]
     public void IntArray_Should_Be_Cloned()

@@ -1,7 +1,7 @@
 ﻿namespace FastCloner.Tests;
 
 [TestFixture]
-public class LoopCheckSpec
+public class CircularTests
 {
     public class C1
     {

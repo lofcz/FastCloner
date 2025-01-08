@@ -3,7 +3,7 @@
 namespace FastCloner.Tests;
 
 [TestFixture]
-public class InheritanceSpec
+public class InheritanceTests
 {
     public class C1 : IDisposable
     {

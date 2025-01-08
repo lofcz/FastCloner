@@ -5,7 +5,7 @@ using FastCloner.Tests.Objects;
 namespace FastCloner.Tests;
 
 [TestFixture]
-public class SimpleObjectSpec
+public class ObjectTests
 {
     [Test]
     public void SimpleObject_Should_Be_Cloned()

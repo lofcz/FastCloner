@@ -6,7 +6,7 @@ using System.Collections.Specialized;
 namespace FastCloner.Tests;
 
 [TestFixture]
-public class CopyToObjectSpec
+public class CopyToObjectTests
 {
     [Test]
     public void InterfaceTest()

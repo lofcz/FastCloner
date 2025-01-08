@@ -3,7 +3,7 @@
 namespace FastCloner.Tests;
 
 [TestFixture]
-public class ConstructorsSpec
+public class CtorTests
 {
     public class T1
     {

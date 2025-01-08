@@ -9,7 +9,7 @@ using System.Text;
 namespace FastCloner.Tests;
 
 [TestFixture]
-public class SystemTypesSpec
+public class TypeTests
 {
     [Test]
     public void StandardTypes_Should_Be_Cloned()
@@ -66,10 +66,14 @@ public class SystemTypesSpec
         Func<int, string> df = f.DeepClone();
         Func<int, string> cf = f.ShallowClone();
         closure[0] = "xxx";
-        Assert.That(f(3), Is.EqualTo("xxx3"));
-        // we clone delegate together with a closure
-        Assert.That(df(3), Is.EqualTo("1233"));
-        Assert.That(cf(3), Is.EqualTo("xxx3"));
+        
+        Assert.Multiple(() =>
+        {
+            Assert.That(f(3), Is.EqualTo("xxx3"));
+            // we clone delegate together with a closure
+            Assert.That(df(3), Is.EqualTo("1233"));
+            Assert.That(cf(3), Is.EqualTo("xxx3"));
+        });
     }
 
     public class EventHandlerTest1
@@ -105,9 +109,13 @@ public class SystemTypesSpec
         Assert.That(summ[0], Is.EqualTo(2));
         eht.Event -= a1;
         eht.Event -= a2;
-        Assert.That(eht.Call(1), Is.EqualTo(0)); // 0
-        Assert.That(summ[0], Is.EqualTo(2)); // nothing to increment
-        Assert.That(clone.Call(1), Is.EqualTo(2));
+        
+        Assert.Multiple(() =>
+        {
+            Assert.That(eht.Call(1), Is.EqualTo(0)); // 0
+            Assert.That(summ[0], Is.EqualTo(2)); // nothing to increment
+            Assert.That(clone.Call(1), Is.EqualTo(2));
+        });
     }
 
     private const string CertData =
