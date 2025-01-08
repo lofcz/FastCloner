@@ -4,65 +4,52 @@ namespace FastCloner.Code;
 
 internal static class FastClonerCache
 {
-    private static readonly ConcurrentDictionary<Type, object> _typeCache = new ConcurrentDictionary<Type, object>();
-
-    private static readonly ConcurrentDictionary<Type, object> _typeCacheDeepTo = new ConcurrentDictionary<Type, object>();
-
-    private static readonly ConcurrentDictionary<Type, object> _typeCacheShallowTo = new ConcurrentDictionary<Type, object>();
-
-    private static readonly ConcurrentDictionary<Type, object> _structAsObjectCache = new ConcurrentDictionary<Type, object>();
-
-    private static readonly ConcurrentDictionary<Tuple<Type, Type>, object> _typeConvertCache = new ConcurrentDictionary<Tuple<Type, Type>, object>();
-
-    public static object GetOrAddClass<T>(Type type, Func<Type, T> adder)
+    private static readonly ConcurrentDictionary<Type, Lazy<object>> classCache = new ConcurrentDictionary<Type, Lazy<object>>();
+    private static readonly ConcurrentDictionary<Type, Lazy<object>> structCache = new ConcurrentDictionary<Type, Lazy<object>>();
+    private static readonly ConcurrentDictionary<Type, Lazy<object>> deepClassToCache = new ConcurrentDictionary<Type, Lazy<object>>();
+    private static readonly ConcurrentDictionary<Type, Lazy<object>> shallowClassToCache = new ConcurrentDictionary<Type, Lazy<object>>();
+    private static readonly ConcurrentDictionary<Tuple<Type, Type>, Lazy<object>> typeConvertCache = new ConcurrentDictionary<Tuple<Type, Type>, Lazy<object>>();
+    
+    public static object GetOrAddClass(Type type, Func<Type, object> valueFactory)
     {
-        // return _typeCache.GetOrAdd(type, x => adder(x));
-
-        // this implementation is slightly faster than getoradd
-        if (_typeCache.TryGetValue(type, out object? value)) return value;
-
-        value = _typeCache.GetOrAdd(type, t => adder(t));
-        return value;
+        Lazy<object> lazy = classCache.GetOrAdd(type, t => new Lazy<object>(() => valueFactory(t), LazyThreadSafetyMode.ExecutionAndPublication));
+        return lazy.Value;
     }
 
-    public static object GetOrAddDeepClassTo<T>(Type type, Func<Type, T> adder)
+    public static object GetOrAddStructAsObject(Type type, Func<Type, object> valueFactory)
     {
-        if (_typeCacheDeepTo.TryGetValue(type, out object? value)) return value;
-
-        value = _typeCacheDeepTo.GetOrAdd(type, t => adder(t));
-        return value;
+        Lazy<object> lazy = structCache.GetOrAdd(type, t => new Lazy<object>(() => valueFactory(t), LazyThreadSafetyMode.ExecutionAndPublication));
+        return lazy.Value;
     }
 
-    public static object GetOrAddShallowClassTo<T>(Type type, Func<Type, T> adder)
+    public static object GetOrAddDeepClassTo(Type type, Func<Type, object> valueFactory)
     {
-        if (_typeCacheShallowTo.TryGetValue(type, out object? value)) return value;
-
-        value = _typeCacheShallowTo.GetOrAdd(type, t => adder(t));
-        return value;
+        Lazy<object> lazy = deepClassToCache.GetOrAdd(type, t => new Lazy<object>(() => valueFactory(t), LazyThreadSafetyMode.ExecutionAndPublication));
+        return lazy.Value;
     }
 
-    public static object GetOrAddStructAsObject<T>(Type type, Func<Type, T?> adder)
+    public static object GetOrAddShallowClassTo(Type type, Func<Type, object> valueFactory)
     {
-        // return _typeCache.GetOrAdd(type, x => adder(x));
-
-        // this implementation is slightly faster than getoradd
-        if (_structAsObjectCache.TryGetValue(type, out object? value)) return value;
-
-        value = _structAsObjectCache.GetOrAdd(type, t => adder(t));
-        return value;
+        Lazy<object> lazy = shallowClassToCache.GetOrAdd(type, t => new Lazy<object>(() => valueFactory(t), LazyThreadSafetyMode.ExecutionAndPublication));
+        return lazy.Value;
     }
 
-    public static T GetOrAddConvertor<T>(Type from, Type to, Func<Type, Type, T> adder) => (T)_typeConvertCache.GetOrAdd(new Tuple<Type, Type>(from, to), (tuple) => adder(tuple.Item1, tuple.Item2));
+    public static T GetOrAddConvertor<T>(Type from, Type to, Func<Type, Type, T> adder)
+    {
+        Tuple<Type, Type> key = new Tuple<Type, Type>(from, to);
+        Lazy<object> lazy = typeConvertCache.GetOrAdd(key, tuple => new Lazy<object>(() => adder(tuple.Item1, tuple.Item2), LazyThreadSafetyMode.ExecutionAndPublication));
+        return (T)lazy.Value;
+    }
 
     /// <summary>
     /// This method can be used when we switch between safe / unsafe variants (for testing)
     /// </summary>
     public static void ClearCache()
     {
-        _typeCache.Clear();
-        _typeCacheDeepTo.Clear();
-        _typeCacheShallowTo.Clear();
-        _structAsObjectCache.Clear();
-        _typeConvertCache.Clear();
+        classCache.Clear();
+        structCache.Clear();
+        deepClassToCache.Clear();
+        shallowClassToCache.Clear();
+        typeConvertCache.Clear();
     }
 }
