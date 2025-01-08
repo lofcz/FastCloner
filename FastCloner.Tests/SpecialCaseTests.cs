@@ -275,7 +275,7 @@ public class SpecialCaseTests
     {
         public int A { get; set; } = 10;
     
-        [DeepCloneIgnore]
+        [FastClonerIgnore]
         public string B { get; set; } = "My string";
     }
 
@@ -386,13 +386,13 @@ public class SpecialCaseTests
     {
         public int A { get; set; } = 10;
         
-        [DeepCloneIgnore]
+        [FastClonerIgnore]
         public string B { get; private set; } = "My string";
         
         public int C => A * 2;
         
         private int _d;
-        [DeepCloneIgnore]
+        [FastClonerIgnore]
         public int D
         {
             get => _d;

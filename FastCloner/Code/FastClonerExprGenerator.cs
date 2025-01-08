@@ -22,7 +22,7 @@ internal static class FastClonerExprGenerator
 
     private static bool MemberIsIgnored(MemberInfo memberInfo)
     {
-        DeepCloneIgnoreAttribute? attribute = memberInfo.GetCustomAttribute<DeepCloneIgnoreAttribute>();
+        FastClonerIgnoreAttribute? attribute = memberInfo.GetCustomAttribute<FastClonerIgnoreAttribute>();
         return attribute?.Ignored ?? false;
     }
     
@@ -207,7 +207,7 @@ internal static class FastClonerExprGenerator
 
             if (member is PropertyInfo piLocal)
             {
-                DeepCloneIgnoreAttribute? attribute = piLocal.GetCustomAttribute<DeepCloneIgnoreAttribute>();
+                FastClonerIgnoreAttribute? attribute = piLocal.GetCustomAttribute<FastClonerIgnoreAttribute>();
                 
                 if (attribute?.Ignored ?? false)
                 {
