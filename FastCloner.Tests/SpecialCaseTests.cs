@@ -1,4 +1,5 @@
-﻿using System.Collections.ObjectModel;
+﻿using System.Collections;
+using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
@@ -1094,6 +1095,86 @@ public class SpecialCaseTests
             Assert.That(cloned["Two"], Is.EqualTo(2), "Should preserve values");
         });
     }
+    
+    [Test]
+    public void IReadOnlySet_Clone_ShouldCreateNewInstance()
+    {
+        // Arrange
+        IReadOnlySet<string> original = new HashSet<string> { "One", "Two", "Three" }.AsReadOnly();
+
+        // Act
+        IReadOnlySet<string>? cloned = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
+            Assert.That(cloned, Is.AssignableTo<IReadOnlySet<string>>(), "Should preserve interface");
+            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
+            Assert.That(cloned.Contains("One"), Is.True, "Should contain original elements");
+            Assert.That(cloned.Contains("Two"), Is.True, "Should contain original elements");
+            Assert.That(cloned.Contains("Three"), Is.True, "Should contain original elements");
+        });
+    }
+
+    [Test]
+    public void IReadOnlySet_IsSubsetOf_ShouldWorkCorrectly()
+    {
+        // Arrange
+        IReadOnlySet<int> original = new HashSet<int> { 1, 2 }.AsReadOnly();
+        IReadOnlySet<int> superSet = new HashSet<int> { 1, 2, 3 }.AsReadOnly();
+        IReadOnlySet<int> nonSuperSet = new HashSet<int> { 1, 4 }.AsReadOnly();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(original.IsSubsetOf(superSet), Is.True, "Should be subset of superset");
+            Assert.That(original.IsSubsetOf(nonSuperSet), Is.False, "Should not be subset of non-superset");
+            Assert.That(original.IsSubsetOf(original), Is.True, "Should be subset of itself");
+        });
+    }
+
+    [Test]
+    public void IReadOnlySet_Overlaps_ShouldWorkCorrectly()
+    {
+        // Arrange
+        IReadOnlySet<char> setA = new HashSet<char> { 'a', 'b', 'c' }.AsReadOnly();
+        IReadOnlySet<char> setB = new HashSet<char> { 'b', 'c', 'd' }.AsReadOnly();
+        IReadOnlySet<char> setC = new HashSet<char> { 'x', 'y', 'z' }.AsReadOnly();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(setA.Overlaps(setB), Is.True, "Sets with common elements should overlap");
+            Assert.That(setA.Overlaps(setC), Is.False, "Sets without common elements should not overlap");
+            Assert.That(setA.Overlaps(setA), Is.True, "Set should overlap with itself");
+        });
+    }
+
+    public class ReadOnlySet<T> : IReadOnlySet<T>
+    {
+        private readonly ISet<T> _set;
+
+        public ReadOnlySet(ISet<T> set)
+        {
+            _set = set ?? throw new ArgumentNullException(nameof(set));
+        }
+
+        public int Count => _set.Count;
+        public bool Contains(T item) => _set.Contains(item);
+        public bool IsProperSubsetOf(IEnumerable<T> other) => _set.IsProperSubsetOf(other);
+        public bool IsProperSupersetOf(IEnumerable<T> other) => _set.IsProperSupersetOf(other);
+        public bool IsSubsetOf(IEnumerable<T> other) => _set.IsSubsetOf(other);
+        public bool IsSupersetOf(IEnumerable<T> other) => _set.IsSupersetOf(other);
+        public bool Overlaps(IEnumerable<T> other) => _set.Overlaps(other);
+        public bool SetEquals(IEnumerable<T> other) => _set.SetEquals(other);
+        public IEnumerator<T> GetEnumerator() => _set.GetEnumerator();
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
+    }
+
 
     [Test]
     public void ReadOnlyDictionary_WithComplexValues_Clone_ShouldDeepClone()
