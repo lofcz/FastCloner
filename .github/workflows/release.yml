@@ -36,6 +36,7 @@ jobs:
         SHOULD_RELEASE="false"
         CHANGED_PROJECTS=""
         LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        NEW_VERSION=""
         
         # Check each project for changes and update versions
         for proj in $(find . -name "*.csproj"); do
@@ -79,6 +80,7 @@ jobs:
         echo -e "$CHANGED_PROJECTS" >> $GITHUB_ENV
         echo "EOF" >> $GITHUB_ENV
         echo "SHOULD_RELEASE=$SHOULD_RELEASE" >> $GITHUB_ENV
+        echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
 
     # Generate release notes with commits and changed projects
     - name: Generate Release Notes
