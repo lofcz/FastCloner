@@ -32,13 +32,13 @@ jobs:
         node-version: '22'
         
     - name: Restore dependencies
-      run: dotnet restore
+      run: dotnet restore FastClonerCi.slnf
 
     - name: Build
-      run: dotnet build --no-restore
+      run: dotnet build FastClonerCi.slnf --no-restore
 
     - name: Test
-      run: dotnet test --no-build --verbosity normal
+      run: dotnet test FastClonerCi.slnf --no-build --verbosity normal
 
     - name: Update GitHub status check
       if: always()
