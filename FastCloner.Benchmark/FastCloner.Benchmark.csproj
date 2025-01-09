@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net8.0</TargetFramework>
+        <LangVersion>preview</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+      <PackageReference Include="BenchmarkDotNet" Version="0.14.0" />
+      <PackageReference Include="DeepCloner" Version="0.10.4" />
+      <PackageReference Include="DeepCopier" Version="1.0.4" />
+      <PackageReference Include="DeepCopy" Version="1.0.3" />
+      <PackageReference Include="DeepCopy.Expression" Version="1.4.2" />
+      <PackageReference Include="FastDeepCloner" Version="1.3.6" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\FastCloner.Contrib\FastCloner.Contrib.csproj" />
+      <ProjectReference Include="..\FastCloner\FastCloner.csproj" />
+    </ItemGroup>
+
+</Project>

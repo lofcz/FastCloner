@@ -1426,7 +1426,7 @@ public class SpecialCaseTests
         });
     }
 
-     [Test]
+    [Test]
     public void ReadOnlyDictionary_Clone_ShouldCreateNewInstance()
     {
         // Arrange

@@ -72,15 +72,16 @@ internal static class ClonerToExprGenerator
                 if (!fieldInfo.FieldType.IsValueType())
                     call = Expression.Convert(call, fieldInfo.FieldType);
 
-                // should handle specially
-                // todo: think about optimization, but it rare case
                 if (fieldInfo.IsInitOnly)
                 {
-                    // var setMethod = fieldInfo.GetType().GetMethod("SetValue", new[] { typeof(object), typeof(object) });
-                    // expressionList.Add(Expression.Call(Expression.Constant(fieldInfo), setMethod, toLocal, call));
-                    MethodInfo setMethod = typeof(FastClonerExprGenerator).GetPrivateStaticMethod(nameof(FastClonerExprGenerator.ForceSetField))!;
-                    expressionList.Add(Expression.Call(setMethod, Expression.Constant(fieldInfo),
-                                                       Expression.Convert(toLocal, typeof(object)), Expression.Convert(call, typeof(object))));
+                    ConstantExpression setter = Expression.Constant(FieldAccessorGenerator.GetFieldSetter(fieldInfo));
+                    expressionList.Add(
+                        Expression.Invoke(
+                            setter,
+                            Expression.Convert(toLocal, typeof(object)),
+                            Expression.Convert(call, typeof(object))
+                        )
+                    );
                 }
                 else
                 {

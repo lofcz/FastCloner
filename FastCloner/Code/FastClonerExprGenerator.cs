@@ -26,27 +26,9 @@ internal static class FastClonerExprGenerator
         return attribute?.Ignored ?? false;
     }
     
-    // today, I found that it is not required to do such complex things. Just SetValue is enough
-    // is it new runtime changes, or I made incorrect assumptions earlier
-    // slow, but hardcore method to set readonly field
     internal static void ForceSetField(FieldInfo field, object obj, object value)
     {
-        FieldInfo? fieldInfo = field.GetType().GetPrivateField("m_fieldAttributes");
-
-        // TODO: think about it
-        // nothing to do :( we should a throw an exception, but it is no good for user
-        if (fieldInfo == null) return;
-
-        object? ov = fieldInfo.GetValue(field);
-        if (ov is not FieldAttributes fieldAttributes) return;
-
-        // protect from parallel execution, when first thread set field readonly back, and second set it to write value
-        lock (fieldInfo)
-        {
-            fieldInfo.SetValue(field, fieldAttributes & ~FieldAttributes.InitOnly);
-            field.SetValue(obj, value);
-            fieldInfo.SetValue(field, fieldAttributes | FieldAttributes.InitOnly);
-        }
+        field.SetValue(obj, value);
     }
 
     internal readonly record struct ExpressionPosition(int Depth, int Index)

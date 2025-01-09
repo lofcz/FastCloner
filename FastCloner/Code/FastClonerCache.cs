@@ -9,7 +9,9 @@ internal static class FastClonerCache
     private static readonly ClrCache<object> deepClassToCache = new ClrCache<object>();
     private static readonly ClrCache<object> shallowClassToCache = new ClrCache<object>();
     private static readonly ConcurrentLazyCache<object> typeConvertCache = new ConcurrentLazyCache<object>();
+    private static readonly ClrCache<object?> fieldCache = new ClrCache<object?>();
 
+    public static object? GetOrAddField(Type type, Func<Type, object?> valueFactory) => fieldCache.GetOrAdd(type, valueFactory);
     public static object? GetOrAddClass(Type type, Func<Type, object?> valueFactory) => classCache.GetOrAdd(type, valueFactory);
     public static object GetOrAddStructAsObject(Type type, Func<Type, object> valueFactory) => structCache.GetOrAdd(type, valueFactory);
     public static object GetOrAddDeepClassTo(Type type, Func<Type, object> valueFactory) => deepClassToCache.GetOrAdd(type, valueFactory);
