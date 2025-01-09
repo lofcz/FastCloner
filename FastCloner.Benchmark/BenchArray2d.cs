@@ -9,7 +9,7 @@ namespace FastCloner.Benchmark;
 public class Bench2DArray
 {
     private int[,] testData;
-    private const int SIZE = 1000;
+    private const int SIZE = 100;
     
     [GlobalSetup]
     public void Setup()
