@@ -12,6 +12,10 @@ namespace FastCloner.SourceGenerator
     {
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
+            #if !ENABLE_SOURCEGEN
+            return;
+            #endif
+            
             IncrementalValuesProvider<(TypeDeclarationSyntax Syntax, SemanticModel SemanticModel)> typesToProcess = 
                 context.SyntaxProvider
                     .CreateSyntaxProvider(

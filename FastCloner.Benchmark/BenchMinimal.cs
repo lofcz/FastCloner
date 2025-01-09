@@ -6,20 +6,23 @@ namespace FastCloner.Benchmark;
 [RankColumn]
 [Orderer(BenchmarkDotNet.Order.SummaryOrderPolicy.FastestToSlowest)]
 [MemoryDiagnoser]
-public class DictionaryBenchmark
+public class BenchMinimal
 {
-    private Dictionary<ComplexKey, string> testData;
+    private TestObject testData;
     
     [GlobalSetup]
     public void Setup()
     {
-        testData = new Dictionary<ComplexKey, string>();
-        
-        for (int i = 0; i < 1000; i++)
+        testData = new TestObject
         {
-            ComplexKey key = new ComplexKey { Id = i, Name = $"Key{i}" };
-            testData.Add(key, $"Value{i}");
-        }
+            Id = 1,
+            Name = "Test",
+            NestedObject = new NestedObject
+            {
+                Value = 42,
+                Description = "Nested test"
+            }
+        };
     }
     
     [Benchmark(Baseline = true)]
@@ -57,21 +60,17 @@ public class DictionaryBenchmark
     {
         return testData.DeepClone();
     }
-}
-
-public class ComplexKey
-{
-    public int Id { get; set; }
-    public string Name { get; set; }
-
-    public override bool Equals(object obj)
+    
+    public class TestObject
     {
-        if (obj is not ComplexKey other) return false;
-        return Id == other.Id && Name == other.Name;
+        public int Id { get; set; }
+        public string Name { get; set; }
+        public NestedObject NestedObject { get; set; }
     }
 
-    public override int GetHashCode()
+    public class NestedObject
     {
-        return HashCode.Combine(Id, Name);
+        public int Value { get; set; }
+        public string Description { get; set; }
     }
 }

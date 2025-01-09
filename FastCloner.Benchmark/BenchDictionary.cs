@@ -6,23 +6,20 @@ namespace FastCloner.Benchmark;
 [RankColumn]
 [Orderer(BenchmarkDotNet.Order.SummaryOrderPolicy.FastestToSlowest)]
 [MemoryDiagnoser]
-public class Minimal
+public class BenchDictionary
 {
-    private TestObject testData;
+    private Dictionary<SimpleKey, string> testData;
     
     [GlobalSetup]
     public void Setup()
     {
-        testData = new TestObject
+        testData = new Dictionary<SimpleKey, string>();
+        
+        for (int i = 0; i < 1000; i++)
         {
-            Id = 1,
-            Name = "Test",
-            NestedObject = new NestedObject
-            {
-                Value = 42,
-                Description = "Nested test"
-            }
-        };
+            SimpleKey key = new SimpleKey { Id = i, Name = $"Key{i}" };
+            testData.Add(key, $"Value{i}");
+        }
     }
     
     [Benchmark(Baseline = true)]
@@ -60,17 +57,10 @@ public class Minimal
     {
         return testData.DeepClone();
     }
-    
-    public class TestObject
-    {
-        public int Id { get; set; }
-        public string Name { get; set; }
-        public NestedObject NestedObject { get; set; }
-    }
+}
 
-    public class NestedObject
-    {
-        public int Value { get; set; }
-        public string Description { get; set; }
-    }
+public class SimpleKey
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
 }
