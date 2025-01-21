@@ -11,6 +11,8 @@ using System.Dynamic;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Numerics;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using FastCloner.Code;
@@ -231,6 +233,310 @@ public class SpecialCaseTests
     public class C1 : CBase<int>
     {
         public C2 C2 { get; set; } = new C2();
+    }
+    
+    [Test]
+    public void Uri_DeepClone_Test()
+    {
+        // Arrange
+        Uri original = new Uri("https://example.com/path?query=value#fragment");
+
+        // Act
+        Uri clone = original.DeepClone();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone.AbsoluteUri, Is.EqualTo(original.AbsoluteUri));
+            Assert.That(clone.Host, Is.EqualTo(original.Host));
+            Assert.That(clone.PathAndQuery, Is.EqualTo(original.PathAndQuery));
+            Assert.That(clone.Fragment, Is.EqualTo(original.Fragment));
+            Assert.That(clone, Is.Not.SameAs(original));
+        });
+    }
+    
+    [Test]
+    public void Complex_DeepClone_Test()
+    {
+        // Arrange
+        Complex original = new Complex(3.14, 2.718);
+
+        // Act
+        Complex clone = original.DeepClone();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone.Real, Is.EqualTo(original.Real));
+            Assert.That(clone.Imaginary, Is.EqualTo(original.Imaginary));
+            Assert.That(clone.Magnitude, Is.EqualTo(original.Magnitude));
+            Assert.That(clone.Phase, Is.EqualTo(original.Phase));
+        });
+    }
+    
+    [Test]
+    public void BigInteger_DeepClone_Test()
+    {
+        // Arrange
+        BigInteger? original = BigInteger.Parse("123456789012345678901234567890");
+
+        // Act
+        BigInteger? clone = original.DeepClone();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone, Is.EqualTo(original));
+            Assert.That(clone.ToString(), Is.EqualTo("123456789012345678901234567890"));
+            Assert.That((-clone).ToString(), Is.EqualTo("-123456789012345678901234567890"));
+        });
+    }
+
+    [Test]
+    public void BigInteger_DeepClone_EdgeCases_Test()
+    {
+        // Arrange
+        BigInteger[] originals = 
+        {
+            BigInteger.Zero,
+            BigInteger.One,
+            BigInteger.MinusOne,
+            BigInteger.Parse("-340282366920938463463374607431768211456"),
+            BigInteger.Parse("340282366920938463463374607431768211455")
+        };
+
+        // Act & Assert
+        foreach (var original in originals)
+        {
+            var clone = original.DeepClone();
+            Assert.That(clone, Is.EqualTo(original), $"Failed for value: {original}");
+        }
+    }
+
+    [Test]
+    public void Version_DeepClone_Test()
+    {
+        // Arrange
+        Version original = new Version(1, 2, 3, 4);
+
+        // Act
+        Version clone = original.DeepClone();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone.Major, Is.EqualTo(original.Major));
+            Assert.That(clone.Minor, Is.EqualTo(original.Minor));
+            Assert.That(clone.Build, Is.EqualTo(original.Build));
+            Assert.That(clone.Revision, Is.EqualTo(original.Revision));
+            Assert.That(clone, Is.Not.SameAs(original));
+        });
+    }
+
+    class ValTupleTest
+    {
+        public int Val { get; set; }
+    }
+    
+    [Test]
+    public void ValueTuple_Simple_DeepClone_Test()
+    {
+        // Arrange
+        (int X, string Y) original = (X: 42, Y: "test");
+
+        // Act
+        (int X, string Y) clone = original.DeepClone();
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone.X, Is.EqualTo(original.X));
+            Assert.That(clone.Y, Is.EqualTo(original.Y));
+        });
+    }
+    
+    [Test]
+    public void ValueTuple_Simple_DeepClone_Test2()
+    {
+        ValTupleTest valX = new ValTupleTest { Val = 42 };
+        
+        // Arrange
+        (ValTupleTest X, ValTupleTest Y) original = (X: valX, Y: new ValTupleTest { Val = 43 });
+
+        // Act
+        (ValTupleTest X, ValTupleTest Y) clone = original.DeepClone();
+        (ValTupleTest X, ValTupleTest Y) shallow = original.ShallowClone();
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone.X.Val, Is.EqualTo(original.X.Val));
+            Assert.That(clone.Y.Val, Is.EqualTo(original.Y.Val));
+        });
+
+        valX.Val = 80;
+        
+        Assert.Multiple(() =>
+        {
+            Assert.That(ReferenceEquals(original.X, clone.X), Is.False);
+            Assert.That(original.X.Val, Is.EqualTo(80));
+            Assert.That(clone.X.Val, Is.EqualTo(42));
+            Assert.That(shallow.X.Val, Is.EqualTo(80));
+        });
+    }
+
+    [Test]
+    public void ValueTuple_WithReferenceType_DeepClone_Test()
+    {
+        // Arrange
+        List<int> list = new List<int> { 1, 2, 3 };
+        (int X, List<int> List) original = (X: 42, List: list);
+
+        // Act
+        (int X, List<int> List) clone = original.DeepClone();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone.X, Is.EqualTo(original.X));
+            Assert.That(clone.List, Is.EqualTo(original.List));
+            Assert.That(clone.List, Is.Not.SameAs(original.List));
+        });
+    }
+    
+    [Test]
+    public void ValueTuple_Nested_DeepClone_Test()
+    {
+        // Arrange
+        (int A, string B) nested = (A: 1, B: "inner");
+        ((int A, string B) X, string Y) original = (X: nested, Y: "outer");
+
+        // Act
+        ((int A, string B) X, string Y) clone = original.DeepClone();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone.X.A, Is.EqualTo(original.X.A));
+            Assert.That(clone.X.B, Is.EqualTo(original.X.B));
+            Assert.That(clone.Y, Is.EqualTo(original.Y));
+        });
+    }
+
+    [Test]
+    public void ValueTuple_WithComplexType_DeepClone_Test()
+    {
+        // Arrange
+        Uri uri = new Uri("https://example.com");
+        (int Id, Uri Uri) original = (Id: 1, Uri: uri);
+
+        // Act
+        (int Id, Uri Uri) clone = original.DeepClone();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone.Id, Is.EqualTo(original.Id));
+            Assert.That(clone.Uri.AbsoluteUri, Is.EqualTo(original.Uri.AbsoluteUri));
+            Assert.That(clone.Uri, Is.Not.SameAs(original.Uri));
+        });
+    }
+
+    [Test]
+    public void ValueTuple_Mutability_Test()
+    {
+        // Arrange
+        List<int> list = [1, 2, 3];
+        (int X, List<int> List) original = (X: 42, List: list);
+        (int X, List<int> List) clone = original.DeepClone();
+
+        // Act
+        clone.X = 100;
+        clone.List.Add(4);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(original.X, Is.EqualTo(42));
+            Assert.That(original.List, Has.Count.EqualTo(3));
+            
+            Assert.That(clone.X, Is.EqualTo(100));
+            Assert.That(clone.List, Has.Count.EqualTo(4));
+        });
+    }
+
+    [Test]
+    public void Range_DeepClone_Test()
+    {
+        // Arrange
+        Range original = new Range(Index.FromStart(1), Index.FromEnd(5));
+        
+        // Act
+        Range clone = original.DeepClone();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone.Start.Value, Is.EqualTo(original.Start.Value));
+            Assert.That(clone.Start.IsFromEnd, Is.EqualTo(original.Start.IsFromEnd));
+            Assert.That(clone.End.Value, Is.EqualTo(original.End.Value));
+            Assert.That(clone.End.IsFromEnd, Is.EqualTo(original.End.IsFromEnd));
+            Assert.That(clone, Is.EqualTo(original));
+        });
+    }
+    
+    [Test]
+    public void Index_DeepClone_Test()
+    {
+        // Arrange
+        Index original = new Index(42, fromEnd: true);
+
+        // Act
+        Index clone = original.DeepClone();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone.Value, Is.EqualTo(original.Value));
+            Assert.That(clone.IsFromEnd, Is.EqualTo(original.IsFromEnd));
+            Assert.That(clone, Is.EqualTo(original));
+        });
+    }
+
+    [Test]
+    public void Index_DeepClone_FromStart_Test()
+    {
+        // Arrange
+        Index original = Index.FromStart(10);
+
+        // Act
+        Index clone = original.DeepClone();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone.Value, Is.EqualTo(original.Value));
+            Assert.That(clone.IsFromEnd, Is.False);
+            Assert.That(clone, Is.EqualTo(original));
+        });
+    }
+
+    [Test]
+    public void Index_DeepClone_FromEnd_Test()
+    {
+        // Arrange
+        Index original = Index.FromEnd(10);
+
+        // Act
+        Index clone = original.DeepClone();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone.Value, Is.EqualTo(original.Value));
+            Assert.That(clone.IsFromEnd, Is.True);
+            Assert.That(clone, Is.EqualTo(original));
+        });
     }
     
     [Test]

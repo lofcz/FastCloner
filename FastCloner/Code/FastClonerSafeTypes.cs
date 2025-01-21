@@ -1,4 +1,6 @@
 ﻿using System.Collections.Concurrent;
+using System.Globalization;
+using System.Numerics;
 using System.Reflection;
 using System.Text;
 
@@ -43,13 +45,16 @@ internal static class FastClonerSafeTypes
         [typeof(Half)] = true,
         [typeof(Int128)] = true,
         [typeof(UInt128)] = true,
+        [typeof(Complex)] = true,
         
         // Others
         [typeof(DBNull)] = true,
         [StringComparer.Ordinal.GetType()] = true,
         [StringComparer.OrdinalIgnoreCase.GetType()] = true,
         [StringComparer.InvariantCulture.GetType()] = true,
-        [StringComparer.InvariantCultureIgnoreCase.GetType()] = true
+        [StringComparer.InvariantCultureIgnoreCase.GetType()] = true,
+        [typeof(Range)] = true,
+        [typeof(Index)] = true
     };
 
     static FastClonerSafeTypes()
@@ -65,8 +70,72 @@ internal static class FastClonerSafeTypes
             knownTypes.TryAdd(x, true);
         }
     }
+    
+    private static bool IsSpecialEqualityComparer(string fullName) => fullName switch
+    {
+        _ when fullName.StartsWith("System.Collections.Generic.GenericEqualityComparer`") => true,
+        _ when fullName.StartsWith("System.Collections.Generic.ObjectEqualityComparer`") => true,
+        _ when fullName.StartsWith("System.Collections.Generic.EnumEqualityComparer`") => true,
+        _ when fullName.StartsWith("System.Collections.Generic.NullableEqualityComparer`") => true,
+        "System.Collections.Generic.ByteEqualityComparer" => true,
+        _ => false
+    };
+    
+    private static class TypePrefixes
+    {
+        public const string SystemReflection = "System.Reflection.";
+        public const string SystemRuntimeType = "System.RuntimeType";
+        public const string MicrosoftExtensions = "Microsoft.Extensions.DependencyInjection.";
+    }
 
-    private static bool CanReturnSameType(Type type, HashSet<Type>? processingTypes)
+    private static readonly Assembly propertyInfoAssembly = typeof(PropertyInfo).Assembly;
+    private static bool IsReflectionType(Type type) => type.FullName?.StartsWith(TypePrefixes.SystemReflection) is true && Equals(type.GetTypeInfo().Assembly, typeof(PropertyInfo).GetTypeInfo().Assembly);
+
+    private static IEnumerable<FieldInfo> GetAllTypeFields(Type type)
+    {
+        Type? currentType = type;
+    
+        while (currentType is not null)
+        {
+            foreach (FieldInfo field in currentType.GetAllFields())
+            {
+                yield return field;
+            }
+            
+            currentType = currentType.BaseType();
+        }
+    }
+    
+    private static bool IsSafeSystemType(Type type)
+    {
+        if (type.IsEnum() || type.IsPointer)
+            return true;
+
+        if (type.IsCOMObject)
+            return true;
+
+        if (type.FullName is null)
+            return true;
+
+        if (IsReflectionType(type))
+            return true;
+
+        if (type.IsSubclassOf(typeof(System.Runtime.ConstrainedExecution.CriticalFinalizerObject)))
+            return true;
+
+        if (type.FullName.StartsWith(TypePrefixes.SystemRuntimeType))
+            return true;
+
+        if (type.FullName.StartsWith(TypePrefixes.MicrosoftExtensions))
+            return true;
+
+        if (type.FullName is "Microsoft.EntityFrameworkCore.Internal.ConcurrencyDetector")
+            return true;
+
+        return false;
+    }
+    
+    private static bool CanReturnSameType(Type type, HashSet<Type>? processingTypes = null)
     {
         if (knownTypes.TryGetValue(type, out bool isSafe))
         {
@@ -78,87 +147,19 @@ internal static class FastClonerSafeTypes
             knownTypes.TryAdd(type, false);
             return false;
         }
-        
-        // enums are safe
-        // pointers (e.g. int*) are unsafe, but we cannot do anything with it except blind copy
-        if (type.IsEnum() || type.IsPointer)
-        {
-            knownTypes.TryAdd(type, true);
-            return true;
-        }
-        
-        if (type.FullName is null)
+
+        if (IsSafeSystemType(type))
         {
             knownTypes.TryAdd(type, true);
             return true;
         }
 
-        if (type.FullName.StartsWith("System.Reflection.") && type.Assembly == typeof(PropertyInfo).Assembly)
+        if (type.FullName?.Contains("EqualityComparer") == true && IsSpecialEqualityComparer(type.FullName))
         {
             knownTypes.TryAdd(type, true);
             return true;
         }
 
-        // these types are serious native resources, it is better not to clone it
-        if (type.IsSubclassOf(typeof(System.Runtime.ConstrainedExecution.CriticalFinalizerObject)))
-        {
-            knownTypes.TryAdd(type, true);
-            return true;
-        }
-
-        // Better not to do anything with COM
-        if (type.IsCOMObject)
-        {
-            knownTypes.TryAdd(type, true);
-            return true;
-        }
-
-        if (type.FullName.StartsWith("System.RuntimeType"))
-        {
-            knownTypes.TryAdd(type, true);
-            return true;
-        }
-
-        if (type.FullName.StartsWith("System.Reflection.") && Equals(type.GetTypeInfo().Assembly, typeof(PropertyInfo).GetTypeInfo().Assembly))
-        {
-            knownTypes.TryAdd(type, true);
-            return true;
-        }
-
-        if (type.IsSubclassOfTypeByName("CriticalFinalizerObject"))
-        {
-            knownTypes.TryAdd(type, true);
-            return true;
-        }
-
-        // better not to touch ms dependency injection
-        if (type.FullName.StartsWith("Microsoft.Extensions.DependencyInjection."))
-        {
-            knownTypes.TryAdd(type, true);
-            return true;
-        }
-
-        if (type.FullName == "Microsoft.EntityFrameworkCore.Internal.ConcurrencyDetector")
-        {
-            knownTypes.TryAdd(type, true);
-            return true;
-        }
-
-        // default comparers should not be cloned due possible comparison EqualityComparer<T>.Default == comparer
-        if (type.FullName.Contains("EqualityComparer"))
-        {
-            if (type.FullName.StartsWith("System.Collections.Generic.GenericEqualityComparer`")
-                || type.FullName.StartsWith("System.Collections.Generic.ObjectEqualityComparer`")
-                || type.FullName.StartsWith("System.Collections.Generic.EnumEqualityComparer`")
-                || type.FullName.StartsWith("System.Collections.Generic.NullableEqualityComparer`")
-                || type.FullName == "System.Collections.Generic.ByteEqualityComparer")
-            {
-                knownTypes.TryAdd(type, true);
-                return true;
-            }
-        }
-
-        // classes are always unsafe (we should copy it fully to count references)
         if (!type.IsValueType())
         {
             knownTypes.TryAdd(type, false);
@@ -167,36 +168,32 @@ internal static class FastClonerSafeTypes
 
         processingTypes ??= [];
 
-        // structs cannot have a loops, but check it anyway
-        processingTypes.Add(type);
-
-        List<FieldInfo> fi = [];
-        Type? tp = type;
-        do
+        if (!processingTypes.Add(type))
         {
-            fi.AddRange(tp.GetAllFields());
-            tp = tp.BaseType();
+            return true;
         }
-        while (tp != null);
 
-        foreach (FieldInfo fieldInfo in fi)
+        foreach (FieldInfo fieldInfo in GetAllTypeFields(type))
         {
-            // type loop
             Type fieldType = fieldInfo.FieldType;
+            
             if (processingTypes.Contains(fieldType))
-                continue;
-
-            // not safe and not not safe. we need to go deeper
-            if (!CanReturnSameType(fieldType, processingTypes))
             {
-                knownTypes.TryAdd(type, false);
-                return false;
+                continue;
             }
+
+            if (CanReturnSameType(fieldType, processingTypes))
+            {
+                continue;
+            }
+            
+            knownTypes.TryAdd(type, false);
+            return false;
         }
 
         knownTypes.TryAdd(type, true);
         return true;
     }
 
-    public static bool CanReturnSameObject(Type type) => CanReturnSameType(type, null);
+    public static bool CanReturnSameObject(Type type) => CanReturnSameType(type);
 }

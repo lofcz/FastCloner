@@ -118,7 +118,7 @@ internal static class FastClonerExprGenerator
             return GenerateProcessArrayMethod(type);
         }
 
-        if (type.FullName != null && type.FullName.StartsWith("System.Tuple`"))
+        if (type.FullName is not null && type.FullName.StartsWith("System.Tuple`"))
         {
             // if not safe type it is no guarantee that some type will contain reference to
             // this tuple. In usual way, we're creating new object, setting reference for it
