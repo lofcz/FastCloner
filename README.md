@@ -25,7 +25,15 @@ using FastCloner.Code;
 var clone = FastCloner.DeepClone(new { Hello = "world", MyList = new List<int> { 1 } });
 ```
 
-⭐ **That's it!** _Feel free to map this method to your extension so if you need to migrate in the future it's a matter of just switching that method. We intentionally don't ship our own `.DeepClone()` extension method._
+⭐ **That's it!** _Feel free to map this method to your extension so if you need to migrate in the future it's a matter of just switching that method. We intentionally don't ship our own `.DeepClone()` extension method. If you don't have one yet, just copy this into your project:_
+
+```cs
+[return: NotNullIfNotNull(nameof(obj))]
+public static T? DeepClone<T>(this T? obj)
+{
+    return FastCloner.FastCloner.DeepClone(obj);
+}
+```
 
 ## Advanced usage
 
