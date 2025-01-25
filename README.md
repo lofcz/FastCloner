@@ -22,7 +22,7 @@ Clone your objects:
 
 ```csharp
 using FastCloner.Code;
-var clone = FastCloner.DeepClone(new { Hello = "world", MyList = new List<int> { 1 } });
+var clone = FastCloner.FastCloner.DeepClone(new { Hello = "world", MyList = new List<int> { 1 } });
 ```
 
 ⭐ **That's it!** _Feel free to map this method to your extension so if you need to migrate in the future it's a matter of just switching that method. We intentionally don't ship our own `.DeepClone()` extension method. If you don't have one yet, just copy this into your project:_
@@ -55,7 +55,7 @@ Apart from deep cloning, FastCloner supports shallow cloning and deep cloning _t
 
 ```csharp
 // the list is shared between the two instances
-var clone = FastCloner.ShallowClone(new { Hello = "world", MyList = new List<int> { 1 } });
+var clone = FastCloner.FastCloner.ShallowClone(new { Hello = "world", MyList = new List<int> { 1 } });
 ```
 
 ## Limitations
