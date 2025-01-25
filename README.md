@@ -37,6 +37,8 @@ public static T? DeepClone<T>(this T? obj)
 
 ## Advanced usage
 
+_The following examples assume you've copied the extension method above._
+
 Sometimes you might want to exclude certain fields & properties from cloning:
 ```csharp
 private class TestPropsWithIgnored
