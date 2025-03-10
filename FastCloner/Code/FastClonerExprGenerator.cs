@@ -516,7 +516,7 @@ internal static class FastClonerExprGenerator
 
     private static BlockExpression GenerateGenericDictionaryIteration(ParameterExpression enumerator, Type keyType, Type valueType, MethodInfo keyCloneMethod, MethodInfo valueCloneMethod, ParameterExpression local, MethodInfo addMethod, ParameterExpression state, ExpressionPosition position)
     {
-        PropertyInfo current = enumerator.Type.GetProperty(nameof(IEnumerator<>.Current))!;
+        PropertyInfo current = enumerator.Type.GetProperty(nameof(IEnumerator<object>.Current))!;
         LabelTarget breakLabel = CreateLoopLabel(position);
         Type dictionaryType = local.Type;
         bool isSingleGenericParameter = dictionaryType.GetGenericArguments().Length is 1;
