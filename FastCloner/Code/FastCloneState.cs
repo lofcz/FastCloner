@@ -39,10 +39,10 @@ internal sealed class FastCloneState
 
     private sealed class MiniDictionary
     {
-        private readonly struct Entry(int hashCode, int next, object key, object value)
+        private struct Entry(int hashCode, int next, object key, object value)
         {
             public readonly int HashCode = hashCode;
-            public readonly int Next = next;
+            public int Next = next;
             public readonly object Key = key;
             public readonly object Value = value;
         }
@@ -159,25 +159,24 @@ internal sealed class FastCloneState
         public void Insert(object key, object value)
         {
             if (buckets is null)
-                Initialize(DefaultCapacity);
-            
-            int hashCode = RuntimeHelpers.GetHashCode(key) & 0x7FFFFFFF;
-            int targetBucket = hashCode % buckets!.Length;
+                Initialize(GetPrime(DefaultCapacity));
 
-            if (count == entries.Length)
+            int hashCode = RuntimeHelpers.GetHashCode(key) & 0x7FFFFFFF;
+            int[] localBuckets = buckets!;
+            int targetBucket = hashCode % localBuckets.Length;
+            Entry[] localEntries = entries;
+
+            if (count == localEntries.Length)
             {
                 Resize();
-                targetBucket = hashCode % buckets.Length;
+                localBuckets = buckets!;
+                localEntries = entries;
+                targetBucket = hashCode % localBuckets.Length;
             }
 
             int index = count++;
-            entries[index] = new Entry(
-                hashCode,
-                buckets[targetBucket],
-                key,
-                value
-            );
-            buckets[targetBucket] = index;
+            localEntries[index] = new Entry(hashCode, localBuckets[targetBucket], key, value);
+            localBuckets[targetBucket] = index;
         }
 
         private void Resize() => Resize(ExpandPrime(count));
@@ -188,22 +187,16 @@ internal sealed class FastCloneState
             Array.Fill(newBuckets, -1);
             
             Entry[] newEntries = new Entry[newSize];
-            Array.Copy(entries, 0, newEntries, 0, count);
+            Array.Copy(entries, newEntries, count);
 
             for (int i = 0; i < count; i++)
             {
-                if (newEntries[i].HashCode < 0)
-                {
+                ref Entry entry = ref newEntries[i];
+                if (entry.HashCode < 0)
                     continue;
-                }
-                
-                int bucket = newEntries[i].HashCode % newSize;
-                newEntries[i] = new Entry(
-                    newEntries[i].HashCode,
-                    newBuckets[bucket],
-                    newEntries[i].Key,
-                    newEntries[i].Value
-                );
+
+                int bucket = entry.HashCode % newSize;
+                entry.Next = newBuckets[bucket];
                 newBuckets[bucket] = i;
             }
 
