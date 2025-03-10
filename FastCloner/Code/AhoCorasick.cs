@@ -50,10 +50,8 @@ public class AhoCorasick
         while (queue.Count > 0)
         {
             Node current = queue.Dequeue();
-            foreach (KeyValuePair<char, Node> kvp in current.Children)
+            foreach ((char character, Node child) in current.Children)
             {
-                Node child = kvp.Value;
-                char character = kvp.Key;
                 queue.Enqueue(child);
 
                 Node? failure = current.Failure;

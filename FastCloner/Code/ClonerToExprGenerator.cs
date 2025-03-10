@@ -50,14 +50,17 @@ internal static class ClonerToExprGenerator
         Type? tp = type;
         do
         {
-            if (tp == typeof(ContextBoundObject)) break;
+            if (tp == typeof(ContextBoundObject))
+            {
+                break;
+            }
 
             fi.AddRange(tp.GetDeclaredFields());
             tp = tp.BaseType();
         }
         while (tp != null);
 
-        foreach (FieldInfo? fieldInfo in fi)
+        foreach (FieldInfo fieldInfo in fi)
         {
             if (isDeepClone && !FastClonerSafeTypes.CanReturnSameObject(fieldInfo.FieldType))
             {
@@ -172,9 +175,15 @@ internal static class ClonerToExprGenerator
         if (objFrom == null || objTo == null) return null;
         int l = Math.Min(objFrom.Length, objTo.Length);
         state.AddKnownRef(objFrom, objTo);
-        Func<T, FastCloneState, T> cloner = FastClonerGenerator.GetClonerForValueType<T>();
-        for (int i = 0; i < l; i++)
-            objTo[i] = cloner(objTo[i], state);
+        Func<T, FastCloneState, T>? cloner = FastClonerGenerator.GetClonerForValueType<T>();
+
+        if (cloner is not null)
+        {
+            for (int i = 0; i < l; i++)
+            {
+                objTo[i] = cloner(objTo[i], state);
+            }   
+        }
 
         return objTo;
     }
@@ -197,7 +206,7 @@ internal static class ClonerToExprGenerator
         if (objFrom == null || objTo == null) return null;
         if (objFrom.GetLowerBound(0) != 0 || objFrom.GetLowerBound(1) != 0
                                           || objTo.GetLowerBound(0) != 0 || objTo.GetLowerBound(1) != 0)
-            return (T[,]) CloneAbstractArrayInternal(objFrom, objTo, state, isDeep);
+            return (T[,]?) CloneAbstractArrayInternal(objFrom, objTo, state, isDeep);
 
         int l1 = Math.Min(objFrom.GetLength(0), objTo.GetLength(0));
         int l2 = Math.Min(objFrom.GetLength(1), objTo.GetLength(1));
@@ -220,10 +229,14 @@ internal static class ClonerToExprGenerator
 
         if (typeof(T).IsValueType())
         {
-            Func<T, FastCloneState, T> cloner = FastClonerGenerator.GetClonerForValueType<T>();
-            for (int i = 0; i < l1; i++)
+            Func<T, FastCloneState, T>? cloner = FastClonerGenerator.GetClonerForValueType<T>();
+
+            if (cloner is not null)
+            {
+                for (int i = 0; i < l1; i++)
                 for (int k = 0; k < l2; k++)
                     objTo[i, k] = cloner(objFrom[i, k], state);
+            }
         }
         else
         {

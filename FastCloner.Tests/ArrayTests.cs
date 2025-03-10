@@ -6,6 +6,32 @@ namespace FastCloner.Tests;
 [TestFixture]
 public class ArrayTests
 {
+    struct MyIntStruct
+    {
+        public int val;
+    }
+    
+    [Test]
+    public void Array2dPerf()
+    {
+        const int SIZE = 100;
+        
+        MyIntStruct[,] testData = new MyIntStruct[SIZE, SIZE];
+        
+        for (int i = 0; i < SIZE; i++)
+        {
+            for (int j = 0; j < SIZE; j++)
+            {
+                testData[i, j] = new MyIntStruct
+                {
+                    val = i * j
+                };
+            }
+        }
+
+        testData.DeepClone();
+    }
+    
     [Test]
     public void IntArray_Should_Be_Cloned()
     {

@@ -1,5 +1,6 @@
 ﻿using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace FastCloner.Code;
 
@@ -41,13 +42,10 @@ internal static class FastClonerGenerator
         if (obj == null)
             return null;
 
-        Func<object, FastCloneState, object>? cloner = (Func<object, FastCloneState, object>)FastClonerCache.GetOrAddClass(obj.GetType(), t => GenerateCloner(t, true));
+        Func<object, FastCloneState, object>? cloner = (Func<object, FastCloneState, object>?)FastClonerCache.GetOrAddClass(obj.GetType(), t => GenerateCloner(t, true));
 
         // null -> should return same type
-        if (cloner == null)
-            return obj;
-
-        return cloner(obj, new FastCloneState());
+        return cloner is null ? obj : cloner(obj, new FastCloneState());
     }
 
     internal static object? CloneClassInternal(object? obj, FastCloneState state)
@@ -57,7 +55,7 @@ internal static class FastClonerGenerator
             return null;
         }
 
-        Func<object, FastCloneState, object>? cloner = (Func<object, FastCloneState, object>)FastClonerCache.GetOrAddClass(obj.GetType(), t => GenerateCloner(t, true));
+        Func<object, FastCloneState, object>? cloner = (Func<object, FastCloneState, object>?)FastClonerCache.GetOrAddClass(obj.GetType(), t => GenerateCloner(t, true));
 
         // safe object
         if (cloner is null)
@@ -75,8 +73,8 @@ internal static class FastClonerGenerator
         // no loops, no nulls, no inheritance
         Func<T, FastCloneState, T>? cloner = GetClonerForValueType<T>();
 
-        // safe ojbect
-        if (cloner == null)
+        // safe object
+        if (cloner is null)
             return obj;
 
         return cloner(obj, state);
@@ -123,7 +121,10 @@ internal static class FastClonerGenerator
     internal static T[,]? Clone2DimArrayInternal<T>(T[,]? obj, FastCloneState state)
     {
         // not null from called method, but will check it anyway
-        if (obj == null) return null;
+        if (obj is null)
+        {
+            return null;
+        }
 
         // we cannot determine by type multidim arrays (one dimension is possible)
         // so, will check for index here
@@ -207,11 +208,11 @@ internal static class FastClonerGenerator
         }
     }
 
-    internal static Func<T, FastCloneState, T> GetClonerForValueType<T>() => (Func<T, FastCloneState, T>)FastClonerCache.GetOrAddStructAsObject(typeof(T), t => GenerateCloner(t, false));
+    internal static Func<T, FastCloneState, T>? GetClonerForValueType<T>() => (Func<T, FastCloneState, T>?)FastClonerCache.GetOrAddStructAsObject(typeof(T), t => GenerateCloner(t, false));
 
     private static object? GenerateCloner(Type t, bool asObject)
     {
-        if (FastClonerSafeTypes.CanReturnSameObject(t) && (asObject && !t.IsValueType()))
+        if (FastClonerSafeTypes.CanReturnSameObject(t) && asObject && !t.IsValueType())
             return null;
 
         return FastClonerExprGenerator.GenerateClonerInternal(t, asObject);

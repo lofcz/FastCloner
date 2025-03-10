@@ -5,7 +5,6 @@ using System.Collections.ObjectModel;
 using System.Dynamic;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 
 namespace FastCloner.Code;
 
@@ -18,7 +17,7 @@ internal static class FastClonerExprGenerator
     private static readonly MethodInfo fieldSetMethod;
     static FastClonerExprGenerator() => fieldSetMethod = typeof(FieldInfo).GetMethod(nameof(FieldInfo.SetValue), [typeof(object), typeof(object)])!;
 
-    internal static object GenerateClonerInternal(Type realType, bool asObject) => GenerateProcessMethod(realType, asObject && realType.IsValueType());
+    internal static object? GenerateClonerInternal(Type realType, bool asObject) => GenerateProcessMethod(realType, asObject && realType.IsValueType());
 
     private static bool MemberIsIgnored(MemberInfo memberInfo)
     {
@@ -43,7 +42,7 @@ internal static class FastClonerExprGenerator
         return Expression.Label(str);
     }
 
-    internal static object GenerateProcessMethod(Type realType, bool asObject) => GenerateProcessMethod(realType, asObject && realType.IsValueType(), new ExpressionPosition(0, 0));
+    internal static object? GenerateProcessMethod(Type realType, bool asObject) => GenerateProcessMethod(realType, asObject && realType.IsValueType(), new ExpressionPosition(0, 0));
     public static bool IsSetType(Type type) => type.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ISet<>));
     private static bool IsDictionaryType(Type type) => typeof(IDictionary).IsAssignableFrom(type) || type.GetInterfaces().Any(i => i.IsGenericType && (i.GetGenericTypeDefinition() == typeof(IDictionary<,>) || i.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)));
 
@@ -445,11 +444,11 @@ internal static class FastClonerExprGenerator
                                     : typeof(IDictionary).GetMethod("Add"))
                                 ?? innerDictType.GetMethods()
                                     .FirstOrDefault(m => m.Name == "TryAdd" &&
-                                                         m.GetParameters().Length == 2 &&
+                                                         m.GetParameters().Length is 2 &&
                                                          m.GetParameters()[0].ParameterType == keyType &&
                                                          m.GetParameters()[1].ParameterType == valueType);
 
-        if (addMethod == null)
+        if (addMethod is null)
         {
             throw new InvalidOperationException($"Cannot find Add or TryAdd method for type {innerDictType.FullName}");
         }
@@ -469,18 +468,18 @@ internal static class FastClonerExprGenerator
         MethodInfo valueCloneMethod = valueType.IsValueType()
             ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(valueType)
             : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
-
-
+        
         BlockExpression iterationBlock = isGeneric
             ? GenerateGenericDictionaryIteration(enumerator, keyType, valueType, keyCloneMethod, valueCloneMethod, innerDict, addMethod, state, position)
             : GenerateNonGenericDictionaryIteration(enumerator, keyCloneMethod, valueCloneMethod, innerDict, addMethod, state, position);
-
+        
         Type enumerableType = isGeneric
             ? typeof(IEnumerable<>).MakeGenericType(typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType))
             : typeof(IDictionary);
 
         MethodInfo? getEnumeratorMethod = enumerableType.GetMethod("GetEnumerator");
-        if (getEnumeratorMethod == null)
+        
+        if (getEnumeratorMethod is null)
         {
             throw new InvalidOperationException($"Cannot find GetEnumerator method for type {enumerableType.FullName}");
         }
@@ -517,7 +516,7 @@ internal static class FastClonerExprGenerator
 
     private static BlockExpression GenerateGenericDictionaryIteration(ParameterExpression enumerator, Type keyType, Type valueType, MethodInfo keyCloneMethod, MethodInfo valueCloneMethod, ParameterExpression local, MethodInfo addMethod, ParameterExpression state, ExpressionPosition position)
     {
-        PropertyInfo current = enumerator.Type.GetProperty(nameof(IEnumerator<object>.Current))!;
+        PropertyInfo current = enumerator.Type.GetProperty(nameof(IEnumerator<>.Current))!;
         LabelTarget breakLabel = CreateLoopLabel(position);
         Type dictionaryType = local.Type;
         bool isSingleGenericParameter = dictionaryType.GetGenericArguments().Length is 1;
