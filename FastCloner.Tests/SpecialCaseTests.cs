@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -306,9 +307,9 @@ public class SpecialCaseTests
         };
 
         // Act & Assert
-        foreach (var original in originals)
+        foreach (BigInteger original in originals)
         {
-            var clone = original.DeepClone();
+            BigInteger clone = original.DeepClone();
             Assert.That(clone, Is.EqualTo(original), $"Failed for value: {original}");
         }
     }
@@ -1827,6 +1828,381 @@ public class SpecialCaseTests
             Assert.That(setA.Overlaps(setC), Is.False, "Sets without common elements should not overlap");
             Assert.That(setA.Overlaps(setA), Is.True, "Set should overlap with itself");
         });
+    }
+    
+    [Test]
+    public void Stack_DeepClone_ShouldCreateNewInstance()
+    {
+        // Arrange
+        Stack<string> original = new Stack<string>();
+        original.Push("One");
+        original.Push("Two");
+        original.Push("Three");
+
+        // Act
+        Stack<string>? cloned = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
+            Assert.That(cloned, Is.AssignableTo<Stack<string>>(), "Should preserve type");
+            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
+            
+            // Verify stack order by popping elements
+            Assert.That(cloned.Pop(), Is.EqualTo("Three"), "Top element should be preserved");
+            Assert.That(cloned.Pop(), Is.EqualTo("Two"), "Second element should be preserved");
+            Assert.That(cloned.Pop(), Is.EqualTo("One"), "Bottom element should be preserved");
+            Assert.That(cloned.Count, Is.EqualTo(0), "Should be empty after popping all elements");
+        });
+    }
+
+    [Test]
+    public void Stack_DeepClone_WithComplexObjects_ShouldCreateDeepCopy()
+    {
+        // Arrange
+        Person complexObj1 = new Person { Name = "Alice", Age = 30 };
+        Person complexObj2 = new Person { Name = "Bob", Age = 25 };
+        
+        Stack<Person> original = new Stack<Person>();
+        original.Push(complexObj1);
+        original.Push(complexObj2);
+
+        // Act
+        Stack<Person>? cloned = FastCloner.DeepClone(original);
+        
+        // Modify original objects
+        complexObj1.Name = "Alice Modified";
+        complexObj2.Age = 26;
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
+            
+            Person topCloned = cloned.Pop();
+            Person bottomCloned = cloned.Pop();
+            
+            Assert.That(topCloned, Is.Not.SameAs(complexObj2), "Should create new object instances");
+            Assert.That(bottomCloned, Is.Not.SameAs(complexObj1), "Should create new object instances");
+            
+            Assert.That(topCloned.Name, Is.EqualTo("Bob"), "Cloned objects should not reflect changes to original");
+            Assert.That(topCloned.Age, Is.EqualTo(25), "Cloned objects should not reflect changes to original");
+            Assert.That(bottomCloned.Name, Is.EqualTo("Alice"), "Cloned objects should not reflect changes to original");
+            Assert.That(bottomCloned.Age, Is.EqualTo(30), "Cloned objects should not reflect changes to original");
+        });
+    }
+    
+    [Test]
+    public void ImmutableList_DeepClone_ShouldCreateNewInstance()
+    {
+        // Arrange
+        ImmutableList<string> original = ImmutableList.Create("One", "Two", "Three");
+    
+        // Act
+        ImmutableList<string>? cloned = FastCloner.DeepClone(original);
+    
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
+            Assert.That(cloned, Is.AssignableTo<ImmutableList<string>>(), "Should preserve type");
+            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
+        
+            // Verify elements and order
+            Assert.That(cloned[0], Is.EqualTo("One"), "First element should be preserved");
+            Assert.That(cloned[1], Is.EqualTo("Two"), "Second element should be preserved");
+            Assert.That(cloned[2], Is.EqualTo("Three"), "Third element should be preserved");
+        
+            // Verify immutability behavior
+            ImmutableList<string> newList = cloned.Add("Four");
+            Assert.That(cloned.Count, Is.EqualTo(3), "Original cloned list should remain unchanged after add");
+            Assert.That(newList.Count, Is.EqualTo(4), "New list should contain added element");
+            Assert.That(newList[3], Is.EqualTo("Four"), "New list should have correct added element");
+        });
+    }
+    
+    [Test]
+    public void ImmutableHashSet_DeepClone_ShouldPreserveSetOperations()
+    {
+        // Arrange
+        ImmutableHashSet<int> original = ImmutableHashSet.Create(1, 2, 3, 4, 5);
+        
+        // Act
+        ImmutableHashSet<int>? cloned = FastCloner.DeepClone(original);
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
+            Assert.That(cloned, Is.AssignableTo<ImmutableHashSet<int>>(), "Should preserve type");
+            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
+            
+            // Verify elements
+            foreach (int item in original)
+            {
+                Assert.That(cloned.Contains(item), Is.True, $"Cloned set should contain {item}");
+            }
+            
+            // Verify set operations work correctly
+            ImmutableHashSet<int> otherSet = ImmutableHashSet.Create(4, 5, 6, 7);
+            
+            ImmutableHashSet<int> intersection = cloned.Intersect(otherSet);
+            Assert.That(intersection.Count, Is.EqualTo(2), "Intersection should have correct count");
+            Assert.That(intersection.Contains(4), Is.True, "Intersection should contain common elements");
+            Assert.That(intersection.Contains(5), Is.True, "Intersection should contain common elements");
+            
+            ImmutableHashSet<int> union = cloned.Union(otherSet);
+            Assert.That(union.Count, Is.EqualTo(7), "Union should have correct count");
+            for (int i = 1; i <= 7; i++)
+            {
+                Assert.That(union.Contains(i), Is.True, $"Union should contain {i}");
+            }
+            
+            ImmutableHashSet<int> except = cloned.Except(otherSet);
+            Assert.That(except.Count, Is.EqualTo(3), "Except should have correct count");
+            Assert.That(except.Contains(1), Is.True, "Except should contain non-common elements");
+            Assert.That(except.Contains(2), Is.True, "Except should contain non-common elements");
+            Assert.That(except.Contains(3), Is.True, "Except should contain non-common elements");
+            
+            // Verify immutability behavior
+            ImmutableHashSet<int> newSet = cloned.Add(6);
+            Assert.That(cloned.Count, Is.EqualTo(5), "Original cloned set should remain unchanged after add");
+            Assert.That(newSet.Count, Is.EqualTo(6), "New set should contain added element");
+            Assert.That(newSet.Contains(6), Is.True, "New set should have correct added element");
+        });
+    }
+    
+    [Test]
+    public void ImmutableDictionary_DeepClone_WithComplexObjects_ShouldCreateDeepCopy()
+    {
+        // Arrange
+        var complexObj1 = new Person { Name = "Alice", Age = 30 };
+        var complexObj2 = new Person { Name = "Bob", Age = 25 };
+        
+        var original = ImmutableDictionary.CreateRange(new Dictionary<string, Person>
+        {
+            ["person1"] = complexObj1,
+            ["person2"] = complexObj2
+        });
+        
+        // Act
+        ImmutableDictionary<string, Person>? cloned = FastCloner.DeepClone(original);
+        
+        // Modify original objects
+        complexObj1.Name = "Alice Modified";
+        complexObj2.Age = 26;
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
+            Assert.That(cloned, Is.AssignableTo<ImmutableDictionary<string, Person>>(), "Should preserve type");
+            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
+            
+            // Verify keys are preserved
+            Assert.That(cloned.ContainsKey("person1"), Is.True, "Should contain original keys");
+            Assert.That(cloned.ContainsKey("person2"), Is.True, "Should contain original keys");
+            
+            // Verify key lookup works correctly
+            bool person1Found = cloned.TryGetValue("person1", out Person person1Value);
+            bool person2Found = cloned.TryGetValue("person2", out Person person2Value);
+            
+            Assert.That(person1Found, Is.True, "Should be able to retrieve value by key");
+            Assert.That(person2Found, Is.True, "Should be able to retrieve value by key");
+            Assert.That(person1Value.Name, Is.EqualTo("Alice"), "Retrieved value should have correct properties");
+            Assert.That(person2Value.Name, Is.EqualTo("Bob"), "Retrieved value should have correct properties");
+            
+            var newPerson = new Person { Name = "Charlie", Age = 35 };
+            var newDict = cloned.Add("person3", newPerson);
+            Assert.That(cloned.Count, Is.EqualTo(2), "Original cloned dictionary should remain unchanged after add");
+            Assert.That(newDict.Count, Is.EqualTo(3), "New dictionary should contain added element");
+            Assert.That(newDict["person3"].Name, Is.EqualTo("Charlie"), "New dictionary should have correct added element");
+        });
+    }
+
+    [Test]
+    public void ConcurrentStack_DeepClone_ShouldCreateNewInstance()
+    {
+        // Arrange
+        ConcurrentStack<string> original = new ConcurrentStack<string>();
+        original.Push("One");
+        original.Push("Two");
+        original.Push("Three");
+
+        // Act
+        ConcurrentStack<string>? cloned = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
+            Assert.That(cloned, Is.AssignableTo<ConcurrentStack<string>>(), "Should preserve type");
+            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
+            
+            // Verify stack order by popping elements
+            string[] clonedItems = new string[3];
+            bool success = cloned.TryPopRange(clonedItems, 0, 3) == 3;
+            Assert.That(success, Is.True, "Should be able to pop all elements");
+            
+            Assert.That(clonedItems[0], Is.EqualTo("Three"), "Top element should be preserved");
+            Assert.That(clonedItems[1], Is.EqualTo("Two"), "Second element should be preserved");
+            Assert.That(clonedItems[2], Is.EqualTo("One"), "Bottom element should be preserved");
+            Assert.That(cloned.Count, Is.EqualTo(0), "Should be empty after popping all elements");
+            
+            // Verify original stack is unchanged
+            Assert.That(original.Count, Is.EqualTo(3), "Original stack should remain unchanged");
+        });
+    }
+
+    [Test]
+    public void ConcurrentQueue_DeepClone_WithComplexObjects_ShouldCreateDeepCopy()
+    {
+        // Arrange
+        Person complexObj1 = new Person { Name = "Eve", Age = 32 };
+        Person complexObj2 = new Person { Name = "Frank", Age = 27 };
+        
+        ConcurrentQueue<Person> original = new ConcurrentQueue<Person>();
+        original.Enqueue(complexObj1);
+        original.Enqueue(complexObj2);
+
+        // Act
+        ConcurrentQueue<Person>? cloned = FastCloner.DeepClone(original);
+        
+        // Modify original objects
+        complexObj1.Name = "Eve Modified";
+        complexObj2.Age = 28;
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
+            Assert.That(cloned, Is.AssignableTo<ConcurrentQueue<Person>>(), "Should preserve type");
+            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
+            
+            Person firstCloned, secondCloned;
+            bool firstSuccess = cloned.TryDequeue(out firstCloned);
+            bool secondSuccess = cloned.TryDequeue(out secondCloned);
+            
+            Assert.That(firstSuccess, Is.True, "Should be able to dequeue first element");
+            Assert.That(secondSuccess, Is.True, "Should be able to dequeue second element");
+            
+            Assert.That(firstCloned, Is.Not.SameAs(complexObj1), "Should create new object instances");
+            Assert.That(secondCloned, Is.Not.SameAs(complexObj2), "Should create new object instances");
+            
+            Assert.That(firstCloned.Name, Is.EqualTo("Eve"), "Cloned objects should not reflect changes to original");
+            Assert.That(firstCloned.Age, Is.EqualTo(32), "Cloned objects should not reflect changes to original");
+            Assert.That(secondCloned.Name, Is.EqualTo("Frank"), "Cloned objects should not reflect changes to original");
+            Assert.That(secondCloned.Age, Is.EqualTo(27), "Cloned objects should not reflect changes to original");
+            
+            // Verify original queue is unchanged
+            Assert.That(original.Count, Is.EqualTo(2), "Original queue should remain unchanged");
+        });
+    }
+
+    
+    [Test]
+    public void Queue_DeepClone_ShouldCreateNewInstance()
+    {
+        // Arrange
+        Queue<string> original = new Queue<string>();
+        original.Enqueue("One");
+        original.Enqueue("Two");
+        original.Enqueue("Three");
+
+        // Act
+        Queue<string>? cloned = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
+            Assert.That(cloned, Is.AssignableTo<Queue<string>>(), "Should preserve type");
+            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
+            
+            // Verify queue order by dequeuing elements
+            Assert.That(cloned.Dequeue(), Is.EqualTo("One"), "First element should be preserved");
+            Assert.That(cloned.Dequeue(), Is.EqualTo("Two"), "Second element should be preserved");
+            Assert.That(cloned.Dequeue(), Is.EqualTo("Three"), "Last element should be preserved");
+            Assert.That(cloned.Count, Is.EqualTo(0), "Should be empty after dequeuing all elements");
+        });
+    }
+
+    [Test]
+    public void Queue_DeepClone_WithComplexObjects_ShouldCreateDeepCopy()
+    {
+        // Arrange
+        Person complexObj1 = new Person { Name = "Charlie", Age = 35 };
+        Person complexObj2 = new Person { Name = "Diana", Age = 28 };
+        
+        Queue<Person> original = new Queue<Person>();
+        original.Enqueue(complexObj1);
+        original.Enqueue(complexObj2);
+
+        // Act
+        Queue<Person>? cloned = FastCloner.DeepClone(original);
+        
+        // Modify original objects
+        complexObj1.Name = "Charlie Modified";
+        complexObj2.Age = 29;
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
+            
+            Person firstCloned = cloned.Dequeue();
+            Person secondCloned = cloned.Dequeue();
+            
+            Assert.That(firstCloned, Is.Not.SameAs(complexObj1), "Should create new object instances");
+            Assert.That(secondCloned, Is.Not.SameAs(complexObj2), "Should create new object instances");
+            
+            Assert.That(firstCloned.Name, Is.EqualTo("Charlie"), "Cloned objects should not reflect changes to original");
+            Assert.That(firstCloned.Age, Is.EqualTo(35), "Cloned objects should not reflect changes to original");
+            Assert.That(secondCloned.Name, Is.EqualTo("Diana"), "Cloned objects should not reflect changes to original");
+            Assert.That(secondCloned.Age, Is.EqualTo(28), "Cloned objects should not reflect changes to original");
+        });
+    }
+
+    [Test]
+    public void Stack_DeepClone_EmptyStack_ShouldCreateEmptyClone()
+    {
+        // Arrange
+        Stack<int> original = new Stack<int>();
+
+        // Act
+        Stack<int>? cloned = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
+            Assert.That(cloned.Count, Is.EqualTo(0), "Cloned stack should be empty");
+        });
+    }
+
+    [Test]
+    public void Queue_DeepClone_EmptyQueue_ShouldCreateEmptyClone()
+    {
+        // Arrange
+        Queue<int> original = new Queue<int>();
+
+        // Act
+        Queue<int>? cloned = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
+            Assert.That(cloned.Count, Is.EqualTo(0), "Cloned queue should be empty");
+        });
+    }
+
+    // Helper class for complex object tests
+    private class Person
+    {
+        public string Name { get; set; }
+        public int Age { get; set; }
     }
 
     public class ReadOnlySet<T> : IReadOnlySet<T>

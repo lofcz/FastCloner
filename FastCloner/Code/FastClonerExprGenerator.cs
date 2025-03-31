@@ -385,6 +385,14 @@ internal static class FastClonerExprGenerator
             Expression.Return(returnNullLabel, Expression.Constant(null))
         );
         
+        // For immutable collections
+        bool isImmutable = IsImmutableCollection(dictType);
+        
+        if (isImmutable)
+        {
+            return GenerateImmutableDictionaryProcessor(dictType, keyType, valueType, from, state, returnNullLabel, nullCheck);
+        }
+        
         // For read-only collections
         bool isReadOnly = dictType.Name.Contains("ReadOnly", StringComparison.InvariantCultureIgnoreCase) || 
                           (dictType.IsGenericType && dictType.GetGenericTypeDefinition() == typeof(ReadOnlyDictionary<,>));
@@ -513,6 +521,187 @@ internal static class FastClonerExprGenerator
             state
         ).Compile();
     }
+    
+    private static object GenerateImmutableDictionaryProcessor(Type dictType, Type keyType, Type valueType, ParameterExpression from, ParameterExpression state, LabelTarget returnNullLabel, Expression nullCheck)
+    {
+        ParameterExpression typedFrom = Expression.Variable(dictType);
+        ParameterExpression result = Expression.Variable(dictType);
+        BinaryExpression castFrom = Expression.Assign(
+            typedFrom,
+            Expression.Convert(from, dictType)
+        );
+        
+        MethodInfo? addMethod = dictType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .FirstOrDefault(m => m.Name == "Add" && m.ReturnType == dictType && 
+                               m.GetParameters().Length == 2 &&
+                               m.GetParameters()[0].ParameterType == keyType &&
+                               m.GetParameters()[1].ParameterType == valueType);
+        
+        if (addMethod == null)
+        {
+            return Expression.Lambda<Func<object, FastCloneState, object>>(
+                from,
+                from, 
+                state
+            ).Compile();
+        }
+        
+        MethodInfo emptyMethod = dictType.GetMethod("Empty", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null);
+        MethodInfo createMethod = dictType.GetMethod("Create", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null);
+        
+        // try to make an empty copy
+        Expression createEmpty;
+        if (emptyMethod != null)
+        {
+            createEmpty = Expression.Assign(
+                result,
+                Expression.Call(null, emptyMethod)
+            );
+        }
+        else if (createMethod != null)
+        {
+            createEmpty = Expression.Assign(
+                result,
+                Expression.Call(null, createMethod)
+            );
+        }
+        else
+        {
+            MethodInfo? clearMethod = dictType.GetMethod("Clear", BindingFlags.Public | BindingFlags.Instance);
+            
+            if (clearMethod != null && clearMethod.ReturnType == dictType)
+            {
+                createEmpty = Expression.Assign(
+                    result,
+                    Expression.Call(typedFrom, clearMethod)
+                );
+            }
+            else
+            {
+                // bail
+                return Expression.Lambda<Func<object, FastCloneState, object>>(
+                    from,
+                    from, 
+                    state
+                ).Compile();
+            }
+        }
+ 
+        MethodInfo keyCloneMethod = keyType.IsValueType()
+            ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(keyType)
+            : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
+
+        MethodInfo valueCloneMethod = valueType.IsValueType()
+            ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(valueType)
+            : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
+
+        Type enumeratorType = typeof(IEnumerator<>).MakeGenericType(
+            typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType));
+        ParameterExpression enumerator = Expression.Variable(enumeratorType);
+   
+        Type enumerableType = typeof(IEnumerable<>).MakeGenericType(
+            typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType));
+        MethodInfo getEnumeratorMethod = enumerableType.GetMethod("GetEnumerator");
+
+        BinaryExpression assignEnumerator = Expression.Assign(
+            enumerator,
+            Expression.Call(
+                Expression.Convert(typedFrom, enumerableType),
+                getEnumeratorMethod
+            )
+        );
+        
+        // iterate over pairs
+        PropertyInfo current = enumeratorType.GetProperty("Current");
+        Type kvpType = typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType);
+        ParameterExpression kvp = Expression.Variable(kvpType);
+        ParameterExpression key = Expression.Variable(keyType);
+        ParameterExpression value = Expression.Variable(valueType);
+        
+        LabelTarget breakLabel = Expression.Label("LoopBreak");
+        
+        BlockExpression loopBody = Expression.Block(
+            [kvp, key, value],
+            Expression.Assign(kvp, Expression.Property(enumerator, current)),
+            
+            Expression.Assign(
+                key,
+                Expression.Convert(
+                    Expression.Call(keyCloneMethod, Expression.Property(kvp, "Key"), state),
+                    keyType
+                )
+            ),
+            
+            Expression.Assign(
+                value,
+                Expression.Convert(
+                    Expression.Call(valueCloneMethod, Expression.Property(kvp, "Value"), state),
+                    valueType
+                )
+            ),
+            
+            Expression.Assign(
+                result,
+                Expression.Call(result, addMethod, key, value)
+            )
+        );
+        
+        LoopExpression loop = Expression.Loop(
+            Expression.IfThenElse(
+                Expression.Call(enumerator, typeof(IEnumerator).GetMethod("MoveNext")),
+                loopBody,
+                Expression.Break(breakLabel)
+            ),
+            breakLabel
+        );
+        
+        // detect cycles
+        MethodCallExpression addRef = Expression.Call(
+            state,
+            StaticMethodInfos.DeepCloneStateMethods.AddKnownRef,
+            from,
+            result
+        );
+        
+        BlockExpression block = Expression.Block(
+            [typedFrom, result, enumerator],
+            nullCheck,
+            castFrom,
+            createEmpty,
+            assignEnumerator,
+            loop,
+            addRef,
+            Expression.Label(returnNullLabel, Expression.Convert(result, typeof(object)))
+        );
+        
+        return Expression.Lambda<Func<object, FastCloneState, object>>(
+            block,
+            from,
+            state
+        ).Compile();
+    }
+    
+    /// <summary>
+    /// Note: this is based on a few heuristics, "best effor".
+    /// </summary>
+    /// <param name="type"></param>
+    /// <returns></returns>
+    private static bool IsImmutableCollection(Type type)
+    {
+        if (type.Namespace == "System.Collections.Immutable")
+        {
+            return true;
+        }
+        
+        if (type.GetInterfaces().Any(x => x.Namespace == "System.Collections.Immutable"))
+        {
+            return true;
+        }
+        
+        Attribute? immutableAttr = type.GetCustomAttributes().FirstOrDefault(attr => attr.GetType().Name.Contains("Immutable"));
+        return immutableAttr is not null || type.Name.Contains("Immutable");
+    }
+
 
     private static BlockExpression GenerateGenericDictionaryIteration(ParameterExpression enumerator, Type keyType, Type valueType, MethodInfo keyCloneMethod, MethodInfo valueCloneMethod, ParameterExpression local, MethodInfo addMethod, ParameterExpression state, ExpressionPosition position)
     {
@@ -632,6 +821,14 @@ internal static class FastClonerExprGenerator
 
         ParameterExpression from = Expression.Parameter(typeof(object));
         ParameterExpression state = Expression.Parameter(typeof(FastCloneState));
+        
+        bool isImmutable = IsImmutableCollection(type);
+    
+        if (isImmutable)
+        {
+            return GenerateImmutableSetProcessor(type, elementType, from, state);
+        }
+        
         ParameterExpression local = Expression.Variable(type);
         
         bool isReadOnly = type.Name.Contains("ReadOnly", StringComparison.InvariantCultureIgnoreCase);
@@ -700,8 +897,154 @@ internal static class FastClonerExprGenerator
             state
         ).Compile();
     }
+    
+    private static object GenerateImmutableSetProcessor(Type setType, Type elementType, ParameterExpression from, ParameterExpression state)
+    {
+        ParameterExpression typedFrom = Expression.Variable(setType);
+        ParameterExpression result = Expression.Variable(setType);
+        LabelTarget returnNullLabel = Expression.Label(typeof(object));
+        
+        Expression nullCheck = Expression.IfThen(
+            Expression.Equal(from, Expression.Constant(null)),
+            Expression.Return(returnNullLabel, Expression.Constant(null))
+        );
+        
+        BinaryExpression castFrom = Expression.Assign(
+            typedFrom,
+            Expression.Convert(from, setType)
+        );
+        
+        MethodInfo? addMethod = setType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .FirstOrDefault(m => m.Name == "Add" && m.ReturnType == setType && 
+                               m.GetParameters().Length == 1 &&
+                               m.GetParameters()[0].ParameterType == elementType);
+        
+        if (addMethod == null)
+        {
+            addMethod = setType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .FirstOrDefault(m => m.Name == "Union" && m.ReturnType == setType);
+                
+            if (addMethod == null)
+            {
+                return Expression.Lambda<Func<object, FastCloneState, object>>(
+                    from,
+                    from, 
+                    state
+                ).Compile();
+            }
+        }
 
+        MethodInfo? emptyMethod = setType.GetMethod("Empty", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null);
+        MethodInfo? createMethod = setType.GetMethod("Create", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null);
+        Expression createEmpty;
+        
+        if (emptyMethod != null)
+        {
+            createEmpty = Expression.Assign(
+                result,
+                Expression.Call(null, emptyMethod)
+            );
+        }
+        else if (createMethod != null)
+        {
+            createEmpty = Expression.Assign(
+                result,
+                Expression.Call(null, createMethod)
+            );
+        }
+        else
+        {
+            MethodInfo clearMethod = setType.GetMethod("Clear", BindingFlags.Public | BindingFlags.Instance);
+            if (clearMethod != null && clearMethod.ReturnType == setType)
+            {
+                createEmpty = Expression.Assign(
+                    result,
+                    Expression.Call(typedFrom, clearMethod)
+                );
+            }
+            else
+            {
+                return Expression.Lambda<Func<object, FastCloneState, object>>(
+                    from,
+                    from, 
+                    state
+                ).Compile();
+            }
+        }
+        
+        Type enumeratorType = typeof(IEnumerator<>).MakeGenericType(elementType);
+        ParameterExpression enumerator = Expression.Variable(enumeratorType);
+        
+        Type enumerableType = typeof(IEnumerable<>).MakeGenericType(elementType);
+        MethodInfo getEnumeratorMethod = enumerableType.GetMethod("GetEnumerator");
+        
+        BinaryExpression assignEnumerator = Expression.Assign(
+            enumerator,
+            Expression.Call(
+                Expression.Convert(typedFrom, enumerableType),
+                getEnumeratorMethod
+            )
+        );
+        
+        PropertyInfo current = enumeratorType.GetProperty("Current");
+        ParameterExpression element = Expression.Variable(elementType);
+        
+        LabelTarget breakLabel = Expression.Label("LoopBreak");
 
+        MethodInfo elementCloneMethod = elementType.IsValueType()
+            ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(elementType)
+            : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
+        
+        BlockExpression loopBody = Expression.Block(
+            [element],
+            Expression.Assign(
+                element,
+                Expression.Convert(
+                    Expression.Call(elementCloneMethod, Expression.Property(enumerator, current), state),
+                    elementType
+                )
+            ),
+            
+            Expression.Assign(
+                result,
+                Expression.Call(result, addMethod, element)
+            )
+        );
+        
+        LoopExpression loop = Expression.Loop(
+            Expression.IfThenElse(
+                Expression.Call(enumerator, typeof(IEnumerator).GetMethod("MoveNext")),
+                loopBody,
+                Expression.Break(breakLabel)
+            ),
+            breakLabel
+        );
+        
+        MethodCallExpression addRef = Expression.Call(
+            state,
+            StaticMethodInfos.DeepCloneStateMethods.AddKnownRef,
+            from,
+            result
+        );
+        
+        BlockExpression block = Expression.Block(
+            [typedFrom, result, enumerator],
+            nullCheck,
+            castFrom,
+            createEmpty,
+            assignEnumerator,
+            loop,
+            addRef,
+            Expression.Label(returnNullLabel, Expression.Convert(result, typeof(object)))
+        );
+
+        return Expression.Lambda<Func<object, FastCloneState, object>>(
+            block,
+            from,
+            state
+        ).Compile();
+    }
+    
     private static object GenerateProcessArrayMethod(Type type)
     {
         Type? elementType = type.GetElementType();
