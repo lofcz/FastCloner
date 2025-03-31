@@ -25,7 +25,7 @@ using FastCloner.Code;
 var clone = FastCloner.FastCloner.DeepClone(new { Hello = "world", MyList = new List<int> { 1 } });
 ```
 
-⭐ **That's it!** _Feel free to map this method to your extension so if you need to migrate in the future it's a matter of just switching that method. We intentionally don't ship our own `.DeepClone()` extension method. If you don't have one yet, just copy this into your project:_
+⭐ **That's it!** _Feel free to map this method to your extension, so if you need to migrate in the future, it's just a matter of switching that method. We intentionally don't ship our own `.DeepClone()` extension method. If you don't have one yet, copy the following method into your project:_
 
 ```cs
 [return: NotNullIfNotNull(nameof(obj))]
@@ -39,7 +39,7 @@ public static T? DeepClone<T>(this T? obj)
 
 _The following examples assume you've copied the extension method above._
 
-Sometimes you might want to exclude certain fields & properties from cloning:
+Sometimes, you might want to exclude certain fields & properties from cloning:
 ```csharp
 private class TestPropsWithIgnored
 {
@@ -62,7 +62,7 @@ var clone = FastCloner.FastCloner.ShallowClone(new { Hello = "world", MyList = n
 
 ## Limitations
 
-FastCloner uses caching by default which makes evaluating properties harder. Cloning unmanaged resources, such as `IntPtr`s may result in side-effects, as there is no metadata for the length of buffers such pointers often point to. `ReadOnly` collections are tested to behave well as long as they follow basic conventions. Many other features, such as cloning `Dictionary`ies properly while keeping hashcodes, `INotifyPropertyChanged`, `delegate`s, `event`s, `HttpRequest`s / responses, and others are supported. If something doesn't work out of the box let me know in the [issues](https://github.com/lofcz/FastCloner/issues), the repository is actively maintained.
+FastCloner uses caching by default, which makes evaluating properties harder. Cloning unmanaged resources, such as `IntPtr`s may result in side-effects, as there is no metadata for the length of buffers such pointers often point to. `ReadOnly` and `Immutable` collections are tested to behave well if they follow basic conventions. Many other features, such as cloning `Dictionary`ies properly while keeping hashcodes, `INotifyPropertyChanged`, `delegate`s, `event`s, `HttpRequest`s / responses, and others are supported. If something doesn't work out of the box, let me know in the [issues](https://github.com/lofcz/FastCloner/issues), the repository is actively maintained.
 
 ## Performance
 
