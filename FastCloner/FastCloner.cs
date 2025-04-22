@@ -30,4 +30,9 @@ public static class FastCloner
     /// Performs shallow (only new object returned, without cloning of dependencies) copy of object
     /// </summary>
     public static T? ShallowClone<T>(T? obj) => ShallowClonerGenerator.CloneObject(obj);
+
+    /// <summary>
+    /// Clears all cached information about classes, structs, types, and other CLR objects.
+    /// </summary>
+    public static void ClearCache() => FastClonerCache.ClearCache();
 }

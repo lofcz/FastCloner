@@ -1,7 +1,6 @@
 [![FastCloner](https://badgen.net/nuget/v/FastCloner?v=302&icon=nuget&label=FastCloner)](https://www.nuget.org/packages/FastCloner)
 [![FastCloner.Contrib](https://badgen.net/nuget/v/FastCloner.Contrib?v=302&icon=nuget&label=FastCloner.Contrib)](https://www.nuget.org/packages/FastCloner.Contrib)
 
-
 # FastCloner
 
 <img align="left" width="128" height="128" alt="Te Reo Icon" src="https://github.com/user-attachments/assets/54f5be37-543a-411d-b6e6-90a77414926c" />
@@ -25,7 +24,7 @@ using FastCloner.Code;
 var clone = FastCloner.FastCloner.DeepClone(new { Hello = "world", MyList = new List<int> { 1 } });
 ```
 
-⭐ **That's it!** _Feel free to map this method to your extension, so if you need to migrate in the future, it's just a matter of switching that method. We intentionally don't ship our own `.DeepClone()` extension method. If you don't have one yet, copy the following method into your project:_
+⭐ **That's it!** _For convenience, please add the following method to your project. We intentionally don't ship this extension to make switching from/to FastCloner easier:_
 
 ```cs
 [return: NotNullIfNotNull(nameof(obj))]
@@ -63,6 +62,12 @@ var clone = FastCloner.FastCloner.ShallowClone(new { Hello = "world", MyList = n
 ## Limitations
 
 FastCloner uses caching by default, which makes evaluating properties harder. Cloning unmanaged resources, such as `IntPtr`s may result in side-effects, as there is no metadata for the length of buffers such pointers often point to. `ReadOnly` and `Immutable` collections are tested to behave well if they follow basic conventions. Many other features, such as cloning `Dictionary`ies properly while keeping hashcodes, `INotifyPropertyChanged`, `delegate`s, `event`s, `HttpRequest`s / responses, and others are supported. If something doesn't work out of the box, let me know in the [issues](https://github.com/lofcz/FastCloner/issues), the repository is actively maintained.
+
+Cache can be invalidated to reduce memory footprint, if needed:
+
+```csharp
+FastCloner.FastCloner.ClearCache();
+```
 
 ## Performance
 
