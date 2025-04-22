@@ -11,12 +11,11 @@ namespace FastCloner.Code;
 internal static class FastClonerExprGenerator
 {
     internal static readonly ConcurrentDictionary<Type, Func<Type, bool, ExpressionPosition, object>> CustomTypeHandlers = [];
-    
     private static readonly ConcurrentDictionary<FieldInfo, bool> readonlyFields = new ConcurrentDictionary<FieldInfo, bool>();
-
     private static readonly MethodInfo fieldSetMethod;
+    
     static FastClonerExprGenerator() => fieldSetMethod = typeof(FieldInfo).GetMethod(nameof(FieldInfo.SetValue), [typeof(object), typeof(object)])!;
-
+    
     internal static object? GenerateClonerInternal(Type realType, bool asObject) => GenerateProcessMethod(realType, asObject && realType.IsValueType());
 
     private static bool MemberIsIgnored(MemberInfo memberInfo)
@@ -243,9 +242,13 @@ internal static class FastClonerExprGenerator
         expressionList.Add(Expression.Convert(toLocal, methodType));
 
         Type funcType = typeof(Func<,,>).MakeGenericType(methodType, typeof(FastCloneState), methodType);
-
         List<ParameterExpression> blockParams = [];
-        if (from != fromLocal) blockParams.Add(fromLocal);
+        
+        if (from != fromLocal)
+        {
+            blockParams.Add(fromLocal);
+        }
+        
         blockParams.Add(toLocal);
 
         return Expression.Lambda(funcType, Expression.Block(blockParams, expressionList), from, state).Compile();
@@ -546,8 +549,8 @@ internal static class FastClonerExprGenerator
             ).Compile();
         }
         
-        MethodInfo emptyMethod = dictType.GetMethod("Empty", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null);
-        MethodInfo createMethod = dictType.GetMethod("Create", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null);
+        MethodInfo? emptyMethod = dictType.GetMethod("Empty", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null);
+        MethodInfo? createMethod = dictType.GetMethod("Create", BindingFlags.Public | BindingFlags.Static, null, Type.EmptyTypes, null);
         
         // try to make an empty copy
         Expression createEmpty;
@@ -601,7 +604,7 @@ internal static class FastClonerExprGenerator
    
         Type enumerableType = typeof(IEnumerable<>).MakeGenericType(
             typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType));
-        MethodInfo getEnumeratorMethod = enumerableType.GetMethod("GetEnumerator");
+        MethodInfo? getEnumeratorMethod = enumerableType.GetMethod("GetEnumerator");
 
         BinaryExpression assignEnumerator = Expression.Assign(
             enumerator,
@@ -612,7 +615,7 @@ internal static class FastClonerExprGenerator
         );
         
         // iterate over pairs
-        PropertyInfo current = enumeratorType.GetProperty("Current");
+        PropertyInfo? current = enumeratorType.GetProperty("Current");
         Type kvpType = typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType);
         ParameterExpression kvp = Expression.Variable(kvpType);
         ParameterExpression key = Expression.Variable(keyType);
@@ -954,7 +957,8 @@ internal static class FastClonerExprGenerator
         }
         else
         {
-            MethodInfo clearMethod = setType.GetMethod("Clear", BindingFlags.Public | BindingFlags.Instance);
+            MethodInfo? clearMethod = setType.GetMethod("Clear", BindingFlags.Public | BindingFlags.Instance);
+            
             if (clearMethod != null && clearMethod.ReturnType == setType)
             {
                 createEmpty = Expression.Assign(
@@ -976,7 +980,7 @@ internal static class FastClonerExprGenerator
         ParameterExpression enumerator = Expression.Variable(enumeratorType);
         
         Type enumerableType = typeof(IEnumerable<>).MakeGenericType(elementType);
-        MethodInfo getEnumeratorMethod = enumerableType.GetMethod("GetEnumerator");
+        MethodInfo? getEnumeratorMethod = enumerableType.GetMethod("GetEnumerator");
         
         BinaryExpression assignEnumerator = Expression.Assign(
             enumerator,
@@ -986,7 +990,7 @@ internal static class FastClonerExprGenerator
             )
         );
         
-        PropertyInfo current = enumeratorType.GetProperty("Current");
+        PropertyInfo? current = enumeratorType.GetProperty("Current");
         ParameterExpression element = Expression.Variable(elementType);
         
         LabelTarget breakLabel = Expression.Label("LoopBreak");
@@ -1053,9 +1057,9 @@ internal static class FastClonerExprGenerator
         MethodInfo methodInfo;
 
         // multidim or not zero-based arrays
-        if (rank != 1 || type != elementType.MakeArrayType())
+        if (rank != 1 || type != elementType?.MakeArrayType())
         {
-            if (rank == 2 && type == elementType.MakeArrayType(2))
+            if (rank == 2 && type == elementType?.MakeArrayType(2))
             {
                 // small optimization for 2 dim arrays
                 methodInfo = typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.Clone2DimArrayInternal))!.MakeGenericMethod(elementType);
@@ -1128,8 +1132,7 @@ internal static class FastClonerExprGenerator
 
         return Expression.Block([element], assignElement, addElement);
     }
-
-
+    
     private static BlockExpression GenerateDictionaryAddBlock(ParameterExpression enumerator, PropertyInfo current, Type keyType, Type valueType, MethodInfo cloneKeyMethod, MethodInfo cloneValueMethod, ParameterExpression local, MethodInfo addMethod, ParameterExpression state)
     {
         ParameterExpression kvp = Expression.Variable(typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType));

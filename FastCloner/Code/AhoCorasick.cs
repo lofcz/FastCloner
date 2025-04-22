@@ -5,9 +5,8 @@ public class AhoCorasick
     private class Node
     {
         public readonly Dictionary<char, Node> Children = new Dictionary<char, Node>();
-        public Node Failure;
+        public Node? Failure;
         public bool IsEndOfPattern;
-        public string Pattern;
     }
 
     private readonly Node root = new Node();
@@ -22,7 +21,7 @@ public class AhoCorasick
 
     private void BuildTrie()
     {
-        foreach (string? pattern in patterns)
+        foreach (string pattern in patterns)
         {
             Node current = root;
             foreach (char c in pattern)
@@ -33,15 +32,16 @@ public class AhoCorasick
                 }
                 current = current.Children[c];
             }
+            
             current.IsEndOfPattern = true;
-            current.Pattern = pattern;
         }
     }
 
     private void BuildFailureLinks()
     {
         Queue<Node> queue = new Queue<Node>();
-        foreach (Node? node in root.Children.Values)
+        
+        foreach (Node node in root.Children.Values)
         {
             node.Failure = root;
             queue.Enqueue(node);
@@ -50,11 +50,13 @@ public class AhoCorasick
         while (queue.Count > 0)
         {
             Node current = queue.Dequeue();
+            
             foreach ((char character, Node child) in current.Children)
             {
                 queue.Enqueue(child);
 
                 Node? failure = current.Failure;
+                
                 while (failure != null && !failure.Children.ContainsKey(character))
                 {
                     failure = failure.Failure;
@@ -68,6 +70,7 @@ public class AhoCorasick
     public bool ContainsAnyPattern(string text)
     {
         Node? current = root;
+        
         foreach (char c in text)
         {
             while (current != null && !current.Children.ContainsKey(c))

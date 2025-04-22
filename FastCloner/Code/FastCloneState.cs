@@ -50,7 +50,7 @@ internal sealed class FastCloneState
         private int[]? buckets;
         private Entry[] entries;
         private int count;
-        private const int DefaultCapacity = 5;
+        private const int DefaultCapacity = 7;
 
         public MiniDictionary() : this(DefaultCapacity)
         {
@@ -121,8 +121,11 @@ internal sealed class FastCloneState
             for (int i = min | 1; i < int.MaxValue; i += 2)
             {
                 if (IsPrime(i) && (i - 1) % 101 is not 0)
+                {
                     return i;
+                }
             }
+            
             return min;
         }
 
@@ -159,7 +162,9 @@ internal sealed class FastCloneState
         public void Insert(object key, object value)
         {
             if (buckets is null)
+            {
                 Initialize(GetPrime(DefaultCapacity));
+            }
 
             int hashCode = RuntimeHelpers.GetHashCode(key) & 0x7FFFFFFF;
             int[] localBuckets = buckets!;
@@ -192,8 +197,11 @@ internal sealed class FastCloneState
             for (int i = 0; i < count; i++)
             {
                 ref Entry entry = ref newEntries[i];
+                
                 if (entry.HashCode < 0)
+                {
                     continue;
+                }
 
                 int bucket = entry.HashCode % newSize;
                 entry.Next = newBuckets[bucket];
