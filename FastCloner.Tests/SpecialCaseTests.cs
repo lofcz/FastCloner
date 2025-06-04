@@ -1989,6 +1989,57 @@ public class SpecialCaseTests
         }
     }
 
+    struct ClonerIgnoreStructTest
+    {
+        [FastClonerIgnore]
+        public int MyInt;
+    }
+    
+    struct ClonerIgnoreStructTestNullable
+    {
+        [FastClonerIgnore]
+        public int? MyInt;
+    }
+
+    [Test]
+    public void CloneSimpleInt()
+    {
+        int i = 42.DeepClone();
+        Assert.That(i, Is.EqualTo(42));
+    }
+    
+    [Test]
+    public void StructMembersIgnoreNullable()
+    {
+        // Arrange
+        ClonerIgnoreStructTestNullable inst = new ClonerIgnoreStructTestNullable
+        {
+            MyInt = 49
+        };
+
+        // Act
+        ClonerIgnoreStructTestNullable cloned = inst.DeepClone();
+
+        // Assert
+        Assert.That(cloned.MyInt, Is.EqualTo(null), "Should ignore the field");
+    }
+    
+    [Test]
+    public void StructMembersIgnore()
+    {
+        // Arrange
+        ClonerIgnoreStructTest inst = new ClonerIgnoreStructTest
+        {
+            MyInt = 49
+        };
+
+        // Act
+        ClonerIgnoreStructTest cloned = inst.DeepClone();
+
+        // Assert
+        Assert.That(cloned.MyInt, Is.EqualTo(0), "Should ignore the field");
+    }
+
     [Test]
     public void EventPropertyNotifyChangedIgnore()
     {

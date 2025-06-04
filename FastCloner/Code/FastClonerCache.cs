@@ -5,6 +5,13 @@ namespace FastCloner.Code;
 
 internal static class FastClonerCache
 {
+    internal static readonly ConcurrentDictionary<Type, bool> AlwaysIgnoredTypes = [];
+
+    internal static bool IsTypeIgnored(Type type)
+    {
+        return AlwaysIgnoredTypes.TryGetValue(type, out _);
+    }
+    
     private static readonly ClrCache<object?> classCache = new ClrCache<object?>();
     private static readonly ClrCache<object?> structCache = new ClrCache<object?>();
     private static readonly ClrCache<object> deepClassToCache = new ClrCache<object>();
@@ -14,7 +21,8 @@ internal static class FastClonerCache
     private static readonly ClrCache<Dictionary<string, Type>> ignoredEventInfoCache = new ClrCache<Dictionary<string, Type>>();
     private static readonly ClrCache<List<MemberInfo>> allMembersCache = new ClrCache<List<MemberInfo>>();
     private static readonly GenericClrCache<MemberInfo, bool> memberIgnoreStatusCache = new GenericClrCache<MemberInfo, bool>();
-    
+    private static readonly ClrCache<bool> typeContainsIgnoredMembersCache = new ClrCache<bool>();
+
     public static object? GetOrAddField(Type type, Func<Type, object?> valueFactory) => fieldCache.GetOrAdd(type, valueFactory);
     public static object? GetOrAddClass(Type type, Func<Type, object?> valueFactory) => classCache.GetOrAdd(type, valueFactory);
     public static object? GetOrAddStructAsObject(Type type, Func<Type, object?> valueFactory) => structCache.GetOrAdd(type, valueFactory);
@@ -24,6 +32,10 @@ internal static class FastClonerCache
     public static Dictionary<string, Type> GetOrAddIgnoredEventInfo(Type type, Func<Type, Dictionary<string, Type>> valueFactory) => ignoredEventInfoCache.GetOrAdd(type, valueFactory);
     public static List<MemberInfo> GetOrAddAllMembers(Type type, Func<Type, List<MemberInfo>> valueFactory) => allMembersCache.GetOrAdd(type, valueFactory);
     public static bool GetOrAddMemberIgnoreStatus(MemberInfo memberInfo, Func<MemberInfo, bool> valueFactory) => memberIgnoreStatusCache.GetOrAdd(memberInfo, valueFactory);
+    public static bool GetOrAddTypeContainsIgnoredMembers(Type type, Func<Type, bool> valueFactory)
+    {
+        return type.IsValueType && typeContainsIgnoredMembersCache.GetOrAdd(type, valueFactory);
+    }
     
     /// <summary>
     /// Clears the FastCloner cached reflection metadata.

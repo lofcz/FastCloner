@@ -13,8 +13,14 @@ internal static class FastClonerExprGenerator
     internal static readonly ConcurrentDictionary<Type, Func<Type, bool, ExpressionPosition, object>> CustomTypeHandlers = [];
     private static readonly ConcurrentDictionary<FieldInfo, bool> readonlyFields = new ConcurrentDictionary<FieldInfo, bool>();
     private static readonly MethodInfo fieldSetMethod;
+    private static readonly Lazy<MethodInfo> _isTypeIgnoredMethodInfo = new Lazy<MethodInfo>(() => typeof(FastClonerCache).GetMethod(nameof(FastClonerCache.IsTypeIgnored), BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static, [typeof(Type)])!, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    internal static MethodInfo IsTypeIgnoredMethodInfo => _isTypeIgnoredMethodInfo.Value;
     
-    static FastClonerExprGenerator() => fieldSetMethod = typeof(FieldInfo).GetMethod(nameof(FieldInfo.SetValue), [typeof(object), typeof(object)])!;
+    static FastClonerExprGenerator()
+    {
+        fieldSetMethod = typeof(FieldInfo).GetMethod(nameof(FieldInfo.SetValue), [typeof(object), typeof(object)])!;
+    }
     
     internal static object? GenerateClonerInternal(Type realType, bool asObject) => GenerateProcessMethod(realType, asObject && realType.IsValueType());
 
@@ -25,6 +31,12 @@ internal static class FastClonerExprGenerator
             FastClonerIgnoreAttribute? attribute = mi.GetCustomAttribute<FastClonerIgnoreAttribute>();
             return attribute?.Ignored ?? false;
         });
+    }
+    
+    internal static bool CalculateTypeContainsIgnoredMembers(Type type)
+    {
+        IEnumerable<MemberInfo> members = FastClonerCache.GetOrAddAllMembers(type, GetAllMembers);
+        return members.Any(MemberIsIgnored);
     }
     
     internal static void ForceSetField(FieldInfo field, object obj, object value)
@@ -96,6 +108,28 @@ internal static class FastClonerExprGenerator
             return null;
         }
         
+        Type methodType = unboxStruct || type.IsClass() ? typeof(object) : type;
+        
+        if (FastClonerCache.IsTypeIgnored(type))
+        {
+            ParameterExpression pFrom = Expression.Parameter(methodType, "fromParam");
+            ParameterExpression pState = Expression.Parameter(typeof(FastCloneState), "stateParam");
+            Type funcGenericType = typeof(Func<,,>).MakeGenericType(methodType, typeof(FastCloneState), methodType);
+
+            Expression resultExpression;
+            
+            if (type.IsValueType && !unboxStruct)
+            {
+                resultExpression = Expression.Default(type);
+            }
+            else
+            {
+                resultExpression = Expression.Constant(null, methodType);
+            }
+
+            return Expression.Lambda(funcGenericType, resultExpression, pFrom, pState).Compile();
+        }
+        
         if (knownTypeProcessors.TryGetValue(type, out ProcessMethodDelegate? handler))
         {
             return handler.Invoke(type, unboxStruct, position);
@@ -135,11 +169,8 @@ internal static class FastClonerExprGenerator
                 return GenerateProcessTupleMethod(type);
             }
         }
-
-        Type methodType = unboxStruct || type.IsClass() ? typeof(object) : type;
-
+        
         List<Expression> expressionList = [];
-
         ParameterExpression from = Expression.Parameter(methodType);
         ParameterExpression fromLocal = from;
         ParameterExpression toLocal = Expression.Variable(type);
@@ -207,10 +238,56 @@ internal static class FastClonerExprGenerator
                 PropertyInfo pi => pi.PropertyType,
                 _ => throw new ArgumentException($"Unsupported member type: {member.GetType()}")
             };
-
+            
+            bool isWritable = member switch {
+                FieldInfo fi => !fi.IsInitOnly,
+                PropertyInfo pi => pi.CanWrite,
+                _ => false
+            } || type.IsClass() && member is FieldInfo { IsInitOnly: true };
+            
+            if (MemberIsIgnored(member))
+            {
+                if (isWritable)
+                {
+                    expressionList.Add(Expression.Assign(
+                        Expression.MakeMemberAccess(toLocal, member),
+                        Expression.Default(memberType)
+                    ));
+                }
+                continue;
+            }
+            
+            if (member is FieldInfo fieldInfoForEventCheck && ignoredEventDetails.TryGetValue(fieldInfoForEventCheck.Name, out Type? evtType))
+            {
+                if (evtType == memberType)
+                {
+                    if (isWritable)
+                    {
+                        expressionList.Add(Expression.Assign(
+                            Expression.MakeMemberAccess(toLocal, member),
+                            Expression.Default(memberType)
+                        ));
+                    }
+                    continue;
+                }
+            }
+            
+            if (FastClonerCache.IsTypeIgnored(memberType))
+            {
+                if (isWritable)
+                {
+                    expressionList.Add(Expression.Assign(
+                        Expression.MakeMemberAccess(toLocal, member),
+                        Expression.Default(memberType)
+                    ));
+                }
+                
+                continue;
+            }
+            
             if (member is PropertyInfo piLocal)
             {
-                if (MemberIsIgnored(piLocal))
+                if (isWritable && MemberIsIgnored(piLocal))
                 {
                     expressionList.Add(Expression.Assign(
                         Expression.Property(toLocal, piLocal),
@@ -252,29 +329,41 @@ internal static class FastClonerExprGenerator
                     
                     continue;
                 }
-
-                MethodInfo methodInfo = memberType.IsValueType()
+                
+                MethodInfo cloneMethodInfo = memberType.IsValueType()
                     ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!
                         .MakeGenericMethod(memberType)
                     : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
 
-                MemberExpression get = Expression.MakeMemberAccess(fromLocal, member);
-                Expression call = Expression.Call(methodInfo, get, state);
-            
-                if (!memberType.IsValueType())
-                    call = Expression.Convert(call, memberType);
+                MemberExpression getMemberValue = Expression.MakeMemberAccess(fromLocal, member);
+                Expression originalMemberValue = getMemberValue;
 
-                if (member is FieldInfo fieldInfo && readonlyFields.GetOrAdd(fieldInfo, f => f.IsInitOnly))
+                Expression callClone = Expression.Call(cloneMethodInfo, originalMemberValue, state);
+                
+                if (!memberType.IsValueType()) 
                 {
-                    expressionList.Add(Expression.Call(
-                        Expression.Constant(fieldInfo),
-                        fieldSetMethod,
-                        Expression.Convert(toLocal, typeof(object)),
-                        Expression.Convert(call, typeof(object))));
+                    callClone = Expression.Convert(callClone, memberType);
                 }
-                else
+                
+                Expression clonedValueExpression = callClone;
+            
+                switch (member)
                 {
-                    expressionList.Add(Expression.Assign(Expression.MakeMemberAccess(toLocal, member), call));
+                    case FieldInfo fieldInfo when readonlyFields.GetOrAdd(fieldInfo, f => f.IsInitOnly):
+                    {
+                        expressionList.Add(Expression.Call(
+                            Expression.Constant(fieldInfo),
+                            fieldSetMethod,
+                            Expression.Convert(toLocal, typeof(object)),
+                            Expression.Convert(clonedValueExpression, typeof(object))));
+                        break;
+                    }
+                    case PropertyInfo { CanWrite: true }:
+                    case FieldInfo:
+                    {
+                        expressionList.Add(Expression.Assign(Expression.MakeMemberAccess(toLocal, member), clonedValueExpression));
+                        break;
+                    }
                 }
 
                 currentPosition = currentPosition.Next();
@@ -298,6 +387,13 @@ internal static class FastClonerExprGenerator
     
     private static object GenerateHttpRequestOptionsProcessor(ExpressionPosition position)
     {
+        if (FastClonerCache.IsTypeIgnored(typeof(HttpRequestOptions)))
+        {
+            ParameterExpression pFrom = Expression.Parameter(typeof(object));
+            ParameterExpression pState = Expression.Parameter(typeof(FastCloneState));
+            return Expression.Lambda<Func<object, FastCloneState, object>>(pFrom, pFrom, pState).Compile();
+        }
+        
         ParameterExpression from = Expression.Parameter(typeof(object));
         ParameterExpression state = Expression.Parameter(typeof(FastCloneState));
         ParameterExpression result = Expression.Variable(typeof(HttpRequestOptions));
@@ -351,11 +447,38 @@ internal static class FastClonerExprGenerator
     {
         ParameterExpression enumerator = Expression.Variable(typeof(IEnumerator<KeyValuePair<string, object>>));
         ParameterExpression kvp = Expression.Variable(typeof(KeyValuePair<string, object>));
-        ParameterExpression value = Expression.Variable(typeof(object));
+        ParameterExpression valueToClone = Expression.Variable(typeof(object));
         LabelTarget breakLabel = CreateLoopLabel(position);
+        
+        Expression clonedLogic = Expression.Call(
+            typeof(FastClonerGenerator).GetMethod("CloneClassInternal", BindingFlags.NonPublic | BindingFlags.Static)!,
+            valueToClone,
+            state
+        );
+        
+        Expression typeOfValue = Expression.Call(valueToClone, typeof(object).GetMethod(nameof(GetType))!);
+        Expression isValueIgnored = Expression.Call(null, IsTypeIgnoredMethodInfo, typeOfValue);
+        Expression isValueNull = Expression.Equal(valueToClone, Expression.Constant(null, typeof(object)));
 
+        Expression valueIfNotDelegate =
+            Expression.Condition(
+            isValueNull,
+            Expression.Constant(null, typeof(object)),
+            Expression.Condition(
+                isValueIgnored,
+                Expression.Constant(null, typeof(object)),
+                clonedLogic
+            )
+        );
+
+        Expression finalValueExpression = Expression.Condition(
+            Expression.TypeIs(valueToClone, typeof(Delegate)),
+            valueToClone,
+            valueIfNotDelegate
+        );
+        
         return Expression.Block(
-            [enumerator, kvp, value],
+            [enumerator, kvp, valueToClone],
             Expression.Assign(
                 enumerator,
                 Expression.Call(
@@ -368,20 +491,12 @@ internal static class FastClonerExprGenerator
                     Expression.Call(enumerator, typeof(IEnumerator).GetMethod("MoveNext")!),
                     Expression.Block(
                         Expression.Assign(kvp, Expression.Property(enumerator, "Current")),
-                        Expression.Assign(value, Expression.Property(kvp, "Value")),
+                        Expression.Assign(valueToClone, Expression.Property(kvp, "Value")),
                         Expression.Call(
                             resultDict,
                             typeof(IDictionary<string, object>).GetMethod("Add")!,
                             Expression.Property(kvp, "Key"),
-                            Expression.Condition(
-                                Expression.TypeIs(value, typeof(Delegate)),
-                                value,
-                                Expression.Call(
-                                    typeof(FastClonerGenerator).GetMethod("CloneClassInternal", BindingFlags.NonPublic | BindingFlags.Static)!,
-                                    value,
-                                    state
-                                )
-                            )
+                            finalValueExpression 
                         )
                     ),
                     Expression.Break(breakLabel)
@@ -665,26 +780,46 @@ internal static class FastClonerExprGenerator
         
         LabelTarget breakLabel = Expression.Label("LoopBreak");
         
+        Expression originalKeyProperty = Expression.Property(kvp, "Key");
+        Expression clonedKeyCall = Expression.Call(keyCloneMethod, originalKeyProperty, state);
+        
+        if (!keyType.IsValueType())
+        {
+            clonedKeyCall = Expression.Convert(clonedKeyCall, keyType);
+        }
+
+        Expression keyForAdd = Expression.Condition(
+            Expression.Call(null, IsTypeIgnoredMethodInfo, Expression.Constant(keyType, typeof(Type))),
+            originalKeyProperty,
+            clonedKeyCall
+        );
+
+
+        Expression originalValueProperty = Expression.Property(kvp, "Value");
+        Expression clonedValueCall = Expression.Call(valueCloneMethod, originalValueProperty, state);
+        
+        if (!valueType.IsValueType())
+        {
+            clonedValueCall = Expression.Convert(clonedValueCall, valueType);
+        }
+
+        Expression valueForAdd = Expression.Condition(
+            Expression.Call(null, IsTypeIgnoredMethodInfo, Expression.Constant(valueType, typeof(Type))),
+            originalValueProperty,
+            clonedValueCall
+        );
+        
         BlockExpression loopBody = Expression.Block(
             [kvp, key, value],
             Expression.Assign(kvp, Expression.Property(enumerator, current)),
-            
             Expression.Assign(
                 key,
-                Expression.Convert(
-                    Expression.Call(keyCloneMethod, Expression.Property(kvp, "Key"), state),
-                    keyType
-                )
+                keyForAdd
             ),
-            
             Expression.Assign(
                 value,
-                Expression.Convert(
-                    Expression.Call(valueCloneMethod, Expression.Property(kvp, "Value"), state),
-                    valueType
-                )
+                valueForAdd
             ),
-            
             Expression.Assign(
                 result,
                 Expression.Call(result, addMethod, key, value)
@@ -758,19 +893,42 @@ internal static class FastClonerExprGenerator
         if (isSingleGenericParameter)
         {
             Type singleGenericType = dictionaryType.GetGenericArguments()[0];
+            
             if (singleGenericType.IsGenericType && singleGenericType.GetGenericTypeDefinition() == typeof(KeyValuePair<,>))
             {
                 Type[] kvpTypes = singleGenericType.GetGenericArguments();
                 ParameterExpression kvp = Expression.Variable(singleGenericType);
                 BinaryExpression assignKvp = Expression.Assign(kvp, Expression.Property(enumerator, current));
+                
+                Expression originalSingleKey = Expression.Property(kvp, "Key"); 
+                Expression clonedSingleKeyCall = Expression.Call(keyCloneMethod, originalSingleKey, state);
+                
+                if (!kvpTypes[0].IsValueType())
+                {
+                    clonedSingleKeyCall = Expression.Convert(clonedSingleKeyCall, kvpTypes[0]);
+                }
+                
+                Expression keyForNewKvp = Expression.Condition(
+                    Expression.Call(null, IsTypeIgnoredMethodInfo, Expression.Constant(kvpTypes[0], typeof(Type))),
+                    originalSingleKey,
+                    clonedSingleKeyCall
+                );
+                
+                Expression originalSingleValue = Expression.Property(kvp, "Value"); 
+                Expression clonedSingleValueCall = Expression.Call(valueCloneMethod, originalSingleValue, state);
+                if (!kvpTypes[1].IsValueType()) clonedSingleValueCall = Expression.Convert(clonedSingleValueCall, kvpTypes[1]);
+                
+                Expression valueForNewKvp = Expression.Condition(
+                    Expression.Call(null, IsTypeIgnoredMethodInfo, Expression.Constant(kvpTypes[1], typeof(Type))),
+                    originalSingleValue,
+                    clonedSingleValueCall
+                );
+                
                 NewExpression newKvp = Expression.New(
                     singleGenericType.GetConstructor([kvpTypes[0], kvpTypes[1]])!,
-                    Expression.Convert(
-                        Expression.Call(keyCloneMethod, Expression.Property(kvp, "Key"), state),
-                        kvpTypes[0]),
-                    Expression.Convert(
-                        Expression.Call(valueCloneMethod, Expression.Property(kvp, "Value"), state),
-                        kvpTypes[1]));
+                    Expression.Convert(keyForNewKvp, kvpTypes[0]), 
+                    Expression.Convert(valueForNewKvp, kvpTypes[1])  
+                );
                 MethodInfo collectionAddMethod = dictionaryType.GetMethod("Add", [singleGenericType])!;
                 MethodCallExpression addKvp = Expression.Call(local, collectionAddMethod, newKvp);
 
@@ -784,6 +942,7 @@ internal static class FastClonerExprGenerator
                 return Expression.Block(loop);
             }
         }
+        
         {
             Type kvpType = typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType);
             ParameterExpression kvp = Expression.Variable(kvpType);
@@ -791,17 +950,39 @@ internal static class FastClonerExprGenerator
             ParameterExpression value = Expression.Variable(valueType);
 
             BinaryExpression assignKvp = Expression.Assign(kvp, Expression.Property(enumerator, current));
-            BinaryExpression assignKey = Expression.Assign(
-                key,
-                Expression.Convert(
-                    Expression.Call(keyCloneMethod, Expression.Property(kvp, "Key"), state),
-                    keyType));
-            BinaryExpression assignValue = Expression.Assign(
-                value,
-                Expression.Convert(
-                    Expression.Call(valueCloneMethod, Expression.Property(kvp, "Value"), state),
-                    valueType));
+            
+            Expression originalKeyProperty = Expression.Property(kvp, "Key");
+            Expression clonedKeyCall = Expression.Call(keyCloneMethod, originalKeyProperty, state);
+            
+            if (!keyType.IsValueType())
+            {
+                clonedKeyCall = Expression.Convert(clonedKeyCall, keyType);
+            }
 
+            Expression keyToAssign = Expression.Condition(
+                Expression.Call(null, IsTypeIgnoredMethodInfo, Expression.Constant(keyType, typeof(Type))),
+                originalKeyProperty,
+                clonedKeyCall
+            );
+            
+            Expression originalValueProperty = Expression.Property(kvp, "Value");
+            Expression clonedValueCall = Expression.Call(valueCloneMethod, originalValueProperty, state);
+            
+            if (!valueType.IsValueType())
+            {
+                clonedValueCall = Expression.Convert(clonedValueCall, valueType);
+            }
+            
+            Expression valueToAssign = Expression.Condition(
+                Expression.Call(null, IsTypeIgnoredMethodInfo, Expression.Constant(valueType, typeof(Type))),
+                valueType.IsValueType
+                    ? Expression.Default(valueType)
+                    : Expression.Constant(null, valueType),
+                clonedValueCall
+            );
+            
+            BinaryExpression assignKey = Expression.Assign(key, keyToAssign);
+            BinaryExpression assignValue = Expression.Assign(value, valueToAssign);
             MethodCallExpression addKvp = Expression.Call(local, addMethod, key, value);
 
             LoopExpression loop = Expression.Loop(
@@ -825,20 +1006,38 @@ internal static class FastClonerExprGenerator
         ParameterExpression key = Expression.Variable(typeof(object));
         ParameterExpression value = Expression.Variable(typeof(object));
 
-        BinaryExpression assignKey = Expression.Assign(
-            key,
-            Expression.Call(
-                keyCloneMethod,
-                Expression.Property(current, "Key"),
-                state));
-
-        BinaryExpression assignValue = Expression.Assign(
-            value,
-            Expression.Call(
-                valueCloneMethod,
-                Expression.Property(current, "Value"),
-                state));
-
+        Expression originalKeyObject = Expression.Property(current, "Key"); 
+        Expression clonedKeyCall = Expression.Call(keyCloneMethod, originalKeyObject, state); 
+        
+        Expression keyRuntimeType = Expression.Call(originalKeyObject, typeof(object).GetMethod(nameof(GetType))!);
+        Expression isKeyIgnored = Expression.Call(null, IsTypeIgnoredMethodInfo, keyRuntimeType);
+        
+        Expression keyToAssign = Expression.Condition(
+            Expression.OrElse(
+                Expression.Equal(originalKeyObject, Expression.Constant(null, typeof(object))),
+                isKeyIgnored
+            ),
+            originalKeyObject,
+            clonedKeyCall
+        );
+        
+        Expression originalValueObject = Expression.Property(current, "Value"); 
+        Expression clonedValueCall = Expression.Call(valueCloneMethod, originalValueObject, state); 
+        
+        Expression valueRuntimeType = Expression.Call(originalValueObject, typeof(object).GetMethod(nameof(GetType))!);
+        Expression isValueIgnored = Expression.Call(null, IsTypeIgnoredMethodInfo, valueRuntimeType);
+        
+        Expression valueToAssign = Expression.Condition(
+            Expression.OrElse(
+                Expression.Equal(originalValueObject, Expression.Constant(null, typeof(object))),
+                isValueIgnored
+            ),
+            originalValueObject,
+            clonedValueCall
+        );
+        
+        BinaryExpression assignKey = Expression.Assign(key, keyToAssign);
+        BinaryExpression assignValue = Expression.Assign(value, valueToAssign);
         MethodCallExpression addEntry = Expression.Call(local, addMethod, key, value);
         LabelTarget breakLabel = CreateLoopLabel(position);
 
@@ -858,6 +1057,13 @@ internal static class FastClonerExprGenerator
 
     private static object GenerateProcessSetMethod(Type type, ExpressionPosition position)
     {
+        if (FastClonerCache.IsTypeIgnored(type))
+        {
+            ParameterExpression pFrom = Expression.Parameter(typeof(object));
+            ParameterExpression pState = Expression.Parameter(typeof(FastCloneState));
+            return Expression.Lambda<Func<object, FastCloneState, object>>(pFrom, pFrom, pState).Compile();
+        }
+        
         Type elementType = type.GenericArguments()[0];
 
         MethodInfo cloneElementMethod = elementType.IsValueType()
@@ -886,6 +1092,11 @@ internal static class FastClonerExprGenerator
         ParameterExpression innerSet = isReadOnly 
             ? Expression.Variable(innerSetType)
             : local;
+        
+        BinaryExpression assignInnerSet = Expression.Assign(
+            innerSet, 
+            Expression.New(innerSetType.GetConstructor(Type.EmptyTypes)!)
+        );
 
         // Initialize set
         BinaryExpression assign = Expression.Assign(
@@ -916,26 +1127,22 @@ internal static class FastClonerExprGenerator
             state, 
             position
         );
-
-        // Create final ReadOnlySet if needed
-        Expression finalAssign = isReadOnly
-            ? Expression.Assign(
-                local,
-                Expression.New(
-                    type.GetConstructor([innerSetType])!,
-                    innerSet
-                ))
-            : Expression.Empty();
-
+        
+        Expression createMutableColl = assignInnerSet; 
+        Expression createFinalCollShell = isReadOnly ?
+            Expression.Assign(local, Expression.New(type.GetConstructor([innerSetType])!, innerSet)) :
+            Expression.Empty();
+        
         Type funcType = typeof(Func<object, FastCloneState, object>);
 
         return Expression.Lambda(
             funcType, 
             Expression.Block(
                 isReadOnly ? [local, innerSet] : new[] { local },
-                assign,
-                foreachBlock,
-                finalAssign,
+                createMutableColl,
+                createFinalCollShell, 
+                Expression.Call(state, StaticMethodInfos.DeepCloneStateMethods.AddKnownRef, from, local), 
+                foreachBlock, 
                 local
             ), 
             from, 
@@ -1041,17 +1248,26 @@ internal static class FastClonerExprGenerator
             ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(elementType)
             : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
         
+        Expression originalElementProperty = Expression.Property(enumerator, current!);
+        Expression clonedElementCall = Expression.Call(elementCloneMethod, originalElementProperty, state);
+        
+        if (!elementType.IsValueType())
+        {
+            clonedElementCall = Expression.Convert(clonedElementCall, elementType);
+        }
+        
+        Expression elementForAdd = Expression.Condition(
+            Expression.Call(null, IsTypeIgnoredMethodInfo, Expression.Constant(elementType, typeof(Type))),
+            elementType.IsValueType
+                ? Expression.Default(elementType)
+                : Expression.Constant(null, elementType),
+            clonedElementCall
+        );
+        
         BlockExpression loopBody = Expression.Block(
             [element],
-            Expression.Assign(
-                element,
-                Expression.Convert(
-                    Expression.Call(elementCloneMethod, Expression.Property(enumerator, current), state),
-                    elementType
-                )
-            ),
-            
-            Expression.Assign(
+            Expression.Assign(element, elementForAdd), 
+            Expression.Assign( 
                 result,
                 Expression.Call(result, addMethod, element)
             )
@@ -1059,28 +1275,21 @@ internal static class FastClonerExprGenerator
         
         LoopExpression loop = Expression.Loop(
             Expression.IfThenElse(
-                Expression.Call(enumerator, typeof(IEnumerator).GetMethod("MoveNext")),
+                Expression.Call(enumerator, typeof(IEnumerator).GetMethod("MoveNext")!),
                 loopBody,
                 Expression.Break(breakLabel)
             ),
             breakLabel
         );
         
-        MethodCallExpression addRef = Expression.Call(
-            state,
-            StaticMethodInfos.DeepCloneStateMethods.AddKnownRef,
-            from,
-            result
-        );
-        
         BlockExpression block = Expression.Block(
             [typedFrom, result, enumerator],
             nullCheck,
             castFrom,
-            createEmpty,
+            createEmpty, 
+            Expression.Call(state, StaticMethodInfos.DeepCloneStateMethods.AddKnownRef, from, result), 
             assignEnumerator,
-            loop,
-            addRef,
+            loop, 
             Expression.Label(returnNullLabel, Expression.Convert(result, typeof(object)))
         );
 
@@ -1093,6 +1302,14 @@ internal static class FastClonerExprGenerator
     
     private static object GenerateProcessArrayMethod(Type type)
     {
+        if (FastClonerCache.IsTypeIgnored(type))
+        {
+            ParameterExpression pFrom = Expression.Parameter(typeof(object));
+            ParameterExpression pState = Expression.Parameter(typeof(FastCloneState));
+            Type ft = typeof(Func<,,>).MakeGenericType(typeof(object), typeof(FastCloneState), typeof(object));
+            return Expression.Lambda(ft, pFrom, pFrom, pState).Compile();
+        }
+        
         Type? elementType = type.GetElementType();
         int rank = type.GetArrayRank();
 
@@ -1113,9 +1330,25 @@ internal static class FastClonerExprGenerator
         }
         else
         {
-            string methodName = nameof(FastClonerGenerator.Clone1DimArrayClassInternal);
-            if (FastClonerSafeTypes.CanReturnSameObject(elementType)) methodName = nameof(FastClonerGenerator.Clone1DimArraySafeInternal);
-            else if (elementType.IsValueType()) methodName = nameof(FastClonerGenerator.Clone1DimArrayStructInternal);
+            string methodName;
+
+            if (FastClonerCache.IsTypeIgnored(elementType))
+            {
+                methodName = elementType.IsValueType ? nameof(FastClonerGenerator.Clone1DimArrayStructInternal) : nameof(FastClonerGenerator.Clone1DimArrayClassInternal);
+            }
+            else if (FastClonerSafeTypes.CanReturnSameObject(elementType))
+            {
+                methodName = nameof(FastClonerGenerator.Clone1DimArraySafeInternal);
+            }
+            else if (elementType.IsValueType())
+            {
+                methodName = nameof(FastClonerGenerator.Clone1DimArrayStructInternal);
+            }
+            else
+            {
+                methodName = nameof(FastClonerGenerator.Clone1DimArrayClassInternal);
+            }
+        
             methodInfo = typeof(FastClonerGenerator).GetPrivateStaticMethod(methodName)!.MakeGenericMethod(elementType);
         }
 
@@ -1162,46 +1395,82 @@ internal static class FastClonerExprGenerator
 
     private static BlockExpression GenerateSetAddBlock(ParameterExpression enumerator, PropertyInfo current, Type elementType, MethodInfo cloneElementMethod, ParameterExpression local, MethodInfo addMethod, ParameterExpression state)
     {
-        ParameterExpression element = Expression.Variable(elementType);
-        BinaryExpression assignElement = Expression.Assign(
-            element,
-            Expression.Convert(
-                Expression.Call(cloneElementMethod, Expression.Property(enumerator, current), state),
-                elementType
-            )
+        ParameterExpression elementVar = Expression.Variable(elementType); 
+        Expression originalElement = Expression.Property(enumerator, current);
+        Expression clonedElementCall = Expression.Call(cloneElementMethod, originalElement, state);
+        
+        if (!elementType.IsValueType())
+        {
+            clonedElementCall = Expression.Convert(clonedElementCall, elementType);
+        }
+        
+        Expression elementToAssign = Expression.Condition(
+            Expression.Call(null, IsTypeIgnoredMethodInfo, Expression.Constant(elementType, typeof(Type))),
+            originalElement,
+            clonedElementCall
         );
-        MethodCallExpression addElement = Expression.Call(local, addMethod, element);
 
-        return Expression.Block([element], assignElement, addElement);
+        BinaryExpression assignElement = Expression.Assign(elementVar, elementToAssign);
+        MethodCallExpression addElement = Expression.Call(local, addMethod, elementVar);
+
+        return Expression.Block([elementVar], assignElement, addElement);
     }
     
     private static BlockExpression GenerateDictionaryAddBlock(ParameterExpression enumerator, PropertyInfo current, Type keyType, Type valueType, MethodInfo cloneKeyMethod, MethodInfo cloneValueMethod, ParameterExpression local, MethodInfo addMethod, ParameterExpression state)
     {
-        ParameterExpression kvp = Expression.Variable(typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType));
+        Type kvpType = typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType);
+        ParameterExpression kvp = Expression.Variable(kvpType);
         BinaryExpression assignKvp = Expression.Assign(kvp, Expression.Property(enumerator, current));
 
-        ParameterExpression key = Expression.Variable(keyType);
-        ParameterExpression value = Expression.Variable(valueType);
+        ParameterExpression keyVar = Expression.Variable(keyType); 
+        ParameterExpression valueVar = Expression.Variable(valueType); 
 
-        BinaryExpression assignKey = Expression.Assign(
-            key,
-            Expression.Convert(
-                Expression.Call(cloneKeyMethod, Expression.Property(kvp, "Key"), state),
-                keyType));
+        Expression originalKeyProperty = Expression.Property(kvp, "Key");
+        Expression clonedKeyCall = Expression.Call(cloneKeyMethod, originalKeyProperty, state);
+        
+        if (!keyType.IsValueType())
+        {
+            clonedKeyCall = Expression.Convert(clonedKeyCall, keyType);
+        }
 
-        BinaryExpression assignValue = Expression.Assign(
-            value,
-            Expression.Convert(
-                Expression.Call(cloneValueMethod, Expression.Property(kvp, "Value"), state),
-                valueType));
+        Expression keyToAssign = Expression.Condition(
+            Expression.Call(null, IsTypeIgnoredMethodInfo, Expression.Constant(keyType, typeof(Type))),
+            originalKeyProperty,
+            clonedKeyCall
+        );
 
-        MethodCallExpression addKvp = Expression.Call(local, addMethod, key, value);
+        Expression originalValueProperty = Expression.Property(kvp, "Value");
+        Expression clonedValueCall = Expression.Call(cloneValueMethod, originalValueProperty, state);
+        
+        if (!valueType.IsValueType())
+        {
+            clonedValueCall = Expression.Convert(clonedValueCall, valueType);
+        }
 
-        return Expression.Block([kvp, key, value], assignKvp, assignKey, assignValue, addKvp);
+        Expression valueToAssign = Expression.Condition(
+            Expression.Call(null, IsTypeIgnoredMethodInfo, Expression.Constant(valueType, typeof(Type))),
+            originalValueProperty,
+            clonedValueCall
+        );
+
+        BinaryExpression assignKey = Expression.Assign(keyVar, keyToAssign);
+        BinaryExpression assignValue = Expression.Assign(valueVar, valueToAssign);
+
+        MethodCallExpression addKvp = Expression.Call(local, addMethod, keyVar, valueVar);
+
+        return Expression.Block([kvp, keyVar, valueVar], assignKvp, assignKey, assignValue, addKvp);
     }
 
     private static object GenerateProcessTupleMethod(Type type)
     {
+        if (FastClonerCache.IsTypeIgnored(type))
+        {
+            ParameterExpression pFrom = Expression.Parameter(typeof(object));
+            ParameterExpression pState = Expression.Parameter(typeof(FastCloneState));
+            Type ft = typeof(Func<,,>).MakeGenericType(typeof(object), typeof(FastCloneState), typeof(object));
+            return Expression.Lambda(ft, pFrom, pFrom, pState).Compile();
+        }
+        
         ParameterExpression from = Expression.Parameter(typeof(object));
         ParameterExpression state = Expression.Parameter(typeof(FastCloneState));
 
@@ -1223,8 +1492,11 @@ internal static class FastClonerExprGenerator
             funcType,
             Expression.Block(
                 [local],
-                             assign, constructor, Expression.Call(state, StaticMethodInfos.DeepCloneStateMethods.AddKnownRef, from, local),
-                             from),
+                assign, 
+                constructor, 
+                Expression.Call(state, StaticMethodInfos.DeepCloneStateMethods.AddKnownRef, from, local),
+                Expression.Convert(local, typeof(object)) 
+            ),
             from, state).Compile();
     }
 }

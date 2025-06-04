@@ -11,7 +11,7 @@ namespace FastCloner.Code;
 /// </summary>
 internal static class FastClonerSafeTypes
 {
-    private static readonly ConcurrentDictionary<Type, bool> knownTypes = new ConcurrentDictionary<Type, bool>
+    internal static readonly Dictionary<Type, bool> DefaultKnownTypes = new Dictionary<Type, bool>(34)
     {
         // Primitives
         [typeof(byte)] = true,
@@ -32,7 +32,7 @@ internal static class FastClonerSafeTypes
         [typeof(nuint)] = true,
         [typeof(Guid)] = true,
         [typeof(Rune)] = true,
-        
+
         // Time-related types
         [typeof(TimeSpan)] = true,
         [typeof(TimeZoneInfo)] = true,
@@ -40,13 +40,13 @@ internal static class FastClonerSafeTypes
         [typeof(DateTimeOffset)] = true,
         [typeof(DateOnly)] = true,
         [typeof(TimeOnly)] = true,
-        
+
         // Numeric types
         [typeof(Half)] = true,
         [typeof(Int128)] = true,
         [typeof(UInt128)] = true,
         [typeof(Complex)] = true,
-        
+
         // Others
         [typeof(DBNull)] = true,
         [StringComparer.Ordinal.GetType()] = true,
@@ -57,15 +57,22 @@ internal static class FastClonerSafeTypes
         [typeof(Index)] = true
     };
 
+    private static readonly ConcurrentDictionary<Type, bool> knownTypes = [];
+
     static FastClonerSafeTypes()
     {
+        foreach (KeyValuePair<Type, bool> x in DefaultKnownTypes)
+        {
+            knownTypes.TryAdd(x.Key, x.Value);
+        }
+        
         List<Type?> safeTypes =
         [
             Type.GetType("System.RuntimeType"),
             Type.GetType("System.RuntimeTypeHandle")
         ];
 
-        foreach (Type? x in safeTypes.OfType<Type>())
+        foreach (Type x in safeTypes.OfType<Type>())
         {
             knownTypes.TryAdd(x, true);
         }

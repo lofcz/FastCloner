@@ -8,15 +8,40 @@ internal static class FastClonerGenerator
 {
     public static T? CloneObject<T>(T? obj)
     {
+        if (obj is null)
+        {
+            return default;
+        }
+        
+        Type concreteTypeOfObj = obj.GetType();
+        Type typeOfT = typeof(T);
+        
+        if (FastClonerCache.AlwaysIgnoredTypes.ContainsKey(concreteTypeOfObj))
+        {
+            return default;
+        }
+        
+        if (FastClonerSafeTypes.DefaultKnownTypes.TryGetValue(concreteTypeOfObj, out _))
+        {
+            return obj;
+        }
+        
         switch (obj)
         {
             case ValueType:
             {
                 Type type = obj.GetType();
                 
-                if (typeof(T) == type)
+                if (typeOfT == type)
                 {
-                    return FastClonerSafeTypes.CanReturnSameObject(type) ? obj : CloneStructInternal(obj, new FastCloneState());
+                    bool hasIgnoredMembers = FastClonerCache.GetOrAddTypeContainsIgnoredMembers(type, FastClonerExprGenerator.CalculateTypeContainsIgnoredMembers);
+                    
+                    if (hasIgnoredMembers || !FastClonerSafeTypes.CanReturnSameObject(type))
+                    {
+                        return CloneStructInternal(obj, new FastCloneState());
+                    }
+                    
+                    return obj;
                 }
 
                 break;
@@ -54,8 +79,15 @@ internal static class FastClonerGenerator
         {
             return null;
         }
+        
+        Type objType = obj.GetType();
+        
+        if (FastClonerCache.IsTypeIgnored(objType))
+        {
+            return null;
+        }
 
-        Func<object, FastCloneState, object>? cloner = (Func<object, FastCloneState, object>?)FastClonerCache.GetOrAddClass(obj.GetType(), t => GenerateCloner(t, true));
+        Func<object, FastCloneState, object>? cloner = (Func<object, FastCloneState, object>?)FastClonerCache.GetOrAddClass(objType, t => GenerateCloner(t, true));
 
         // safe object
         if (cloner is null)
@@ -68,16 +100,21 @@ internal static class FastClonerGenerator
         return knownRef ?? cloner(obj, state);
     }
 
-    internal static T CloneStructInternal<T>(T obj, FastCloneState state) // where T : struct
+    internal static T CloneStructInternal<T>(T obj, FastCloneState state)
     {
+        Type typeT = typeof(T);
+        Type? underlyingTypeT = Nullable.GetUnderlyingType(typeT);
+        
+        if (FastClonerCache.AlwaysIgnoredTypes.ContainsKey(typeT) || (underlyingTypeT != null && FastClonerCache.AlwaysIgnoredTypes.ContainsKey(underlyingTypeT)))
+        {
+            return default;
+        }
+        
         // no loops, no nulls, no inheritance
         Func<T, FastCloneState, T>? cloner = GetClonerForValueType<T>();
 
         // safe object
-        if (cloner is null)
-            return obj;
-
-        return cloner(obj, state);
+        return cloner is null ? obj : cloner(obj, state);
     }
 
     // when we can't use code generation, we can use these methods

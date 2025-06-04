@@ -7,9 +7,7 @@ internal static class ClonerToExprGenerator
 {
     internal static object GenerateClonerInternal(Type realType, bool isDeepClone)
     {
-        if (realType.IsValueType())
-            throw new InvalidOperationException("Operation is valid only for reference types");
-        return GenerateProcessMethod(realType, isDeepClone);
+        return realType.IsValueType() ? throw new InvalidOperationException("Operation is valid only for reference types") : GenerateProcessMethod(realType, isDeepClone);
     }
 
     private static object GenerateProcessMethod(Type type, bool isDeepClone)
