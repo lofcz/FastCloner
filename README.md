@@ -52,6 +52,18 @@ TestPropsWithIgnored original = new TestPropsWithIgnored { A = 42, B = "Test val
 TestPropsWithIgnored clone = original.DeepClone(); // clone.B is null (default value of a given type)
 ```
 
+You might also need to exclude certain types from being cloned ever. To do that, put offending types on a blacklist:
+```cs
+FastCloner.IgnoreType(typeof(PropertyChangedEventHandler)); // or FastCloner.IgnoreTypes([ .. ])
+```
+
+If needed, the type can be removed from the blacklist later:
+```cs
+// note: doing this invalidates precompiled expressions and clears the cache,
+// performance will be negatively affected until the cache is repopulated
+FastCloner.ClearIgnoredTypes();
+```
+
 Apart from deep cloning, FastCloner supports shallow cloning and deep cloning _to_ target:
 
 ```csharp
