@@ -38,11 +38,11 @@ public static T? DeepClone<T>(this T? obj)
 
 _The following examples assume you've copied the extension method above._
 
-Sometimes, you might want to exclude certain fields & properties from cloning:
+Sometimes, you might want to exclude certain fields (including event synthesized) and properties from cloning:
 ```csharp
 private class TestPropsWithIgnored
 {
-    [FastClonerIgnore] // <-- decorate such members with [FastClonerIgnore]
+    [FastClonerIgnore] // <-- decorate with [FastClonerIgnore]
     public string B { get; set; } = "My string";
 
     public int A { get; set; } = 10;
