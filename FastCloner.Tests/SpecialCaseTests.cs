@@ -1972,15 +1972,51 @@ public class SpecialCaseTests
             Assert.That(newSet.Contains(6), Is.True, "New set should have correct added element");
         });
     }
+
+    class EventPropertyNotifyChangedCls
+    {
+        [FastClonerIgnore]
+        public event PropertyChangedEventHandler? PropertyChanged = (_, _) =>
+        {
+        
+        };
+    
+        public List<int> TestList { get; set; } = [1, 2, 3];
+        
+        public bool HasPropertyChangedSubscribers()
+        {
+            return PropertyChanged != null;
+        }
+    }
+
+    [Test]
+    public void EventPropertyNotifyChangedIgnore()
+    {
+        // Arrange
+        EventPropertyNotifyChangedCls cls = new EventPropertyNotifyChangedCls();
+    
+        // Act
+        EventPropertyNotifyChangedCls cloned = cls.DeepClone();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(cls), "Should create new instance");
+            Assert.That(cls.HasPropertyChangedSubscribers(), Is.True, "Original should have event subscribers");
+            Assert.That(cloned.HasPropertyChangedSubscribers(), Is.False, "Ignored event should be null after cloning");
+            Assert.That(cloned.TestList, Is.Not.SameAs(cls.TestList), "TestList should be deep cloned");
+            Assert.That(cloned.TestList, Is.EqualTo(cls.TestList), "TestList content should be preserved");
+        });
+    }
     
     [Test]
     public void ImmutableDictionary_DeepClone_WithComplexObjects_ShouldCreateDeepCopy()
     {
         // Arrange
-        var complexObj1 = new Person { Name = "Alice", Age = 30 };
-        var complexObj2 = new Person { Name = "Bob", Age = 25 };
+        Person complexObj1 = new Person { Name = "Alice", Age = 30 };
+        Person complexObj2 = new Person { Name = "Bob", Age = 25 };
         
-        var original = ImmutableDictionary.CreateRange(new Dictionary<string, Person>
+        ImmutableDictionary<string, Person> original = ImmutableDictionary.CreateRange(new Dictionary<string, Person>
         {
             ["person1"] = complexObj1,
             ["person2"] = complexObj2
@@ -2013,8 +2049,8 @@ public class SpecialCaseTests
             Assert.That(person1Value.Name, Is.EqualTo("Alice"), "Retrieved value should have correct properties");
             Assert.That(person2Value.Name, Is.EqualTo("Bob"), "Retrieved value should have correct properties");
             
-            var newPerson = new Person { Name = "Charlie", Age = 35 };
-            var newDict = cloned.Add("person3", newPerson);
+            Person newPerson = new Person { Name = "Charlie", Age = 35 };
+            ImmutableDictionary<string, Person> newDict = cloned.Add("person3", newPerson);
             Assert.That(cloned.Count, Is.EqualTo(2), "Original cloned dictionary should remain unchanged after add");
             Assert.That(newDict.Count, Is.EqualTo(3), "New dictionary should contain added element");
             Assert.That(newDict["person3"].Name, Is.EqualTo("Charlie"), "New dictionary should have correct added element");

@@ -20,8 +20,11 @@ internal static class FastClonerExprGenerator
 
     private static bool MemberIsIgnored(MemberInfo memberInfo)
     {
-        FastClonerIgnoreAttribute? attribute = memberInfo.GetCustomAttribute<FastClonerIgnoreAttribute>();
-        return attribute?.Ignored ?? false;
+        return FastClonerCache.GetOrAddMemberIgnoreStatus(memberInfo, mi =>
+        {
+            FastClonerIgnoreAttribute? attribute = mi.GetCustomAttribute<FastClonerIgnoreAttribute>();
+            return attribute?.Ignored ?? false;
+        });
     }
     
     internal static void ForceSetField(FieldInfo field, object obj, object value)
@@ -80,16 +83,18 @@ internal static class FastClonerExprGenerator
         {
             members.AddRange(currentType.GetDeclaredFields());
             members.AddRange(currentType.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Where(p => p is { CanRead: true, CanWrite: true } && p.GetIndexParameters().Length == 0)); // Exclude indexers
-            currentType = currentType.BaseType();
+            currentType = currentType.BaseType;
         }
-        
+
         return members;
     }
     
     private static object? GenerateProcessMethod(Type type, bool unboxStruct, ExpressionPosition position)
     {
         if (!IsCloneable(type))
+        {
             return null;
+        }
         
         if (knownTypeProcessors.TryGetValue(type, out ProcessMethodDelegate? handler))
         {
@@ -174,7 +179,25 @@ internal static class FastClonerExprGenerator
         }
 
         ExpressionPosition currentPosition = position;
-        IEnumerable<MemberInfo> members = GetAllMembers(type);
+        IEnumerable<MemberInfo> members = FastClonerCache.GetOrAddAllMembers(type, GetAllMembers);
+        Dictionary<string, Type> ignoredEventDetails = FastClonerCache.GetOrAddIgnoredEventInfo(type, t =>
+        {
+            Dictionary<string, Type> details = new Dictionary<string, Type>();
+            EventInfo[] events = t.GetEvents(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            
+            foreach (EventInfo evtInfo in events)
+            {
+                if (MemberIsIgnored(evtInfo)) 
+                {
+                    if (evtInfo.EventHandlerType is not null)
+                    {
+                        details[evtInfo.Name] = evtInfo.EventHandlerType;
+                    }
+                }
+            }
+            
+            return details;
+        });
         
         foreach (MemberInfo member in members)
         {
@@ -187,9 +210,7 @@ internal static class FastClonerExprGenerator
 
             if (member is PropertyInfo piLocal)
             {
-                FastClonerIgnoreAttribute? attribute = piLocal.GetCustomAttribute<FastClonerIgnoreAttribute>();
-                
-                if (attribute?.Ignored ?? false)
+                if (MemberIsIgnored(piLocal))
                 {
                     expressionList.Add(Expression.Assign(
                         Expression.Property(toLocal, piLocal),
@@ -202,12 +223,33 @@ internal static class FastClonerExprGenerator
 
             if (!FastClonerSafeTypes.CanReturnSameObject(memberType))
             {
+                bool shouldBeIgnored = false;
+
                 if (MemberIsIgnored(member))
                 {
-                    expressionList.Add(Expression.Assign(
-                        Expression.MakeMemberAccess(toLocal, member),
-                        Expression.Default(memberType)
-                    ));
+                    shouldBeIgnored = true;
+                }
+                else if (member is FieldInfo fi)
+                {
+                    if (ignoredEventDetails.TryGetValue(fi.Name, out Type? eventHandlerTypeFromCache))
+                    {
+                        if (eventHandlerTypeFromCache == fi.FieldType)
+                        {
+                            shouldBeIgnored = true;
+                        }
+                    }
+                }
+                
+                if (shouldBeIgnored)
+                {
+                    if (member is FieldInfo or PropertyInfo { CanWrite: true })
+                    {
+                        expressionList.Add(Expression.Assign(
+                            Expression.MakeMemberAccess(toLocal, member),
+                            Expression.Default(memberType)
+                        ));
+                    }
+                    
                     continue;
                 }
 

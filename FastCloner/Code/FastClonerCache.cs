@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Reflection;
 
 namespace FastCloner.Code;
 
@@ -10,14 +11,23 @@ internal static class FastClonerCache
     private static readonly ClrCache<object> shallowClassToCache = new ClrCache<object>();
     private static readonly ConcurrentLazyCache<object> typeConvertCache = new ConcurrentLazyCache<object>();
     private static readonly ClrCache<object?> fieldCache = new ClrCache<object?>();
-
+    private static readonly ClrCache<Dictionary<string, Type>> ignoredEventInfoCache = new ClrCache<Dictionary<string, Type>>();
+    private static readonly ClrCache<List<MemberInfo>> allMembersCache = new ClrCache<List<MemberInfo>>();
+    private static readonly GenericClrCache<MemberInfo, bool> memberIgnoreStatusCache = new GenericClrCache<MemberInfo, bool>();
+    
     public static object? GetOrAddField(Type type, Func<Type, object?> valueFactory) => fieldCache.GetOrAdd(type, valueFactory);
     public static object? GetOrAddClass(Type type, Func<Type, object?> valueFactory) => classCache.GetOrAdd(type, valueFactory);
     public static object? GetOrAddStructAsObject(Type type, Func<Type, object?> valueFactory) => structCache.GetOrAdd(type, valueFactory);
     public static object GetOrAddDeepClassTo(Type type, Func<Type, object> valueFactory) => deepClassToCache.GetOrAdd(type, valueFactory);
     public static object GetOrAddShallowClassTo(Type type, Func<Type, object> valueFactory) => shallowClassToCache.GetOrAdd(type, valueFactory);
     public static T GetOrAddConvertor<T>(Type from, Type to, Func<Type, Type, T> valueFactory) => (T)typeConvertCache.GetOrAdd(from, to, (f, t) => valueFactory(f, t));
-
+    public static Dictionary<string, Type> GetOrAddIgnoredEventInfo(Type type, Func<Type, Dictionary<string, Type>> valueFactory) => ignoredEventInfoCache.GetOrAdd(type, valueFactory);
+    public static List<MemberInfo> GetOrAddAllMembers(Type type, Func<Type, List<MemberInfo>> valueFactory) => allMembersCache.GetOrAdd(type, valueFactory);
+    public static bool GetOrAddMemberIgnoreStatus(MemberInfo memberInfo, Func<MemberInfo, bool> valueFactory) => memberIgnoreStatusCache.GetOrAdd(memberInfo, valueFactory);
+    
+    /// <summary>
+    /// Clears the FastCloner cached reflection metadata.
+    /// </summary>
     public static void ClearCache()
     {
         classCache.Clear();
@@ -25,6 +35,23 @@ internal static class FastClonerCache
         deepClassToCache.Clear();
         shallowClassToCache.Clear();
         typeConvertCache.Clear();
+        fieldCache.Clear();
+        ignoredEventInfoCache.Clear();
+        allMembersCache.Clear();
+        memberIgnoreStatusCache.Clear();
+    }
+    
+    private class GenericClrCache<TKey, TValue> where TKey : notnull
+    {
+        private readonly ConcurrentDictionary<TKey, Lazy<TValue>> cache = new ConcurrentDictionary<TKey, Lazy<TValue>>();
+
+        public TValue GetOrAdd(TKey key, Func<TKey, TValue> valueFactory)
+        {
+            Lazy<TValue> lazy = cache.GetOrAdd(key, k => new Lazy<TValue>(() => valueFactory(k), LazyThreadSafetyMode.ExecutionAndPublication));
+            return lazy.Value;
+        }
+
+        public void Clear() => cache.Clear();
     }
     
     private class ClrCache<TValue>
