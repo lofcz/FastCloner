@@ -57,7 +57,7 @@ You might also need to exclude certain types from being cloned ever. To do that,
 FastCloner.IgnoreType(typeof(PropertyChangedEventHandler)); // or FastCloner.IgnoreTypes([ .. ])
 ```
 
-If needed, the type can be removed from the blacklist later:
+If needed, the types can be removed from the blacklist later:
 ```cs
 // note: doing this invalidates precompiled expressions and clears the cache,
 // performance will be negatively affected until the cache is repopulated
