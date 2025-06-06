@@ -82,7 +82,7 @@ jobs:
         sha: ${{ github.event.pull_request.head.sha || github.sha }}
         target_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-  build-net462:
+  build-net46:
     runs-on: windows-latest
     
     steps:
@@ -99,16 +99,16 @@ jobs:
       with:
         node-version: '22'
         
-    - name: Build FastCloner for net462
-      run: dotnet build FastCloner/ --framework net462
+    - name: Build FastCloner for net46
+      run: dotnet build FastCloner/ --framework net46
 
     - name: Update GitHub status check
       if: always()
       uses: Sibz/github-status-action@v1
       with: 
         authToken: ${{secrets.GITHUB_TOKEN}}
-        context: 'Build (net462)'
-        description: 'The build for net462 ${{ job.status == ''success'' && ''passed'' || ''failed'' }}'
+        context: 'Build (net46)'
+        description: 'The build for net46 ${{ job.status == ''success'' && ''passed'' || ''failed'' }}'
         state: ${{ job.status == 'success' && 'success' || 'failure' }}
         sha: ${{ github.event.pull_request.head.sha || github.sha }}
         target_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
