@@ -1,6 +1,8 @@
 ﻿using System.Collections;
 using System.Collections.Concurrent;
+#if NET8_0_OR_GREATER
 using System.Collections.Frozen;
+#endif
 using System.Collections.ObjectModel;
 using System.Dynamic;
 using System.Linq.Expressions;
@@ -13,9 +15,14 @@ internal static class FastClonerExprGenerator
     internal static readonly ConcurrentDictionary<Type, Func<Type, bool, ExpressionPosition, object>> CustomTypeHandlers = [];
     private static readonly ConcurrentDictionary<FieldInfo, bool> readonlyFields = new ConcurrentDictionary<FieldInfo, bool>();
     private static readonly MethodInfo fieldSetMethod;
-    private static readonly Lazy<MethodInfo> _isTypeIgnoredMethodInfo = new Lazy<MethodInfo>(() => typeof(FastClonerCache).GetMethod(nameof(FastClonerCache.IsTypeIgnored), BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static, [typeof(Type)])!, LazyThreadSafetyMode.ExecutionAndPublication);
+    
+    #if MODERN
+    private static readonly Lazy<MethodInfo> isTypeIgnoredMethodInfo = new Lazy<MethodInfo>(() => typeof(FastClonerCache).GetMethod(nameof(FastClonerCache.IsTypeIgnored), BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static, [typeof(Type)])!, LazyThreadSafetyMode.ExecutionAndPublication);
+    #else
+    private static readonly Lazy<MethodInfo> isTypeIgnoredMethodInfo = new Lazy<MethodInfo>(() => typeof(FastClonerCache).GetMethod(nameof(FastClonerCache.IsTypeIgnored), BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(Type) }, null)!, LazyThreadSafetyMode.ExecutionAndPublication);
+    #endif
 
-    internal static MethodInfo IsTypeIgnoredMethodInfo => _isTypeIgnoredMethodInfo.Value;
+    internal static MethodInfo IsTypeIgnoredMethodInfo => isTypeIgnoredMethodInfo.Value;
     
     static FastClonerExprGenerator()
     {
@@ -44,11 +51,61 @@ internal static class FastClonerExprGenerator
         field.SetValue(obj, value);
     }
 
+    #if MODERN
     internal readonly record struct ExpressionPosition(int Depth, int Index)
     {
         public ExpressionPosition Next() => this with { Index = Index + 1 };
         public ExpressionPosition Nested() => new ExpressionPosition(Depth + 1, 0);
     }
+    #else 
+    internal readonly struct ExpressionPosition : IEquatable<ExpressionPosition>
+    {
+        public int Depth { get; }
+        public int Index { get; }
+
+        public ExpressionPosition(int depth, int index)
+        {
+            Depth = depth;
+            Index = index;
+        }
+
+        public ExpressionPosition Next() => new ExpressionPosition(Depth, Index + 1);
+        public ExpressionPosition Nested() => new ExpressionPosition(Depth + 1, 0);
+
+        public bool Equals(ExpressionPosition other)
+        {
+            return Depth == other.Depth && Index == other.Index;
+        }
+
+        public override bool Equals(object obj)
+        {
+            return obj is ExpressionPosition other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                return (Depth * 397) ^ Index;
+            }
+        }
+
+        public static bool operator ==(ExpressionPosition left, ExpressionPosition right)
+        {
+            return left.Equals(right);
+        }
+
+        public static bool operator !=(ExpressionPosition left, ExpressionPosition right)
+        {
+            return !left.Equals(right);
+        }
+
+        public override string ToString()
+        {
+            return $"ExpressionPosition {{ Depth = {Depth}, Index = {Index} }}";
+        }
+    }
+    #endif
 
     private static LabelTarget CreateLoopLabel(ExpressionPosition position)
     {
@@ -62,6 +119,7 @@ internal static class FastClonerExprGenerator
 
     private delegate object ProcessMethodDelegate(Type type, bool unboxStruct, ExpressionPosition position);
 
+    #if MODERN
     private static readonly FrozenDictionary<Type, ProcessMethodDelegate> knownTypeProcessors = 
         new Dictionary<Type, ProcessMethodDelegate>
         {
@@ -69,6 +127,14 @@ internal static class FastClonerExprGenerator
             [typeof(HttpRequestOptions)] = (_, _, position) => GenerateHttpRequestOptionsProcessor(position),
             [typeof(Array)] = (type, _, _) => GenerateProcessArrayMethod(type),
         }.ToFrozenDictionary();
+    #else
+    private static readonly Dictionary<Type, ProcessMethodDelegate> knownTypeProcessors =
+        new Dictionary<Type, ProcessMethodDelegate>
+        {
+            [typeof(ExpandoObject)] = (_, _, position) => GenerateExpandoObjectProcessor(position),
+            [typeof(Array)] = (type, _, _) => GenerateProcessArrayMethod(type),
+        };
+    #endif
     
     private static readonly AhoCorasick badTypes = new AhoCorasick([
         "Castle.Proxies.",
@@ -385,6 +451,7 @@ internal static class FastClonerExprGenerator
         return Expression.Lambda(funcType, Expression.Block(blockParams, expressionList), from, state).Compile();
     }
     
+    #if MODERN
     private static object GenerateHttpRequestOptionsProcessor(ExpressionPosition position)
     {
         if (FastClonerCache.IsTypeIgnored(typeof(HttpRequestOptions)))
@@ -418,6 +485,7 @@ internal static class FastClonerExprGenerator
 
         return Expression.Lambda<Func<object, FastCloneState, object>>(block, from, state).Compile();
     }
+    #endif
     
     private static object GenerateExpandoObjectProcessor(ExpressionPosition position)
     {
@@ -554,8 +622,13 @@ internal static class FastClonerExprGenerator
         }
         
         // For read-only collections
+        #if MODERN
         bool isReadOnly = dictType.Name.Contains("ReadOnly", StringComparison.InvariantCultureIgnoreCase) || 
                           (dictType.IsGenericType && dictType.GetGenericTypeDefinition() == typeof(ReadOnlyDictionary<,>));
+        #else 
+        bool isReadOnly = dictType.Name.IndexOf("ReadOnly", StringComparison.InvariantCultureIgnoreCase) >= 0 || 
+                          (dictType.IsGenericType && dictType.GetGenericTypeDefinition() == typeof(ReadOnlyDictionary<,>));
+        #endif
 
         Type innerDictType = isReadOnly
             ? typeof(Dictionary<,>).MakeGenericType(keyType, valueType)
@@ -1082,7 +1155,11 @@ internal static class FastClonerExprGenerator
         
         ParameterExpression local = Expression.Variable(type);
         
+        #if MODERN
         bool isReadOnly = type.Name.Contains("ReadOnly", StringComparison.InvariantCultureIgnoreCase);
+        #else
+        bool isReadOnly = type.Name.IndexOf("ReadOnly", StringComparison.InvariantCultureIgnoreCase) >= 0;
+        #endif
 
         // Use HashSet as inner collection
         Type innerSetType = isReadOnly 

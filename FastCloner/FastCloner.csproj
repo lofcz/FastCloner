@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net9.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net46;net472;net48</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>preview</LangVersion>
@@ -20,7 +20,11 @@
     <RepositoryType>git</RepositoryType>
     <PackageTags>deepclone,clone,fastclone,cloner,replicate,duplicate</PackageTags>
   </PropertyGroup>
-  
+
+  <PropertyGroup>
+    <DefineConstants Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">$(DefineConstants);MODERN</DefineConstants>
+  </PropertyGroup>
+
   <PropertyGroup>
     <Version>3.3.6</Version>
 

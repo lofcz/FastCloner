@@ -63,7 +63,11 @@ public static class FastCloner
     /// </summary>
     public static HashSet<Type> GetIgnoredTypes()
     {
+#if MODERN
         return FastClonerCache.AlwaysIgnoredTypes.Keys.ToHashSet();
+#else
+        return [..FastClonerCache.AlwaysIgnoredTypes.Keys];
+#endif
     }
 
     /// <summary>

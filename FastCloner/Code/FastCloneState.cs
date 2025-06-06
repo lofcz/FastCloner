@@ -154,7 +154,11 @@ internal sealed class FastCloneState
         private void Initialize(int size)
         {
             buckets = new int[size];
+#if MODERN
             Array.Fill(buckets, -1);
+#else
+            buckets.Fill(-1);
+#endif
             entries = new Entry[size];
         }
 
@@ -189,7 +193,11 @@ internal sealed class FastCloneState
         private void Resize(int newSize)
         {
             int[] newBuckets = new int[newSize];
+#if MODERN
             Array.Fill(newBuckets, -1);
+#else
+            newBuckets.Fill(-1);
+#endif
             
             Entry[] newEntries = new Entry[newSize];
             Array.Copy(entries, newEntries, count);

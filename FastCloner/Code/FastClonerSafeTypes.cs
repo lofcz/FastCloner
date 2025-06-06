@@ -31,30 +31,38 @@ internal static class FastClonerSafeTypes
         [typeof(nint)] = true,
         [typeof(nuint)] = true,
         [typeof(Guid)] = true,
+#if MODERN
         [typeof(Rune)] = true,
+#endif
 
         // Time-related types
         [typeof(TimeSpan)] = true,
         [typeof(TimeZoneInfo)] = true,
         [typeof(DateTime)] = true,
         [typeof(DateTimeOffset)] = true,
+#if MODERN
         [typeof(DateOnly)] = true,
         [typeof(TimeOnly)] = true,
+#endif
 
         // Numeric types
+ #if MODERN
         [typeof(Half)] = true,
         [typeof(Int128)] = true,
         [typeof(UInt128)] = true,
         [typeof(Complex)] = true,
-
+#endif
         // Others
         [typeof(DBNull)] = true,
         [StringComparer.Ordinal.GetType()] = true,
         [StringComparer.OrdinalIgnoreCase.GetType()] = true,
         [StringComparer.InvariantCulture.GetType()] = true,
         [StringComparer.InvariantCultureIgnoreCase.GetType()] = true,
+        
+#if MODERN
         [typeof(Range)] = true,
         [typeof(Index)] = true
+#endif
     };
 
     private static readonly ConcurrentDictionary<Type, bool> knownTypes = [];

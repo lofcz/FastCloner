@@ -51,18 +51,18 @@ public class AhoCorasick
         {
             Node current = queue.Dequeue();
             
-            foreach ((char character, Node child) in current.Children)
+            foreach (KeyValuePair<char, Node> kvp in current.Children)
             {
-                queue.Enqueue(child);
+                queue.Enqueue(kvp.Value);
 
                 Node? failure = current.Failure;
                 
-                while (failure != null && !failure.Children.ContainsKey(character))
+                while (failure != null && !failure.Children.ContainsKey(kvp.Key))
                 {
                     failure = failure.Failure;
                 }
 
-                child.Failure = failure?.Children.GetValueOrDefault(character) ?? root;
+                kvp.Value.Failure = failure?.Children.GetValueOrDefault(kvp.Key) ?? root;
             }
         }
     }
