@@ -68,11 +68,8 @@ jobs:
       with:
         node-version: '22'
         
-    - name: Restore dependencies
-      run: dotnet restore FastCloner/
-
     - name: Build FastCloner for netstandard2.0
-      run: dotnet build FastCloner/ --no-restore --framework netstandard2.0
+      run: dotnet build FastCloner/ --framework netstandard2.0
 
     - name: Update GitHub status check
       if: always()
@@ -102,11 +99,8 @@ jobs:
       with:
         node-version: '22'
         
-    - name: Restore dependencies
-      run: dotnet restore FastCloner/
-
     - name: Build FastCloner for net462
-      run: dotnet build FastCloner/ --no-restore --framework net462
+      run: dotnet build FastCloner/ --framework net462
 
     - name: Update GitHub status check
       if: always()
