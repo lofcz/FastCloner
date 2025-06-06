@@ -50,3 +50,72 @@ jobs:
         state: ${{ job.status == 'success' && 'success' || 'failure' }}
         sha: ${{ github.event.pull_request.head.sha || github.sha }}
         target_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+  build-netstandard20:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '6.0.x'
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '22'
+        
+    - name: Restore dependencies
+      run: dotnet restore FastCloner/
+      working-directory: ./
+
+    - name: Build FastCloner for netstandard2.0
+      run: dotnet build FastCloner/ --no-restore --framework netstandard2.0
+
+    - name: Update GitHub status check
+      if: always()
+      uses: Sibz/github-status-action@v1
+      with: 
+        authToken: ${{secrets.GITHUB_TOKEN}}
+        context: 'Build (netstandard2.0)'
+        description: 'The build for netstandard2.0 ${{ job.status == ''success'' && ''passed'' || ''failed'' }}'
+        state: ${{ job.status == 'success' && 'success' || 'failure' }}
+        sha: ${{ github.event.pull_request.head.sha || github.sha }}
+        target_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+  build-net462:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup .NET Framework
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '6.0.x'
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '22'
+        
+    - name: Restore dependencies
+      run: dotnet restore FastCloner/
+
+    - name: Build FastCloner for net462
+      run: dotnet build FastCloner/ --no-restore --framework net462
+
+    - name: Update GitHub status check
+      if: always()
+      uses: Sibz/github-status-action@v1
+      with: 
+        authToken: ${{secrets.GITHUB_TOKEN}}
+        context: 'Build (net462)'
+        description: 'The build for net462 ${{ job.status == ''success'' && ''passed'' || ''failed'' }}'
+        state: ${{ job.status == 'success' && 'success' || 'failure' }}
+        sha: ${{ github.event.pull_request.head.sha || github.sha }}
+        target_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
