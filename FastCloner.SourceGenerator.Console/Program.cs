@@ -1,17 +1,18 @@
-﻿namespace FastCloner.SourceGenerator.Console;
+﻿using FastCloner.SourceGenerator.Shared;
+
+namespace FastCloner.SourceGenerator.Console;
 using System;
+
+[FastClonerClonable]
+public partial class Person
+{
+    public string Name { get; set; }
+    public int Age { get; set; }
+    public List<string> Hobbies { get; set; }
+}
 
 class Program
 {
-    
-    public class Person
-    {
-        public string Name { get; set; }
-        public int Age { get; set; }
-        public List<string> Hobbies { get; set; }
-    }
-
-    
     static void Main(string[] args)
     {
         Person person = new Person

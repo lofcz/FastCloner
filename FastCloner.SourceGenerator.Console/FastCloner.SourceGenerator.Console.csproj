@@ -11,6 +11,14 @@
     <ItemGroup>
         <ProjectReference Include="..\FastCloner.SourceGenerator\FastCloner.SourceGenerator.csproj"
                           OutputItemType="Analyzer"
+                          ReferenceOutputAssembly="true" />
+
+        <ProjectReference Include="..\FastCloner.SourceGenerator.Analyzers\FastCloner.SourceGenerator.Analyzers.csproj"
+                          OutputItemType="Analyzer"
+                          ReferenceOutputAssembly="false" />
+        
+        <ProjectReference Include="..\FastCloner.SourceGenerator.CodeFixes\FastCloner.SourceGenerator.CodeFixes.csproj"
+                          OutputItemType="Analyzer"
                           ReferenceOutputAssembly="false" />
     </ItemGroup>
     

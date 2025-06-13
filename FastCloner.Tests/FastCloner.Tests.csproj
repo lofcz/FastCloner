@@ -17,7 +17,7 @@
     <PackageReference Include="NHibernate" Version="5.5.2" />
     <PackageReference Include="NUnit" Version="4.3.2" />
     <PackageReference Include="NUnit3TestAdapter" Version="5.0.0" />
-    <PackageReference Include="NUnit.Analyzers" Version="4.8.1">
+    <PackageReference Include="NUnit.Analyzers" Version="4.9.1">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
@@ -29,6 +29,8 @@
     <PackageReference Include="System.Data.SQLite" Version="1.0.119" />
     <PackageReference Include="System.Data.SQLite.Core" Version="1.0.119" />
     <PackageReference Include="System.Drawing.Common" Version="8.0.3" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Analyzer.Testing" Version="1.1.2" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.CodeFix.Testing" Version="1.1.2" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -65,6 +67,18 @@
   <ItemGroup>
     <ProjectReference Include="..\FastCloner.Contrib\FastCloner.Contrib.csproj" />
     <ProjectReference Include="..\FastCloner\FastCloner.csproj" />
+
+    <ProjectReference Include="..\FastCloner.SourceGenerator\FastCloner.SourceGenerator.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="true" />
+
+    <ProjectReference Include="..\FastCloner.SourceGenerator.Analyzers\FastCloner.SourceGenerator.Analyzers.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="true" />
+
+    <ProjectReference Include="..\FastCloner.SourceGenerator.CodeFixes\FastCloner.SourceGenerator.CodeFixes.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="true" />
   </ItemGroup>
 
 </Project>
