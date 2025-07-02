@@ -5,6 +5,7 @@ using System.Collections.Frozen;
 #endif
 using System.Collections.ObjectModel;
 using System.Dynamic;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -116,6 +117,57 @@ internal static class FastClonerExprGenerator
     internal static object? GenerateProcessMethod(Type realType, bool asObject) => GenerateProcessMethod(realType, asObject && realType.IsValueType(), new ExpressionPosition(0, 0));
     public static bool IsSetType(Type type) => type.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ISet<>));
     private static bool IsDictionaryType(Type type) => typeof(IDictionary).IsAssignableFrom(type) || type.GetInterfaces().Any(i => i.IsGenericType && (i.GetGenericTypeDefinition() == typeof(IDictionary<,>) || i.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)));
+    
+    private readonly struct ConstructorInfo
+    {
+        public System.Reflection.ConstructorInfo Constructor { get; }
+        public int ParameterCount { get; }
+        public bool HasOptionalParameters { get; }
+
+        public ConstructorInfo(System.Reflection.ConstructorInfo constructor)
+        {
+            Constructor = constructor;
+            ParameterInfo[] parameters = constructor.GetParameters();
+            ParameterCount = parameters.Length;
+            HasOptionalParameters = ParameterCount > 0 && parameters.All(p => p.HasDefaultValue);
+        }
+    }
+
+    /// <summary>
+    /// Finds a constructor that can be called with no arguments.
+    /// First tries to find a parameterless constructor, then falls back to any constructor where all parameters have default values.
+    /// </summary>
+    private static ConstructorInfo? FindCallableConstructor(Type type)
+    {
+        // prefer parameterless constructor
+        System.Reflection.ConstructorInfo? ctor = type.GetConstructor(Type.EmptyTypes);
+        if (ctor != null)
+            return new ConstructorInfo(ctor);
+
+        // or use any that we can call without args
+        ctor = type.GetConstructors().FirstOrDefault(c => c.GetParameters().All(p => p.HasDefaultValue));
+        return ctor != null ? new ConstructorInfo(ctor) : null;
+    }
+    
+    private static NewExpression CreateNewExpressionWithCtor(ConstructorInfo ctorInfo)
+    {
+        if (ctorInfo.ParameterCount == 0)
+        {
+            return Expression.New(ctorInfo.Constructor);
+        }
+
+        // For constructors with optional parameters, create default values
+        Expression[] arguments = ctorInfo.Constructor.GetParameters()
+            .Select(p => Expression.Constant(p.HasDefaultValue ? p.DefaultValue : GetDefaultValue(p.ParameterType), p.ParameterType))
+            .ToArray<Expression>();
+
+        return Expression.New(ctorInfo.Constructor, arguments);
+    }
+
+    private static object? GetDefaultValue(Type type)
+    {
+        return type.IsValueType ? Activator.CreateInstance(type) : null;
+    }
 
     private delegate object ProcessMethodDelegate(Type type, bool unboxStruct, ExpressionPosition position);
 
@@ -126,6 +178,10 @@ internal static class FastClonerExprGenerator
             [typeof(ExpandoObject)] = (_, _, position) => GenerateExpandoObjectProcessor(position),
             [typeof(HttpRequestOptions)] = (_, _, position) => GenerateHttpRequestOptionsProcessor(position),
             [typeof(Array)] = (type, _, _) => GenerateProcessArrayMethod(type),
+            [typeof(System.Text.Json.Nodes.JsonNode)] = (_, _, position) => GenerateJsonNodeProcessorModern(position),
+            [typeof(System.Text.Json.Nodes.JsonObject)] = (_, _, position) => GenerateJsonNodeProcessorModern(position),
+            [typeof(System.Text.Json.Nodes.JsonArray)] = (_, _, position) => GenerateJsonNodeProcessorModern(position),
+            [typeof(System.Text.Json.Nodes.JsonValue)] = (_, _, position) => GenerateJsonNodeProcessorModern(position),
         }.ToFrozenDictionary();
     #else
     private static readonly Dictionary<Type, ProcessMethodDelegate> knownTypeProcessors =
@@ -235,6 +291,14 @@ internal static class FastClonerExprGenerator
                 return GenerateProcessTupleMethod(type);
             }
         }
+
+#if !MODERN
+        // in netstandard2.0 to avoid a dependency we use reflection
+        if (type.FullName != null && type.FullName.StartsWith("System.Text.Json.Nodes."))
+        {
+            return GenerateJsonNodeProcessorNetstandard(type, position);
+        }
+#endif
         
         List<Expression> expressionList = [];
         ParameterExpression from = Expression.Parameter(methodType);
@@ -467,7 +531,7 @@ internal static class FastClonerExprGenerator
         ParameterExpression tempMessage = Expression.Variable(typeof(HttpRequestMessage));
         ParameterExpression fromOptions = Expression.Variable(typeof(HttpRequestOptions));
         
-        ConstructorInfo constructor = typeof(HttpRequestMessage).GetConstructor(Type.EmptyTypes)!;
+        System.Reflection.ConstructorInfo constructor = typeof(HttpRequestMessage).GetConstructor(Type.EmptyTypes)!;
 
         BlockExpression block = Expression.Block(
             [result, tempMessage, fromOptions],
@@ -577,9 +641,26 @@ internal static class FastClonerExprGenerator
     private static object GenerateProcessDictionaryMethod(Type type, ExpressionPosition position)
     {
         Type[] genericArguments = type.GenericArguments();
+        
+        // If the type has no generic arguments but implements IDictionary<,>, use those generic arguments
+        if (genericArguments.Length == 0)
+        {
+            var dictionaryInterface = type.GetInterfaces()
+                .FirstOrDefault(i => i.IsGenericType && 
+                                   (i.GetGenericTypeDefinition() == typeof(IDictionary<,>) || 
+                                    i.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)));
+            
+            if (dictionaryInterface != null)
+            {
+                var interfaceArgs = dictionaryInterface.GetGenericArguments();
+                return GenerateDictionaryProcessor(type, interfaceArgs[0], interfaceArgs[1], true, position);
+            }
+            
+            return GenerateDictionaryProcessor(type, typeof(object), typeof(object), false, position);
+        }
+        
         return genericArguments.Length switch
         {
-            0 => GenerateDictionaryProcessor(type, typeof(object), typeof(object), false, position),
             1 => HandleSingleGenericArgument(type, genericArguments[0], position),
             2 => GenerateDictionaryProcessor(type, genericArguments[0], genericArguments[1], true, position),
             _ => throw new ArgumentException($"Unexpected number of generic arguments: {genericArguments.Length}")
@@ -635,12 +716,12 @@ internal static class FastClonerExprGenerator
             : dictType;
         
         // Check constructors
-        ConstructorInfo? ctor = isReadOnly 
-            ? dictType.GetConstructor([innerDictType])  // Get constructor that takes dictionary
-            : dictType.GetConstructor(Type.EmptyTypes); // Get parameterless constructor
+        ConstructorInfo? ctorInfo = isReadOnly 
+            ? (dictType.GetConstructor([innerDictType]) is System.Reflection.ConstructorInfo ctor ? new ConstructorInfo(ctor) : null)
+            : FindCallableConstructor(dictType); // Get constructor that can be called with no args
 
         // If we can't find appropriate constructor, bail out
-        if (ctor is null)
+        if (ctorInfo is null)
         {
             return Expression.Lambda<Func<object, FastCloneState, object>>(
                 from,
@@ -655,9 +736,22 @@ internal static class FastClonerExprGenerator
             : result;
 
         // Create instance of inner dictionary
+        ConstructorInfo? innerDictCtorInfo = FindCallableConstructor(innerDictType);
+        
+        if (innerDictCtorInfo is null)
+        {
+            return Expression.Lambda<Func<object, FastCloneState, object>>(
+                from,
+                from, 
+                state
+            ).Compile();
+        }
+
+        ConstructorInfo ci = innerDictCtorInfo.GetValueOrDefault();
+        
         BinaryExpression createInnerDict = Expression.Assign(
             innerDict,
-            Expression.New(innerDictType.GetConstructor(Type.EmptyTypes)!)
+            CreateNewExpressionWithCtor(ci)
         );
 
         // If ReadOnlyDictionary, use inner Dictionary
@@ -669,7 +763,10 @@ internal static class FastClonerExprGenerator
                     innerDict
                 )
             )
-            : createInnerDict;
+            : Expression.Assign(
+                result,
+                CreateNewExpressionWithCtor(ci)
+            );
         
         // Add reference to state for cycle detection
         Expression addRef = Expression.Call(
@@ -680,10 +777,13 @@ internal static class FastClonerExprGenerator
         );
 
         // Get Add/TryAdd method
-        MethodInfo? addMethod = (innerDictType.IsGenericType
-                                    ? innerDictType.GetMethod("Add", [keyType, valueType])
-                                    : typeof(IDictionary).GetMethod("Add"))
-                                ?? innerDictType.GetMethods()
+        // For non-read-only types, get the method from the actual type (dictType)
+        // For read-only types, get the method from the inner dictionary type
+        Type methodSourceType = isReadOnly ? innerDictType : dictType;
+        MethodInfo? addMethod = (methodSourceType.IsGenericType
+                                    ? methodSourceType.GetMethod("Add", [keyType, valueType])
+                                    : methodSourceType.GetMethod("Add", [keyType, valueType]))
+                                ?? methodSourceType.GetMethods()
                                     .FirstOrDefault(m => m.Name == "TryAdd" &&
                                                          m.GetParameters().Length is 2 &&
                                                          m.GetParameters()[0].ParameterType == keyType &&
@@ -691,7 +791,13 @@ internal static class FastClonerExprGenerator
 
         if (addMethod is null)
         {
-            throw new InvalidOperationException($"Cannot find Add or TryAdd method for type {innerDictType.FullName}");
+            return Expression.Lambda<Func<object, FastCloneState, object>>(
+                from,
+                from, 
+                state
+            ).Compile();
+            
+            // throw new InvalidOperationException($"Cannot find Add or TryAdd method for type {innerDictType.FullName}");
         }
 
         // Setup enumerator
@@ -1112,6 +1218,7 @@ internal static class FastClonerExprGenerator
         BinaryExpression assignKey = Expression.Assign(key, keyToAssign);
         BinaryExpression assignValue = Expression.Assign(value, valueToAssign);
         MethodCallExpression addEntry = Expression.Call(local, addMethod, key, value);
+        
         LabelTarget breakLabel = CreateLoopLabel(position);
 
         LoopExpression loop = Expression.Loop(
@@ -1576,4 +1683,42 @@ internal static class FastClonerExprGenerator
             ),
             from, state).Compile();
     }
+
+#if MODERN
+    private static readonly Lazy<MethodInfo> jsonNodeDeepCloneMethod = new Lazy<MethodInfo>(
+        () => typeof(System.Text.Json.Nodes.JsonNode).GetMethod("DeepClone")!, 
+        LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static object GenerateJsonNodeProcessorModern(ExpressionPosition position)
+    {
+        ParameterExpression from = Expression.Parameter(typeof(object));
+        ParameterExpression state = Expression.Parameter(typeof(FastCloneState));
+        Expression castToJsonNode = Expression.Convert(from, typeof(System.Text.Json.Nodes.JsonNode));
+        Expression deepCloneCall = Expression.Call(castToJsonNode, jsonNodeDeepCloneMethod.Value);
+        Expression result = Expression.Convert(deepCloneCall, typeof(object));
+        
+        return Expression.Lambda<Func<object, FastCloneState, object>>(result, from, state).Compile();
+    }
+#else
+    private static object GenerateJsonNodeProcessorNetstandard(Type type, ExpressionPosition position)
+    {
+        return FastClonerCache.GetOrAddSpecialType(type, t =>
+        {
+            ParameterExpression from = Expression.Parameter(typeof(object));
+            ParameterExpression state = Expression.Parameter(typeof(FastCloneState));
+            MethodInfo? deepCloneMethod = t.GetMethod("DeepClone", Type.EmptyTypes);
+            
+            if (deepCloneMethod is null)
+            {
+                return Expression.Lambda<Func<object, FastCloneState, object>>(from, from, state).Compile();
+            }
+            
+            Expression castToType = Expression.Convert(from, t);
+            Expression deepCloneCall = Expression.Call(castToType, deepCloneMethod);
+            Expression result = Expression.Convert(deepCloneCall, typeof(object));
+            
+            return Expression.Lambda<Func<object, FastCloneState, object>>(result, from, state).Compile();
+        });
+    }
+#endif
 }

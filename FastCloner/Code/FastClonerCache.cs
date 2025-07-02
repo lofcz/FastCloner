@@ -22,6 +22,7 @@ internal static class FastClonerCache
     private static readonly ClrCache<List<MemberInfo>> allMembersCache = new ClrCache<List<MemberInfo>>();
     private static readonly GenericClrCache<MemberInfo, bool> memberIgnoreStatusCache = new GenericClrCache<MemberInfo, bool>();
     private static readonly ClrCache<bool> typeContainsIgnoredMembersCache = new ClrCache<bool>();
+    private static readonly ClrCache<object> specialTypesCache = new ClrCache<object>();
 
     public static object? GetOrAddField(Type type, Func<Type, object?> valueFactory) => fieldCache.GetOrAdd(type, valueFactory);
     public static object? GetOrAddClass(Type type, Func<Type, object?> valueFactory) => classCache.GetOrAdd(type, valueFactory);
@@ -36,6 +37,7 @@ internal static class FastClonerCache
     {
         return type.IsValueType && typeContainsIgnoredMembersCache.GetOrAdd(type, valueFactory);
     }
+    public static object GetOrAddSpecialType(Type type, Func<Type, object> valueFactory) => specialTypesCache.GetOrAdd(type, valueFactory);
     
     /// <summary>
     /// Clears the FastCloner cached reflection metadata.
@@ -51,6 +53,8 @@ internal static class FastClonerCache
         ignoredEventInfoCache.Clear();
         allMembersCache.Clear();
         memberIgnoreStatusCache.Clear();
+        typeContainsIgnoredMembersCache.Clear();
+        specialTypesCache.Clear();
     }
     
     private class GenericClrCache<TKey, TValue> where TKey : notnull
