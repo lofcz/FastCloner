@@ -2859,4 +2859,69 @@ public class SpecialCaseTests
             Assert.That(((JsonObject)clone)["test"]!.GetValue<string>(), Is.EqualTo("value"), "Should preserve content");
         });
     }
+
+    public class MyNonGenericDict : IDictionary<string, int>
+    {
+        private readonly Dictionary<string, int> _innerDict;
+        private readonly int _defaultValue;
+
+        public MyNonGenericDict(int defaultValue = 0)
+        {
+            _defaultValue = defaultValue;
+            _innerDict = new Dictionary<string, int>();
+        }
+
+        public int this[string key]
+        {
+            get => _innerDict.GetValueOrDefault(key, _defaultValue);
+            set => _innerDict[key] = value;
+        }
+
+        public ICollection<string> Keys => _innerDict.Keys;
+        public ICollection<int> Values => _innerDict.Values;
+        public int Count => _innerDict.Count;
+        public bool IsReadOnly => false;
+
+        public void Add(string key, int value) => _innerDict.Add(key, value);
+        public void Add(KeyValuePair<string, int> item) => _innerDict.Add(item.Key, item.Value);
+        public void Clear() => _innerDict.Clear();
+        public bool Contains(KeyValuePair<string, int> item) => _innerDict.Contains(item);
+        public bool ContainsKey(string key) => _innerDict.ContainsKey(key);
+        public void CopyTo(KeyValuePair<string, int>[] array, int arrayIndex) => ((ICollection<KeyValuePair<string, int>>)_innerDict).CopyTo(array, arrayIndex);
+        public IEnumerator<KeyValuePair<string, int>> GetEnumerator() => _innerDict.GetEnumerator();
+        public bool Remove(string key) => _innerDict.Remove(key);
+        public bool Remove(KeyValuePair<string, int> item) => _innerDict.Remove(item.Key);
+        public bool TryGetValue(string key, out int value) => _innerDict.TryGetValue(key, out value);
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    [Test]
+    public void NonGenericDictionaryWithOptionalConstructor_ShouldDeepClone()
+    {
+        // Arrange
+        MyNonGenericDict original = new MyNonGenericDict(defaultValue: 42)
+        {
+            ["key1"] = 100,
+            ["key2"] = 200,
+            ["key3"] = 300
+        };
+
+        // Act
+        MyNonGenericDict clone = original.DeepClone();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone, Is.Not.SameAs(original), "Should create new instance");
+            Assert.That(clone, Is.TypeOf<MyNonGenericDict>(), "Should preserve type");
+            Assert.That(clone.Count, Is.EqualTo(original.Count), "Should have same count");
+            Assert.That(clone["key1"], Is.EqualTo(100), "Should preserve first value");
+            Assert.That(clone["key2"], Is.EqualTo(200), "Should preserve second value");
+            Assert.That(clone["key3"], Is.EqualTo(300), "Should preserve third value");
+            
+            clone["key1"] = 999;
+            Assert.That(original["key1"], Is.EqualTo(100), "Original should remain unchanged");
+            Assert.That(clone["key1"], Is.EqualTo(999), "Clone should reflect changes");
+        });
+    }
 }

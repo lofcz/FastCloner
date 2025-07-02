@@ -118,13 +118,13 @@ internal static class FastClonerExprGenerator
     public static bool IsSetType(Type type) => type.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ISet<>));
     private static bool IsDictionaryType(Type type) => typeof(IDictionary).IsAssignableFrom(type) || type.GetInterfaces().Any(i => i.IsGenericType && (i.GetGenericTypeDefinition() == typeof(IDictionary<,>) || i.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)));
     
-    private readonly struct ConstructorInfo
+    private readonly struct ConstructorInfoEx
     {
-        public System.Reflection.ConstructorInfo Constructor { get; }
+        public ConstructorInfo Constructor { get; }
         public int ParameterCount { get; }
         public bool HasOptionalParameters { get; }
 
-        public ConstructorInfo(System.Reflection.ConstructorInfo constructor)
+        public ConstructorInfoEx(ConstructorInfo constructor)
         {
             Constructor = constructor;
             ParameterInfo[] parameters = constructor.GetParameters();
@@ -133,35 +133,32 @@ internal static class FastClonerExprGenerator
         }
     }
 
-    /// <summary>
-    /// Finds a constructor that can be called with no arguments.
-    /// First tries to find a parameterless constructor, then falls back to any constructor where all parameters have default values.
-    /// </summary>
-    private static ConstructorInfo? FindCallableConstructor(Type type)
+    private static ConstructorInfoEx? FindCallableConstructor(Type type)
     {
         // prefer parameterless constructor
-        System.Reflection.ConstructorInfo? ctor = type.GetConstructor(Type.EmptyTypes);
+        ConstructorInfo? ctor = type.GetConstructor(Type.EmptyTypes);
+        
         if (ctor != null)
-            return new ConstructorInfo(ctor);
+            return new ConstructorInfoEx(ctor);
 
         // or use any that we can call without args
         ctor = type.GetConstructors().FirstOrDefault(c => c.GetParameters().All(p => p.HasDefaultValue));
-        return ctor != null ? new ConstructorInfo(ctor) : null;
+        return ctor != null ? new ConstructorInfoEx(ctor) : null;
     }
     
-    private static NewExpression CreateNewExpressionWithCtor(ConstructorInfo ctorInfo)
+    private static NewExpression CreateNewExpressionWithCtor(ConstructorInfoEx ctorInfoEx)
     {
-        if (ctorInfo.ParameterCount == 0)
+        if (ctorInfoEx.ParameterCount == 0)
         {
-            return Expression.New(ctorInfo.Constructor);
+            return Expression.New(ctorInfoEx.Constructor);
         }
 
         // For constructors with optional parameters, create default values
-        Expression[] arguments = ctorInfo.Constructor.GetParameters()
+        Expression[] arguments = ctorInfoEx.Constructor.GetParameters()
             .Select(p => Expression.Constant(p.HasDefaultValue ? p.DefaultValue : GetDefaultValue(p.ParameterType), p.ParameterType))
             .ToArray<Expression>();
 
-        return Expression.New(ctorInfo.Constructor, arguments);
+        return Expression.New(ctorInfoEx.Constructor, arguments);
     }
 
     private static object? GetDefaultValue(Type type)
@@ -531,7 +528,7 @@ internal static class FastClonerExprGenerator
         ParameterExpression tempMessage = Expression.Variable(typeof(HttpRequestMessage));
         ParameterExpression fromOptions = Expression.Variable(typeof(HttpRequestOptions));
         
-        System.Reflection.ConstructorInfo constructor = typeof(HttpRequestMessage).GetConstructor(Type.EmptyTypes)!;
+        ConstructorInfo constructor = typeof(HttpRequestMessage).GetConstructor(Type.EmptyTypes)!;
 
         BlockExpression block = Expression.Block(
             [result, tempMessage, fromOptions],
@@ -642,29 +639,29 @@ internal static class FastClonerExprGenerator
     {
         Type[] genericArguments = type.GenericArguments();
         
-        // If the type has no generic arguments but implements IDictionary<,>, use those generic arguments
-        if (genericArguments.Length == 0)
-        {
-            var dictionaryInterface = type.GetInterfaces()
-                .FirstOrDefault(i => i.IsGenericType && 
-                                   (i.GetGenericTypeDefinition() == typeof(IDictionary<,>) || 
-                                    i.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)));
-            
-            if (dictionaryInterface != null)
-            {
-                var interfaceArgs = dictionaryInterface.GetGenericArguments();
-                return GenerateDictionaryProcessor(type, interfaceArgs[0], interfaceArgs[1], true, position);
-            }
-            
-            return GenerateDictionaryProcessor(type, typeof(object), typeof(object), false, position);
-        }
-        
         return genericArguments.Length switch
         {
+            0 => GenerateNonGenericDictionaryProcessor(type, position),
             1 => HandleSingleGenericArgument(type, genericArguments[0], position),
             2 => GenerateDictionaryProcessor(type, genericArguments[0], genericArguments[1], true, position),
             _ => throw new ArgumentException($"Unexpected number of generic arguments: {genericArguments.Length}")
         };
+    }
+
+    private static object GenerateNonGenericDictionaryProcessor(Type type, ExpressionPosition position)
+    {
+        Type? dictionaryInterface = type.GetInterfaces()
+            .FirstOrDefault(i => i.IsGenericType && 
+                                 (i.GetGenericTypeDefinition() == typeof(IDictionary<,>) || 
+                                  i.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)));
+            
+        if (dictionaryInterface is not null)
+        {
+            Type[] interfaceArgs = dictionaryInterface.GetGenericArguments();
+            return GenerateDictionaryProcessor(type, interfaceArgs[0], interfaceArgs[1], true, position);
+        }
+            
+        return GenerateDictionaryProcessor(type, typeof(object), typeof(object), false, position);
     }
 
     private static object HandleSingleGenericArgument(Type type, Type genericArg, ExpressionPosition position)
@@ -716,10 +713,10 @@ internal static class FastClonerExprGenerator
             : dictType;
         
         // Check constructors
-        ConstructorInfo? ctorInfo = isReadOnly 
-            ? (dictType.GetConstructor([innerDictType]) is System.Reflection.ConstructorInfo ctor ? new ConstructorInfo(ctor) : null)
-            : FindCallableConstructor(dictType); // Get constructor that can be called with no args
-
+        ConstructorInfoEx? ctorInfo = isReadOnly 
+            ? dictType.GetConstructor([innerDictType]) is { } ctor ? new ConstructorInfoEx(ctor) : null
+            : FindCallableConstructor(dictType);
+        
         // If we can't find appropriate constructor, bail out
         if (ctorInfo is null)
         {
@@ -736,7 +733,7 @@ internal static class FastClonerExprGenerator
             : result;
 
         // Create instance of inner dictionary
-        ConstructorInfo? innerDictCtorInfo = FindCallableConstructor(innerDictType);
+        ConstructorInfoEx? innerDictCtorInfo = FindCallableConstructor(innerDictType);
         
         if (innerDictCtorInfo is null)
         {
@@ -747,7 +744,7 @@ internal static class FastClonerExprGenerator
             ).Compile();
         }
 
-        ConstructorInfo ci = innerDictCtorInfo.GetValueOrDefault();
+        ConstructorInfoEx ci = innerDictCtorInfo.GetValueOrDefault();
         
         BinaryExpression createInnerDict = Expression.Assign(
             innerDict,
@@ -775,14 +772,9 @@ internal static class FastClonerExprGenerator
             from,
             result
         );
-
-        // Get Add/TryAdd method
-        // For non-read-only types, get the method from the actual type (dictType)
-        // For read-only types, get the method from the inner dictionary type
+        
         Type methodSourceType = isReadOnly ? innerDictType : dictType;
-        MethodInfo? addMethod = (methodSourceType.IsGenericType
-                                    ? methodSourceType.GetMethod("Add", [keyType, valueType])
-                                    : methodSourceType.GetMethod("Add", [keyType, valueType]))
+        MethodInfo? addMethod = methodSourceType.GetMethod("Add", [keyType, valueType])
                                 ?? methodSourceType.GetMethods()
                                     .FirstOrDefault(m => m.Name == "TryAdd" &&
                                                          m.GetParameters().Length is 2 &&
