@@ -162,8 +162,8 @@ internal static class FastClonerSafeTypes
             knownTypes.TryAdd(type, false);
             return false;
         }
-
-        if (IsSafeSystemType(type) || type.FullName?.Contains("EqualityComparer") == true && IsSpecialEqualityComparer(type.FullName))
+        
+        if (type.FullName is null || IsSafeSystemType(type) || type.FullName.Contains("EqualityComparer") && IsSpecialEqualityComparer(type.FullName))
         {
             knownTypes.TryAdd(type, true);
             return true;
