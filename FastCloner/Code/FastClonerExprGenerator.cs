@@ -16,12 +16,7 @@ internal static class FastClonerExprGenerator
     internal static readonly ConcurrentDictionary<Type, Func<Type, bool, ExpressionPosition, object>> CustomTypeHandlers = [];
     private static readonly ConcurrentDictionary<FieldInfo, bool> readonlyFields = new ConcurrentDictionary<FieldInfo, bool>();
     private static readonly MethodInfo fieldSetMethod;
-    
-    #if MODERN
-    private static readonly Lazy<MethodInfo> isTypeIgnoredMethodInfo = new Lazy<MethodInfo>(() => typeof(FastClonerCache).GetMethod(nameof(FastClonerCache.IsTypeIgnored), BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static, [typeof(Type)])!, LazyThreadSafetyMode.ExecutionAndPublication);
-    #else
-    private static readonly Lazy<MethodInfo> isTypeIgnoredMethodInfo = new Lazy<MethodInfo>(() => typeof(FastClonerCache).GetMethod(nameof(FastClonerCache.IsTypeIgnored), BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static, null, new Type[] { typeof(Type) }, null)!, LazyThreadSafetyMode.ExecutionAndPublication);
-    #endif
+    private static readonly Lazy<MethodInfo> isTypeIgnoredMethodInfo = new Lazy<MethodInfo>(() => typeof(FastClonerCache).GetMethod(nameof(FastClonerCache.IsTypeIgnored), BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static, null, [typeof(Type)], null)!, LazyThreadSafetyMode.ExecutionAndPublication);
 
     internal static MethodInfo IsTypeIgnoredMethodInfo => isTypeIgnoredMethodInfo.Value;
     
@@ -135,13 +130,12 @@ internal static class FastClonerExprGenerator
 
     private static ConstructorInfoEx? FindCallableConstructor(Type type)
     {
-        // prefer parameterless constructor
+        // take parameterless constructor
         ConstructorInfo? ctor = type.GetConstructor(Type.EmptyTypes);
+        return ctor != null ? new ConstructorInfoEx(ctor) : null;
         
-        if (ctor != null)
-            return new ConstructorInfoEx(ctor);
-
-        // or use any that we can call without args
+        // using any other constructor that can be called without arguments increases chances we trigger side effects
+        // we fall back to memberwise cloning instead
         ctor = type.GetConstructors().FirstOrDefault(c => c.GetParameters().All(p => p.HasDefaultValue));
         return ctor != null ? new ConstructorInfoEx(ctor) : null;
     }
@@ -166,177 +160,14 @@ internal static class FastClonerExprGenerator
         return type.IsValueType ? Activator.CreateInstance(type) : null;
     }
 
-    private delegate object ProcessMethodDelegate(Type type, bool unboxStruct, ExpressionPosition position);
-
-    #if MODERN
-    private static readonly FrozenDictionary<Type, ProcessMethodDelegate> knownTypeProcessors = 
-        new Dictionary<Type, ProcessMethodDelegate>
-        {
-            [typeof(ExpandoObject)] = (_, _, position) => GenerateExpandoObjectProcessor(position),
-            [typeof(HttpRequestOptions)] = (_, _, position) => GenerateHttpRequestOptionsProcessor(position),
-            [typeof(Array)] = (type, _, _) => GenerateProcessArrayMethod(type),
-            [typeof(System.Text.Json.Nodes.JsonNode)] = (_, _, position) => GenerateJsonNodeProcessorModern(position),
-            [typeof(System.Text.Json.Nodes.JsonObject)] = (_, _, position) => GenerateJsonNodeProcessorModern(position),
-            [typeof(System.Text.Json.Nodes.JsonArray)] = (_, _, position) => GenerateJsonNodeProcessorModern(position),
-            [typeof(System.Text.Json.Nodes.JsonValue)] = (_, _, position) => GenerateJsonNodeProcessorModern(position),
-        }.ToFrozenDictionary();
-    #else
-    private static readonly Dictionary<Type, ProcessMethodDelegate> knownTypeProcessors =
-        new Dictionary<Type, ProcessMethodDelegate>
-        {
-            [typeof(ExpandoObject)] = (_, _, position) => GenerateExpandoObjectProcessor(position),
-            [typeof(Array)] = (type, _, _) => GenerateProcessArrayMethod(type),
-        };
-    #endif
-    
-    private static readonly AhoCorasick badTypes = new AhoCorasick([
-        "Castle.Proxies.",
-        "System.Data.Entity.DynamicProxies.",
-        "NHibernate.Proxy."
-    ]);
-    
-    private static bool IsCloneable(Type type)
+    private static void AddMemberCloneExpressions(
+        List<Expression> expressionList,
+        ParameterExpression fromLocal,
+        ParameterExpression toLocal,
+        ParameterExpression state,
+        Type type)
     {
-        if (type.FullName is null)
-        {
-            return false;
-        }
-        
-        return !badTypes.ContainsAnyPattern(type.FullName);
-    }
-    
-    private static List<MemberInfo> GetAllMembers(Type type)
-    {
-        List<MemberInfo> members = [];
-        Type? currentType = type;
-        
-        while (currentType != null && currentType != typeof(ContextBoundObject))
-        {
-            members.AddRange(currentType.GetDeclaredFields());
-            members.AddRange(currentType.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Where(p => p is { CanRead: true, CanWrite: true } && p.GetIndexParameters().Length == 0)); // Exclude indexers
-            currentType = currentType.BaseType;
-        }
-
-        return members;
-    }
-    
-    private static object? GenerateProcessMethod(Type type, bool unboxStruct, ExpressionPosition position)
-    {
-        if (!IsCloneable(type))
-        {
-            return null;
-        }
-        
-        Type methodType = unboxStruct || type.IsClass() ? typeof(object) : type;
-        
-        if (FastClonerCache.IsTypeIgnored(type))
-        {
-            ParameterExpression pFrom = Expression.Parameter(methodType, "fromParam");
-            ParameterExpression pState = Expression.Parameter(typeof(FastCloneState), "stateParam");
-            Type funcGenericType = typeof(Func<,,>).MakeGenericType(methodType, typeof(FastCloneState), methodType);
-
-            Expression resultExpression;
-            
-            if (type.IsValueType && !unboxStruct)
-            {
-                resultExpression = Expression.Default(type);
-            }
-            else
-            {
-                resultExpression = Expression.Constant(null, methodType);
-            }
-
-            return Expression.Lambda(funcGenericType, resultExpression, pFrom, pState).Compile();
-        }
-        
-        if (knownTypeProcessors.TryGetValue(type, out ProcessMethodDelegate? handler))
-        {
-            return handler.Invoke(type, unboxStruct, position);
-        }
-
-        if (CustomTypeHandlers.TryGetValue(type, out Func<Type, bool, ExpressionPosition, object>? contribHandler))
-        {
-            return contribHandler.Invoke(type, unboxStruct, position);
-        }
-        
-        if (IsDictionaryType(type))
-        {
-            return GenerateProcessDictionaryMethod(type, position);
-        }
-
-        if (IsSetType(type))
-        {
-            return GenerateProcessSetMethod(type, position);
-        }
-
-        if (type.IsArray)
-        {
-            return GenerateProcessArrayMethod(type);
-        }
-
-        if (type.FullName is not null && type.FullName.StartsWith("System.Tuple`"))
-        {
-            // if not safe type it is no guarantee that some type will contain reference to
-            // this tuple. In usual way, we're creating new object, setting reference for it
-            // and filling data. For tuple, we will fill data before creating object
-            // (in constructor arguments)
-            Type[] genericArguments = type.GenericArguments();
-            // current tuples contain only 8 arguments, but may be in future...
-            // we'll write code that works with it
-            if (genericArguments.Length < 10 && genericArguments.All(FastClonerSafeTypes.CanReturnSameObject))
-            {
-                return GenerateProcessTupleMethod(type);
-            }
-        }
-
-#if !MODERN
-        // in netstandard2.0 to avoid a dependency we use reflection
-        if (type.FullName != null && type.FullName.StartsWith("System.Text.Json.Nodes."))
-        {
-            return GenerateJsonNodeProcessorNetstandard(type, position);
-        }
-#endif
-        
-        List<Expression> expressionList = [];
-        ParameterExpression from = Expression.Parameter(methodType);
-        ParameterExpression fromLocal = from;
-        ParameterExpression toLocal = Expression.Variable(type);
-        ParameterExpression state = Expression.Parameter(typeof(FastCloneState));
-
-        if (!type.IsValueType())
-        {
-            MethodInfo methodInfo = typeof(object).GetPrivateMethod(nameof(MemberwiseClone))!;
-
-            // to = (T)from.MemberwiseClone()
-            expressionList.Add(Expression.Assign(toLocal, Expression.Convert(Expression.Call(from, methodInfo), type)));
-
-            fromLocal = Expression.Variable(type);
-            // fromLocal = (T)from
-            expressionList.Add(Expression.Assign(fromLocal, Expression.Convert(from, type)));
-
-            // added from -> to binding to ensure reference loop handling
-            // structs cannot loop here
-            // state.AddKnownRef(from, to)
-            expressionList.Add(Expression.Call(state, StaticMethodInfos.DeepCloneStateMethods.AddKnownRef, from, toLocal));
-        }
-        else
-        {
-            if (unboxStruct)
-            {
-                // toLocal = (T)from;
-                expressionList.Add(Expression.Assign(toLocal, Expression.Unbox(from, type)));
-                fromLocal = Expression.Variable(type);
-                // fromLocal = toLocal; // structs, it is ok to copy
-                expressionList.Add(Expression.Assign(fromLocal, toLocal));
-            }
-            else
-            {
-                // toLocal = from
-                expressionList.Add(Expression.Assign(toLocal, from));
-            }
-        }
-
-        ExpressionPosition currentPosition = position;
+        ExpressionPosition currentPosition = new ExpressionPosition(0, 0);
         IEnumerable<MemberInfo> members = FastClonerCache.GetOrAddAllMembers(type, GetAllMembers);
         Dictionary<string, Type> ignoredEventDetails = FastClonerCache.GetOrAddIgnoredEventInfo(type, t =>
         {
@@ -347,10 +178,7 @@ internal static class FastClonerExprGenerator
             {
                 if (MemberIsIgnored(evtInfo)) 
                 {
-                    if (evtInfo.EventHandlerType is not null)
-                    {
-                        details[evtInfo.Name] = evtInfo.EventHandlerType;
-                    }
+                    details[evtInfo.Name] = evtInfo.EventHandlerType;
                 }
             }
             
@@ -458,8 +286,7 @@ internal static class FastClonerExprGenerator
                 }
                 
                 MethodInfo cloneMethodInfo = memberType.IsValueType()
-                    ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!
-                        .MakeGenericMethod(memberType)
+                    ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(memberType)
                     : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
 
                 MemberExpression getMemberValue = Expression.MakeMemberAccess(fromLocal, member);
@@ -476,17 +303,24 @@ internal static class FastClonerExprGenerator
             
                 switch (member)
                 {
-                    case FieldInfo fieldInfo when readonlyFields.GetOrAdd(fieldInfo, f => f.IsInitOnly):
+                    case FieldInfo fieldInfo:
                     {
-                        expressionList.Add(Expression.Call(
-                            Expression.Constant(fieldInfo),
-                            fieldSetMethod,
-                            Expression.Convert(toLocal, typeof(object)),
-                            Expression.Convert(clonedValueExpression, typeof(object))));
+                        bool isReadonly = readonlyFields.GetOrAdd(fieldInfo, f => f.IsInitOnly);
+                        if (isReadonly)
+                        {
+                            expressionList.Add(Expression.Call(
+                                Expression.Constant(fieldInfo),
+                                fieldSetMethod,
+                                Expression.Convert(toLocal, typeof(object)),
+                                Expression.Convert(clonedValueExpression, typeof(object))));
+                        }
+                        else
+                        {
+                            expressionList.Add(Expression.Assign(Expression.Field(toLocal, fieldInfo), clonedValueExpression));
+                        }
                         break;
                     }
                     case PropertyInfo { CanWrite: true }:
-                    case FieldInfo:
                     {
                         expressionList.Add(Expression.Assign(Expression.MakeMemberAccess(toLocal, member), clonedValueExpression));
                         break;
@@ -496,7 +330,210 @@ internal static class FastClonerExprGenerator
                 currentPosition = currentPosition.Next();
             }
         }
+    }
+    
+    private static object GenerateMemberwiseCloner(Type type, ExpressionPosition position)
+    {
+        ParameterExpression from = Expression.Parameter(typeof(object));
+        ParameterExpression state = Expression.Parameter(typeof(FastCloneState));
+        ParameterExpression toLocal = Expression.Variable(type);
+        ParameterExpression fromLocal = Expression.Variable(type);
+        List<Expression> expressionList = [];
+        
+        if (!type.IsValueType())
+        {
+            MethodInfo methodInfo = typeof(object).GetPrivateMethod(nameof(MemberwiseClone))!;
+            expressionList.Add(Expression.Assign(toLocal, Expression.Convert(Expression.Call(from, methodInfo), type)));
+            expressionList.Add(Expression.Assign(fromLocal, Expression.Convert(from, type)));
+            expressionList.Add(Expression.Call(state, StaticMethodInfos.DeepCloneStateMethods.AddKnownRef, from, toLocal));
+        }
+        else
+        {
+            expressionList.Add(Expression.Assign(toLocal, Expression.Unbox(from, type)));
+            expressionList.Add(Expression.Assign(fromLocal, toLocal));
+        }
 
+        AddMemberCloneExpressions(expressionList, fromLocal, toLocal, state, type);
+        expressionList.Add(Expression.Convert(toLocal, typeof(object)));
+        List<ParameterExpression> blockParams = [fromLocal, toLocal];
+        return Expression.Lambda<Func<object, FastCloneState, object>>(
+            Expression.Block(blockParams, expressionList),
+            from,
+            state
+        ).Compile();
+    }
+
+    private delegate object ProcessMethodDelegate(Type type, bool unboxStruct, ExpressionPosition position);
+
+    #if MODERN
+    private static readonly FrozenDictionary<Type, ProcessMethodDelegate> knownTypeProcessors = 
+        new Dictionary<Type, ProcessMethodDelegate>
+        {
+            [typeof(ExpandoObject)] = (_, _, position) => GenerateExpandoObjectProcessor(position),
+            [typeof(HttpRequestOptions)] = (_, _, position) => GenerateHttpRequestOptionsProcessor(position),
+            [typeof(Array)] = (type, _, _) => GenerateProcessArrayMethod(type),
+            [typeof(System.Text.Json.Nodes.JsonNode)] = (_, _, position) => GenerateJsonNodeProcessorModern(position),
+            [typeof(System.Text.Json.Nodes.JsonObject)] = (_, _, position) => GenerateJsonNodeProcessorModern(position),
+            [typeof(System.Text.Json.Nodes.JsonArray)] = (_, _, position) => GenerateJsonNodeProcessorModern(position),
+            [typeof(System.Text.Json.Nodes.JsonValue)] = (_, _, position) => GenerateJsonNodeProcessorModern(position),
+        }.ToFrozenDictionary();
+    #else
+    private static readonly Dictionary<Type, ProcessMethodDelegate> knownTypeProcessors =
+        new Dictionary<Type, ProcessMethodDelegate>
+        {
+            [typeof(ExpandoObject)] = (_, _, position) => GenerateExpandoObjectProcessor(position),
+            [typeof(Array)] = (type, _, _) => GenerateProcessArrayMethod(type),
+        };
+    #endif
+    
+    private static readonly AhoCorasick badTypes = new AhoCorasick([
+        "Castle.Proxies.",
+        "System.Data.Entity.DynamicProxies.",
+        "NHibernate.Proxy."
+    ]);
+    
+    private static bool IsCloneable(Type type)
+    {
+        if (type.FullName is null)
+        {
+            return false;
+        }
+        
+        return !badTypes.ContainsAnyPattern(type.FullName);
+    }
+    
+    private static List<MemberInfo> GetAllMembers(Type type)
+    {
+        List<MemberInfo> members = [];
+        Type? currentType = type;
+        
+        while (currentType != null && currentType != typeof(ContextBoundObject))
+        {
+            members.AddRange(currentType.GetDeclaredFields());
+            members.AddRange(currentType.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Where(p => p is { CanRead: true, CanWrite: true } && p.GetIndexParameters().Length == 0)); // Exclude indexers
+            currentType = currentType.BaseType;
+        }
+
+        return members;
+    }
+    
+    private static object? GenerateProcessMethod(Type type, bool unboxStruct, ExpressionPosition position)
+    {
+        if (!IsCloneable(type))
+        {
+            return null;
+        }
+        
+        Type methodType = unboxStruct || type.IsClass() ? typeof(object) : type;
+        
+        if (FastClonerCache.IsTypeIgnored(type))
+        {
+            ParameterExpression pFrom = Expression.Parameter(methodType, "fromParam");
+            ParameterExpression pState = Expression.Parameter(typeof(FastCloneState), "stateParam");
+            Type funcGenericType = typeof(Func<,,>).MakeGenericType(methodType, typeof(FastCloneState), methodType);
+            Expression resultExpression;
+            
+            if (type.IsValueType && !unboxStruct)
+            {
+                resultExpression = Expression.Default(type);
+            }
+            else
+            {
+                resultExpression = Expression.Constant(null, methodType);
+            }
+
+            return Expression.Lambda(funcGenericType, resultExpression, pFrom, pState).Compile();
+        }
+        
+        if (knownTypeProcessors.TryGetValue(type, out ProcessMethodDelegate? handler))
+        {
+            return handler.Invoke(type, unboxStruct, position);
+        }
+
+        if (CustomTypeHandlers.TryGetValue(type, out Func<Type, bool, ExpressionPosition, object>? contribHandler))
+        {
+            return contribHandler.Invoke(type, unboxStruct, position);
+        }
+        
+        if (IsDictionaryType(type))
+        {
+            return GenerateProcessDictionaryMethod(type, position);
+        }
+
+        if (IsSetType(type))
+        {
+            return GenerateProcessSetMethod(type, position);
+        }
+
+        if (type.IsArray)
+        {
+            return GenerateProcessArrayMethod(type);
+        }
+
+        if (type.FullName is not null && type.FullName.StartsWith("System.Tuple`"))
+        {
+            // if not safe type it is no guarantee that some type will contain reference to
+            // this tuple. In usual way, we're creating new object, setting reference for it
+            // and filling data. For tuple, we will fill data before creating object
+            // (in constructor arguments)
+            Type[] genericArguments = type.GenericArguments();
+            // current tuples contain only 8 arguments, but may be in future...
+            // we'll write code that works with it
+            if (genericArguments.Length < 10 && genericArguments.All(FastClonerSafeTypes.CanReturnSameObject))
+            {
+                return GenerateProcessTupleMethod(type);
+            }
+        }
+
+#if !MODERN
+        // in netstandard2.0 to avoid a dependency we use reflection
+        // Temporarily disabled JsonNode processors to test generic approach
+        if (type.FullName != null && type.FullName.StartsWith("System.Text.Json.Nodes."))
+        {
+             return GenerateJsonNodeProcessorNetstandard(type, position);
+        }
+#endif
+        
+        List<Expression> expressionList = [];
+        ParameterExpression from = Expression.Parameter(methodType);
+        ParameterExpression fromLocal = from;
+        ParameterExpression toLocal = Expression.Variable(type);
+        ParameterExpression state = Expression.Parameter(typeof(FastCloneState));
+
+        if (!type.IsValueType())
+        {
+            MethodInfo methodInfo = typeof(object).GetPrivateMethod(nameof(MemberwiseClone))!;
+
+            // to = (T)from.MemberwiseClone()
+            expressionList.Add(Expression.Assign(toLocal, Expression.Convert(Expression.Call(from, methodInfo), type)));
+
+            fromLocal = Expression.Variable(type);
+            // fromLocal = (T)from
+            expressionList.Add(Expression.Assign(fromLocal, Expression.Convert(from, type)));
+
+            // added from -> to binding to ensure reference loop handling
+            // structs cannot loop here
+            // state.AddKnownRef(from, to)
+            expressionList.Add(Expression.Call(state, StaticMethodInfos.DeepCloneStateMethods.AddKnownRef, from, toLocal));
+        }
+        else
+        {
+            if (unboxStruct)
+            {
+                // toLocal = (T)from;
+                expressionList.Add(Expression.Assign(toLocal, Expression.Unbox(from, type)));
+                fromLocal = Expression.Variable(type);
+                // fromLocal = toLocal; // structs, it is ok to copy
+                expressionList.Add(Expression.Assign(fromLocal, toLocal));
+            }
+            else
+            {
+                // toLocal = from
+                expressionList.Add(Expression.Assign(toLocal, from));
+            }
+        }
+
+        AddMemberCloneExpressions(expressionList, fromLocal, toLocal, state, type);
         expressionList.Add(Expression.Convert(toLocal, methodType));
 
         Type funcType = typeof(Func<,,>).MakeGenericType(methodType, typeof(FastCloneState), methodType);
@@ -684,14 +721,13 @@ internal static class FastClonerExprGenerator
     {
         ParameterExpression from = Expression.Parameter(typeof(object));
         ParameterExpression state = Expression.Parameter(typeof(FastCloneState));
-        
         LabelTarget returnNullLabel = Expression.Label(typeof(object));
         ConditionalExpression nullCheck = Expression.IfThen(
             Expression.Equal(from, Expression.Constant(null)),
             Expression.Return(returnNullLabel, Expression.Constant(null))
         );
         
-        // For immutable collections
+        // immutable
         bool isImmutable = IsImmutableCollection(dictType);
         
         if (isImmutable)
@@ -699,7 +735,7 @@ internal static class FastClonerExprGenerator
             return GenerateImmutableDictionaryProcessor(dictType, keyType, valueType, from, state, returnNullLabel, nullCheck);
         }
         
-        // For read-only collections
+        // read-only
         #if MODERN
         bool isReadOnly = dictType.Name.Contains("ReadOnly", StringComparison.InvariantCultureIgnoreCase) || 
                           (dictType.IsGenericType && dictType.GetGenericTypeDefinition() == typeof(ReadOnlyDictionary<,>));
@@ -717,14 +753,10 @@ internal static class FastClonerExprGenerator
             ? dictType.GetConstructor([innerDictType]) is { } ctor ? new ConstructorInfoEx(ctor) : null
             : FindCallableConstructor(dictType);
         
-        // If we can't find appropriate constructor, bail out
+        // If we can't find appropriate constructor, fall back to memberwise cloning
         if (ctorInfo is null)
         {
-            return Expression.Lambda<Func<object, FastCloneState, object>>(
-                from,
-                from, 
-                state
-            ).Compile();
+            return GenerateMemberwiseCloner(dictType, position);
         }
 
         ParameterExpression result = Expression.Variable(dictType);
@@ -737,11 +769,7 @@ internal static class FastClonerExprGenerator
         
         if (innerDictCtorInfo is null)
         {
-            return Expression.Lambda<Func<object, FastCloneState, object>>(
-                from,
-                from, 
-                state
-            ).Compile();
+            return GenerateMemberwiseCloner(dictType, position);
         }
 
         ConstructorInfoEx ci = innerDictCtorInfo.GetValueOrDefault();
@@ -783,13 +811,7 @@ internal static class FastClonerExprGenerator
 
         if (addMethod is null)
         {
-            return Expression.Lambda<Func<object, FastCloneState, object>>(
-                from,
-                from, 
-                state
-            ).Compile();
-            
-            // throw new InvalidOperationException($"Cannot find Add or TryAdd method for type {innerDictType.FullName}");
+            return GenerateMemberwiseCloner(dictType, position);
         }
 
         // Setup enumerator
@@ -1033,7 +1055,7 @@ internal static class FastClonerExprGenerator
     }
     
     /// <summary>
-    /// Note: this is based on a few heuristics, "best effor".
+    /// Note: this is based on a few heuristics, "best effort".
     /// </summary>
     /// <param name="type"></param>
     /// <returns></returns>
@@ -1249,7 +1271,7 @@ internal static class FastClonerExprGenerator
     
         if (isImmutable)
         {
-            return GenerateImmutableSetProcessor(type, elementType, from, state);
+            return GenerateImmutableSetProcessor(type, elementType, from, state, position);
         }
         
         ParameterExpression local = Expression.Variable(type);
@@ -1288,7 +1310,7 @@ internal static class FastClonerExprGenerator
 
         if (addMethod == null)
         {
-            throw new InvalidOperationException($"Cannot find Add or TryAdd method for type {innerSetType.FullName}");
+            return GenerateMemberwiseCloner(type, position);
         }
 
         // Generate foreach block using inner set
@@ -1326,7 +1348,7 @@ internal static class FastClonerExprGenerator
         ).Compile();
     }
     
-    private static object GenerateImmutableSetProcessor(Type setType, Type elementType, ParameterExpression from, ParameterExpression state)
+    private static object GenerateImmutableSetProcessor(Type setType, Type elementType, ParameterExpression from, ParameterExpression state, ExpressionPosition position)
     {
         ParameterExpression typedFrom = Expression.Variable(setType);
         ParameterExpression result = Expression.Variable(setType);
@@ -1354,11 +1376,7 @@ internal static class FastClonerExprGenerator
                 
             if (addMethod == null)
             {
-                return Expression.Lambda<Func<object, FastCloneState, object>>(
-                    from,
-                    from, 
-                    state
-                ).Compile();
+                return GenerateMemberwiseCloner(setType, position);
             }
         }
 

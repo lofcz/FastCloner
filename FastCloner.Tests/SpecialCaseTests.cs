@@ -2032,6 +2032,42 @@ public class SpecialCaseTests
             Assert.That(((JsonObject)original.Config!)["a"]!.GetValue<int>(), Is.EqualTo(1), "Original config should remain unchanged");
         });
     }
+    
+    public class DictionaryWithNonOptionalCtor : Dictionary<string, string>
+    {
+        public int RequiredValue { get; }
+        
+        public DictionaryWithNonOptionalCtor(int requiredValue)
+        {
+            RequiredValue = requiredValue;
+        }
+    }
+
+    [Test]
+    public void DictionaryWithNonOptionalConstructor_ShouldFallbackToMemberwiseClone()
+    {
+        // Arrange
+        DictionaryWithNonOptionalCtor original = new DictionaryWithNonOptionalCtor(42)
+        {
+            ["key1"] = "value1",
+            ["key2"] = "value2"
+        };
+
+        // Act
+        DictionaryWithNonOptionalCtor clone = original.DeepClone();
+        clone["key1"] = "value3";
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone, Is.Not.SameAs(original), "Should create new instance");
+            Assert.That(clone, Is.AssignableTo<DictionaryWithNonOptionalCtor>(), "Should preserve type");
+            Assert.That(clone.Count, Is.EqualTo(original.Count), "Should preserve count");
+            Assert.That(clone["key1"], Is.EqualTo("value3"), "Should preserve values");
+            Assert.That(clone["key2"], Is.EqualTo("value2"), "Should preserve values");
+            Assert.That(original["key1"], Is.EqualTo("value1"), "Should not affect original value");
+        });
+    }
 
     [Test]
     public void CloneAllJsonNodeTypes()
