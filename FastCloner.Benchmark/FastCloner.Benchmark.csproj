@@ -9,7 +9,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="BenchmarkDotNet" Version="0.15.1" />
+      <PackageReference Include="BenchmarkDotNet" Version="0.15.2" />
       <PackageReference Include="DeepCloner" Version="0.10.4" />
       <PackageReference Include="DeepCopier" Version="1.0.4" />
       <PackageReference Include="DeepCopy" Version="1.0.3" />
