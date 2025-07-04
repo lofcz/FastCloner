@@ -61,6 +61,13 @@ public class BenchMinimal
         return testData.DeepClone();
     }
     
+    [Benchmark]
+    public object? ObjectCloner()
+    {
+        return global::ObjectCloner.ObjectCloner.DeepClone(testData);
+    }
+
+    
     public class TestObject
     {
         public int Id { get; set; }
