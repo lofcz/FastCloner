@@ -5,7 +5,6 @@ using System.Collections.Frozen;
 #endif
 using System.Collections.ObjectModel;
 using System.Dynamic;
-using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -19,12 +18,12 @@ internal static class FastClonerExprGenerator
     private static readonly Lazy<MethodInfo> isTypeIgnoredMethodInfo = new Lazy<MethodInfo>(() => typeof(FastClonerCache).GetMethod(nameof(FastClonerCache.IsTypeIgnored), BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static, null, [typeof(Type)], null)!, LazyThreadSafetyMode.ExecutionAndPublication);
 
     internal static MethodInfo IsTypeIgnoredMethodInfo => isTypeIgnoredMethodInfo.Value;
-    
+
     static FastClonerExprGenerator()
     {
         fieldSetMethod = typeof(FieldInfo).GetMethod(nameof(FieldInfo.SetValue), [typeof(object), typeof(object)])!;
     }
-    
+
     internal static object? GenerateClonerInternal(Type realType, bool asObject) => GenerateProcessMethod(realType, asObject && realType.IsValueType());
 
     private static bool MemberIsIgnored(MemberInfo memberInfo)
@@ -35,25 +34,25 @@ internal static class FastClonerExprGenerator
             return attribute?.Ignored ?? false;
         });
     }
-    
+
     internal static bool CalculateTypeContainsIgnoredMembers(Type type)
     {
         IEnumerable<MemberInfo> members = FastClonerCache.GetOrAddAllMembers(type, GetAllMembers);
         return members.Any(MemberIsIgnored);
     }
-    
+
     internal static void ForceSetField(FieldInfo field, object obj, object value)
     {
         field.SetValue(obj, value);
     }
 
-    #if MODERN
+#if MODERN
     internal readonly record struct ExpressionPosition(int Depth, int Index)
     {
         public ExpressionPosition Next() => this with { Index = Index + 1 };
         public ExpressionPosition Nested() => new ExpressionPosition(Depth + 1, 0);
     }
-    #else 
+#else
     internal readonly struct ExpressionPosition : IEquatable<ExpressionPosition>
     {
         public int Depth { get; }
@@ -101,7 +100,7 @@ internal static class FastClonerExprGenerator
             return $"ExpressionPosition {{ Depth = {Depth}, Index = {Index} }}";
         }
     }
-    #endif
+#endif
 
     private static LabelTarget CreateLoopLabel(ExpressionPosition position)
     {
@@ -112,7 +111,7 @@ internal static class FastClonerExprGenerator
     internal static object? GenerateProcessMethod(Type realType, bool asObject) => GenerateProcessMethod(realType, asObject && realType.IsValueType(), new ExpressionPosition(0, 0));
     public static bool IsSetType(Type type) => type.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ISet<>));
     private static bool IsDictionaryType(Type type) => typeof(IDictionary).IsAssignableFrom(type) || type.GetInterfaces().Any(i => i.IsGenericType && (i.GetGenericTypeDefinition() == typeof(IDictionary<,>) || i.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)));
-    
+
     private readonly struct ConstructorInfoEx
     {
         public ConstructorInfo Constructor { get; }
@@ -133,13 +132,13 @@ internal static class FastClonerExprGenerator
         // take parameterless constructor
         ConstructorInfo? ctor = type.GetConstructor(Type.EmptyTypes);
         return ctor != null ? new ConstructorInfoEx(ctor) : null;
-        
+
         // using any other constructor that can be called without arguments increases chances we trigger side effects
         // we fall back to memberwise cloning instead
         ctor = type.GetConstructors().FirstOrDefault(c => c.GetParameters().All(p => p.HasDefaultValue));
         return ctor != null ? new ConstructorInfoEx(ctor) : null;
     }
-    
+
     private static NewExpression CreateNewExpressionWithCtor(ConstructorInfoEx ctorInfoEx)
     {
         if (ctorInfoEx.ParameterCount == 0)
@@ -173,18 +172,18 @@ internal static class FastClonerExprGenerator
         {
             Dictionary<string, Type> details = new Dictionary<string, Type>();
             EventInfo[] events = t.GetEvents(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            
+
             foreach (EventInfo evtInfo in events)
             {
-                if (MemberIsIgnored(evtInfo)) 
+                if (MemberIsIgnored(evtInfo))
                 {
                     details[evtInfo.Name] = evtInfo.EventHandlerType;
                 }
             }
-            
+
             return details;
         });
-        
+
         foreach (MemberInfo member in members)
         {
             Type memberType = member switch
@@ -193,13 +192,14 @@ internal static class FastClonerExprGenerator
                 PropertyInfo pi => pi.PropertyType,
                 _ => throw new ArgumentException($"Unsupported member type: {member.GetType()}")
             };
-            
-            bool isWritable = member switch {
+
+            bool isWritable = member switch
+            {
                 FieldInfo fi => !fi.IsInitOnly,
                 PropertyInfo pi => pi.CanWrite,
                 _ => false
             } || type.IsClass() && member is FieldInfo { IsInitOnly: true };
-            
+
             if (MemberIsIgnored(member))
             {
                 if (isWritable)
@@ -209,9 +209,10 @@ internal static class FastClonerExprGenerator
                         Expression.Default(memberType)
                     ));
                 }
+
                 continue;
             }
-            
+
             if (member is FieldInfo fieldInfoForEventCheck && ignoredEventDetails.TryGetValue(fieldInfoForEventCheck.Name, out Type? evtType))
             {
                 if (evtType == memberType)
@@ -223,10 +224,11 @@ internal static class FastClonerExprGenerator
                             Expression.Default(memberType)
                         ));
                     }
+
                     continue;
                 }
             }
-            
+
             if (FastClonerCache.IsTypeIgnored(memberType))
             {
                 if (isWritable)
@@ -236,10 +238,10 @@ internal static class FastClonerExprGenerator
                         Expression.Default(memberType)
                     ));
                 }
-                
+
                 continue;
             }
-            
+
             if (member is PropertyInfo piLocal)
             {
                 if (isWritable && MemberIsIgnored(piLocal))
@@ -271,7 +273,7 @@ internal static class FastClonerExprGenerator
                         }
                     }
                 }
-                
+
                 if (shouldBeIgnored)
                 {
                     if (member is FieldInfo or PropertyInfo { CanWrite: true })
@@ -281,10 +283,10 @@ internal static class FastClonerExprGenerator
                             Expression.Default(memberType)
                         ));
                     }
-                    
+
                     continue;
                 }
-                
+
                 MethodInfo cloneMethodInfo = memberType.IsValueType()
                     ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(memberType)
                     : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
@@ -293,14 +295,14 @@ internal static class FastClonerExprGenerator
                 Expression originalMemberValue = getMemberValue;
 
                 Expression callClone = Expression.Call(cloneMethodInfo, originalMemberValue, state);
-                
-                if (!memberType.IsValueType()) 
+
+                if (!memberType.IsValueType())
                 {
                     callClone = Expression.Convert(callClone, memberType);
                 }
-                
+
                 Expression clonedValueExpression = callClone;
-            
+
                 switch (member)
                 {
                     case FieldInfo fieldInfo:
@@ -318,6 +320,7 @@ internal static class FastClonerExprGenerator
                         {
                             expressionList.Add(Expression.Assign(Expression.Field(toLocal, fieldInfo), clonedValueExpression));
                         }
+
                         break;
                     }
                     case PropertyInfo { CanWrite: true }:
@@ -331,7 +334,7 @@ internal static class FastClonerExprGenerator
             }
         }
     }
-    
+
     private static object GenerateMemberwiseCloner(Type type, ExpressionPosition position)
     {
         ParameterExpression from = Expression.Parameter(typeof(object));
@@ -339,7 +342,7 @@ internal static class FastClonerExprGenerator
         ParameterExpression toLocal = Expression.Variable(type);
         ParameterExpression fromLocal = Expression.Variable(type);
         List<Expression> expressionList = [];
-        
+
         if (!type.IsValueType())
         {
             MethodInfo methodInfo = typeof(object).GetPrivateMethod(nameof(MemberwiseClone))!;
@@ -365,8 +368,8 @@ internal static class FastClonerExprGenerator
 
     private delegate object ProcessMethodDelegate(Type type, bool unboxStruct, ExpressionPosition position);
 
-    #if MODERN
-    private static readonly FrozenDictionary<Type, ProcessMethodDelegate> knownTypeProcessors = 
+#if MODERN
+    private static readonly FrozenDictionary<Type, ProcessMethodDelegate> knownTypeProcessors =
         new Dictionary<Type, ProcessMethodDelegate>
         {
             [typeof(ExpandoObject)] = (_, _, position) => GenerateExpandoObjectProcessor(position),
@@ -377,20 +380,27 @@ internal static class FastClonerExprGenerator
             [typeof(System.Text.Json.Nodes.JsonArray)] = (_, _, position) => GenerateJsonNodeProcessorModern(position),
             [typeof(System.Text.Json.Nodes.JsonValue)] = (_, _, position) => GenerateJsonNodeProcessorModern(position),
         }.ToFrozenDictionary();
-    #else
+#else
     private static readonly Dictionary<Type, ProcessMethodDelegate> knownTypeProcessors =
         new Dictionary<Type, ProcessMethodDelegate>
         {
             [typeof(ExpandoObject)] = (_, _, position) => GenerateExpandoObjectProcessor(position),
             [typeof(Array)] = (type, _, _) => GenerateProcessArrayMethod(type),
         };
-    #endif
-    
+#endif
+
     private static readonly AhoCorasick badTypes = new AhoCorasick([
         "Castle.Proxies.",
         "System.Data.Entity.DynamicProxies.",
         "NHibernate.Proxy."
     ]);
+
+    private static readonly Dictionary<string, Func<Type, object?>> specialNamespaces = new Dictionary<string, Func<Type, object?>> 
+    {
+        // these can be trusted to have their Clone() implemented properly
+        { "System.Drawing", CloneIClonable },
+        { "System.Globalization", CloneIClonable }
+    };
     
     private static bool IsCloneable(Type type)
     {
@@ -415,6 +425,21 @@ internal static class FastClonerExprGenerator
         }
 
         return members;
+    }
+
+    private static object? CloneIClonable(Type type)
+    {
+        if (typeof(ICloneable).IsAssignableFrom(type))
+        {
+            return (Func<object, FastCloneState, object>)((obj, state) =>
+            {
+                object result = ((ICloneable)obj).Clone();
+                state.AddKnownRef(obj, result);
+                return result;
+            });
+        }
+
+        return null;
     }
     
     private static object? GenerateProcessMethod(Type type, bool unboxStruct, ExpressionPosition position)
@@ -453,6 +478,16 @@ internal static class FastClonerExprGenerator
         if (CustomTypeHandlers.TryGetValue(type, out Func<Type, bool, ExpressionPosition, object>? contribHandler))
         {
             return contribHandler.Invoke(type, unboxStruct, position);
+        }
+
+        if (type.Namespace is not null && specialNamespaces.TryGetValue(type.Namespace, out Func<Type, object?>? cloneMethod))
+        {
+            object? special = cloneMethod.Invoke(type);
+
+            if (special is not null)
+            {
+                return special;
+            }
         }
         
         if (IsDictionaryType(type))

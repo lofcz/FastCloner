@@ -24,7 +24,7 @@ public static class ContribTypeHandlers
 
     private static object ProcessFont(Type type, bool unboxStruct, FastClonerExprGenerator.ExpressionPosition position)
     {
-        return (Func<object, FastCloneState, object>)((obj, state) =>
+        return (Func<object, FastCloneState, object>)(static (obj, state) =>
         {
             Font font = (Font)obj;
             Font result = (Font)font.Clone();

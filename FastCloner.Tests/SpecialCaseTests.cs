@@ -2960,4 +2960,67 @@ public class SpecialCaseTests
             Assert.That(clone["key1"], Is.EqualTo(999), "Clone should reflect changes");
         });
     }
+
+    [Test]
+    public void Drawing_Image_DeepClone_Test()
+    {
+        // Arrange
+        Image original = new Bitmap(10, 10);
+
+        // Act
+        Image clone = original.DeepClone();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone, Is.Not.SameAs(original));
+            Assert.That(clone.Width, Is.EqualTo(original.Width));
+            Assert.That(clone.Height, Is.EqualTo(original.Height));
+        });
+    }
+
+    [Test]
+    public void Drawing_Icon_DeepClone_Test()
+    {
+        // Arrange
+        using Bitmap bitmap = new Bitmap(16, 16);
+        using Graphics g = Graphics.FromImage(bitmap);
+        g.Clear(Color.Red);
+        IntPtr hIcon = bitmap.GetHicon();
+        Icon original = Icon.FromHandle(hIcon);
+
+        // Act
+        Icon clone = original.DeepClone();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone, Is.Not.SameAs(original));
+            Assert.That(clone.Width, Is.EqualTo(original.Width));
+            Assert.That(clone.Height, Is.EqualTo(original.Height));
+        });
+    }
+
+    [Test]
+    public void Drawing_Brush_DeepClone_Test()
+    {
+        // Arrange
+        SolidBrush original = new SolidBrush(Color.Red);
+
+        // Act
+        SolidBrush clone = original.DeepClone();
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone, Is.Not.SameAs(original));
+            Assert.That((clone).Color.R, Is.EqualTo((original).Color.R));
+            Assert.That((clone).Color.G, Is.EqualTo((original).Color.G));
+            Assert.That((clone).Color.B, Is.EqualTo((original).Color.B));
+            Assert.That((clone).Color.A, Is.EqualTo((original).Color.A));
+        });
+
+        original.Color = Color.Blue;
+        Assert.That(clone.Color.B, Is.EqualTo(0));
+    }
 }
