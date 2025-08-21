@@ -6,6 +6,7 @@ using System.Collections.Frozen;
 using System.Collections.ObjectModel;
 using System.Dynamic;
 using System.Linq.Expressions;
+using System.Net;
 using System.Reflection;
 
 namespace FastCloner.Code;
@@ -132,11 +133,11 @@ internal static class FastClonerExprGenerator
         // take parameterless constructor
         ConstructorInfo? ctor = type.GetConstructor(Type.EmptyTypes);
         return ctor != null ? new ConstructorInfoEx(ctor) : null;
-
+        
         // using any other constructor that can be called without arguments increases chances we trigger side effects
         // we fall back to memberwise cloning instead
-        ctor = type.GetConstructors().FirstOrDefault(c => c.GetParameters().All(p => p.HasDefaultValue));
-        return ctor != null ? new ConstructorInfoEx(ctor) : null;
+        // ctor = type.GetConstructors().FirstOrDefault(c => c.GetParameters().All(p => p.HasDefaultValue));
+        // return ctor != null ? new ConstructorInfoEx(ctor) : null;
     }
 
     private static NewExpression CreateNewExpressionWithCtor(ConstructorInfoEx ctorInfoEx)
@@ -394,7 +395,7 @@ internal static class FastClonerExprGenerator
         "System.Data.Entity.DynamicProxies.",
         "NHibernate.Proxy."
     ]);
-
+    
     private static readonly Dictionary<string, Func<Type, object?>> specialNamespaces = new Dictionary<string, Func<Type, object?>> 
     {
         // these can be trusted to have their Clone() implemented properly

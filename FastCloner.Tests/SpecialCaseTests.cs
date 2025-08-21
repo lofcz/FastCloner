@@ -3023,4 +3023,30 @@ public class SpecialCaseTests
         original.Color = Color.Blue;
         Assert.That(clone.Color.B, Is.EqualTo(0));
     }
+
+    [Test]
+    public void AssemblyName_DeepClone_Test()
+    {
+        // Arrange
+        var original = new AssemblyName
+        {
+            Name = "MyTestAssembly",
+            Version = new Version(1, 2, 3, 4)
+        };
+        var originalVersion = new Version(1, 2, 3, 4);
+
+        // Act
+        var clone = original.DeepClone();
+        original.Version = new Version(5, 6, 7, 8); // Modify the original
+
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone, Is.Not.Null);
+            Assert.That(clone, Is.Not.SameAs(original));
+            Assert.That(clone.Name, Is.EqualTo("MyTestAssembly"));
+            Assert.That(clone.Version, Is.EqualTo(originalVersion));
+            Assert.That(clone.Version, Is.Not.EqualTo(original.Version));
+        });
+    }
 }

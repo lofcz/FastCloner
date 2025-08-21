@@ -104,7 +104,16 @@ internal static class FastClonerSafeTypes
     }
 
     private static readonly Assembly propertyInfoAssembly = typeof(PropertyInfo).Assembly;
-    private static bool IsReflectionType(Type type) => type.FullName?.StartsWith(TypePrefixes.SystemReflection) is true && Equals(type.GetTypeInfo().Assembly, typeof(PropertyInfo).GetTypeInfo().Assembly);
+    
+    private static bool IsReflectionType(Type type)
+    {
+        if (type == typeof(AssemblyName))
+        {
+            return false;
+        }
+    
+        return type.FullName?.StartsWith(TypePrefixes.SystemReflection) is true && Equals(type.GetTypeInfo().Assembly, typeof(PropertyInfo).GetTypeInfo().Assembly);
+    }
 
     private static IEnumerable<FieldInfo> GetAllTypeFields(Type type)
     {
