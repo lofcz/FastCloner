@@ -14,7 +14,6 @@ Install the package via NuGet:
 
 ```powershell
 dotnet add package FastCloner
-dotnet add package FastCloner.Contrib # only required for some special types, such as Fonts
 ```
 
 Clone your objects:
