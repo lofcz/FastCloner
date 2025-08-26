@@ -2964,6 +2964,12 @@ public class SpecialCaseTests
     [Test]
     public void Drawing_Image_DeepClone_Test()
     {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            Assert.Pass("Windows exclusive");
+            return;
+        }
+        
         // Arrange
         Image original = new Bitmap(10, 10);
 
@@ -2982,6 +2988,12 @@ public class SpecialCaseTests
     [Test]
     public void Drawing_Icon_DeepClone_Test()
     {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            Assert.Pass("Windows exclusive");
+            return;
+        }
+        
         // Arrange
         using Bitmap bitmap = new Bitmap(16, 16);
         using Graphics g = Graphics.FromImage(bitmap);
@@ -3004,6 +3016,12 @@ public class SpecialCaseTests
     [Test]
     public void Drawing_Brush_DeepClone_Test()
     {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            Assert.Pass("Windows exclusive");
+            return;
+        }
+        
         // Arrange
         SolidBrush original = new SolidBrush(Color.Red);
 
