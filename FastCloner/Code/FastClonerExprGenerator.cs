@@ -31,8 +31,9 @@ internal static class FastClonerExprGenerator
     {
         return FastClonerCache.GetOrAddMemberIgnoreStatus(memberInfo, mi =>
         {
-            FastClonerIgnoreAttribute? attribute = mi.GetCustomAttribute<FastClonerIgnoreAttribute>();
-            return attribute?.Ignored ?? false;
+            FastClonerIgnoreAttribute? fcIgnored = mi.GetCustomAttribute<FastClonerIgnoreAttribute>();
+            NonSerializedAttribute? nonSerialized = mi.GetCustomAttribute<NonSerializedAttribute>();
+            return fcIgnored?.Ignored ?? nonSerialized is not null;
         });
     }
 
@@ -193,17 +194,17 @@ internal static class FastClonerExprGenerator
                 PropertyInfo pi => pi.PropertyType,
                 _ => throw new ArgumentException($"Unsupported member type: {member.GetType()}")
             };
-
-            bool isWritable = member switch
+            
+            bool canAssignDirect = member switch
             {
                 FieldInfo fi => !fi.IsInitOnly,
                 PropertyInfo pi => pi.CanWrite,
                 _ => false
-            } || type.IsClass() && member is FieldInfo { IsInitOnly: true };
+            };
 
             if (MemberIsIgnored(member))
             {
-                if (isWritable)
+                if (canAssignDirect)
                 {
                     expressionList.Add(Expression.Assign(
                         Expression.MakeMemberAccess(toLocal, member),
@@ -218,7 +219,7 @@ internal static class FastClonerExprGenerator
             {
                 if (evtType == memberType)
                 {
-                    if (isWritable)
+                    if (canAssignDirect)
                     {
                         expressionList.Add(Expression.Assign(
                             Expression.MakeMemberAccess(toLocal, member),
@@ -232,7 +233,7 @@ internal static class FastClonerExprGenerator
 
             if (FastClonerCache.IsTypeIgnored(memberType))
             {
-                if (isWritable)
+                if (canAssignDirect)
                 {
                     expressionList.Add(Expression.Assign(
                         Expression.MakeMemberAccess(toLocal, member),
@@ -245,7 +246,7 @@ internal static class FastClonerExprGenerator
 
             if (member is PropertyInfo piLocal)
             {
-                if (isWritable && MemberIsIgnored(piLocal))
+                if (piLocal.CanWrite && MemberIsIgnored(piLocal))
                 {
                     expressionList.Add(Expression.Assign(
                         Expression.Property(toLocal, piLocal),
@@ -277,7 +278,7 @@ internal static class FastClonerExprGenerator
 
                 if (shouldBeIgnored)
                 {
-                    if (member is FieldInfo or PropertyInfo { CanWrite: true })
+                    if (canAssignDirect)
                     {
                         expressionList.Add(Expression.Assign(
                             Expression.MakeMemberAccess(toLocal, member),

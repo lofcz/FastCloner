@@ -271,7 +271,7 @@ public class CopyToObjectTests
     
         try
         {
-            // Create a cancelled task that will throw TaskCancelledException
+            // Create a canceled task that will throw TaskCancelledException
             cts.Cancel();
             Task.Delay(100, cts.Token).GetAwaiter().GetResult();
         }

@@ -587,6 +587,14 @@ public class SpecialCaseTests
         [FastClonerIgnore]
         public string B { get; set; } = "My string";
     }
+    
+    private class TestPropsWithNonSerialized
+    {
+        public int A { get; set; } = 10;
+
+        [FastClonerIgnore]
+        public string B { get; set; } = "My string";
+    }
 
     [Test]
     public void Test_Clone_Props()
@@ -607,6 +615,20 @@ public class SpecialCaseTests
     {
         TestPropsWithIgnored original = new TestPropsWithIgnored { A = 42, B = "Test value" };
         TestPropsWithIgnored clone = original.DeepClone();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(clone.A, Is.EqualTo(42));
+            Assert.That(clone.B, Is.EqualTo(null)); // default value
+            Assert.That(clone, Is.Not.SameAs(original));
+        });
+    }
+    
+    [Test]
+    public void Test_Clone_Props_With_NonSerialized()
+    {
+        TestPropsWithNonSerialized original = new TestPropsWithNonSerialized { A = 42, B = "Test value" };
+        TestPropsWithNonSerialized clone = original.DeepClone();
 
         Assert.Multiple(() =>
         {

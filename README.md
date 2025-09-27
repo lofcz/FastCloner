@@ -41,7 +41,7 @@ Sometimes, you might want to exclude certain fields (including event synthesized
 ```csharp
 private class TestPropsWithIgnored
 {
-    [FastClonerIgnore] // <-- decorate with [FastClonerIgnore]
+    [FastClonerIgnore] // <-- decorate with [FastClonerIgnore] or [NonSerialized]
     public string B { get; set; } = "My string";
 
     public int A { get; set; } = 10;
