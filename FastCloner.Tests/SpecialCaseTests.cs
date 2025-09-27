@@ -2883,10 +2883,10 @@ public class SpecialCaseTests
         // JsonObject has constructor: JsonObject(JsonNodeOptions? options = null)
         // So it should be callable with no arguments
 
-        var original = new JsonObject { ["test"] = "value" };
+        JsonObject original = new JsonObject { ["test"] = "value" };
 
         // This should now work without the special JsonNode processors
-        var clone = original.DeepClone();
+        JsonNode clone = original.DeepClone();
 
         Assert.Multiple(() =>
         {
@@ -3046,15 +3046,15 @@ public class SpecialCaseTests
     public void AssemblyName_DeepClone_Test()
     {
         // Arrange
-        var original = new AssemblyName
+        AssemblyName original = new AssemblyName
         {
             Name = "MyTestAssembly",
             Version = new Version(1, 2, 3, 4)
         };
-        var originalVersion = new Version(1, 2, 3, 4);
+        Version originalVersion = new Version(1, 2, 3, 4);
 
         // Act
-        var clone = original.DeepClone();
+        AssemblyName clone = original.DeepClone();
         original.Version = new Version(5, 6, 7, 8); // Modify the original
 
         // Assert
@@ -3066,5 +3066,73 @@ public class SpecialCaseTests
             Assert.That(clone.Version, Is.EqualTo(originalVersion));
             Assert.That(clone.Version, Is.Not.EqualTo(original.Version));
         });
+    }
+    
+    public class LargeNode
+    {
+        public LargeNode Parent { get; set; }
+        public LargeNode Child { get; set; }
+        public LargeNode Previous { get; set; }
+        public LargeNode Next { get; set; }
+        public List<int> Data { get; set; } = [];
+    }
+    
+    [Test]
+    public void LargeCircular_Test()
+    {
+        // Arrange
+        LargeNode root = new LargeNode { Data = [0] };
+        LargeNode current = root;
+        const int nodeCount = 10_000; // stackoverflow for n >= 8000
+
+        for (int i = 1; i < nodeCount; i++)
+        {
+            LargeNode next = new LargeNode { Data = [i], Parent = current };
+            current.Child = next;
+            next.Previous = current;
+            current.Next = next;
+            current = next;
+        }
+        
+        current.Next = root;
+        root.Previous = current;
+
+        // Act
+        LargeNode clone = root.DeepClone();
+
+        // Assert
+        Assert.That(clone, Is.Not.SameAs(root));
+        
+        LargeNode forward = clone;
+        for (int i = 0; i < nodeCount; i++)
+        {
+            forward = forward.Next;
+        }
+        Assert.That(forward, Is.SameAs(clone));
+
+        LargeNode backward = clone;
+        for (int i = 0; i < nodeCount; i++)
+        {
+            backward = backward.Previous;
+        }
+        Assert.That(backward, Is.SameAs(clone));
+
+        // Traverse to a deeply nested node
+        LargeNode originalNode = root;
+        LargeNode clonedNode = clone;
+        for (int i = 0; i < nodeCount / 2; i++)
+        {
+            originalNode = originalNode.Next;
+            clonedNode = clonedNode.Next;
+        }
+        
+        Assert.That(clonedNode, Is.Not.SameAs(originalNode));
+        Assert.That(clonedNode.Data, Is.Not.SameAs(originalNode.Data));
+        Assert.That(clonedNode.Data, Is.EqualTo(originalNode.Data));
+        
+        clonedNode.Data.Add(999);
+        Assert.That(originalNode.Data, Has.Count.EqualTo(1));
+        Assert.That(clonedNode.Data, Has.Count.EqualTo(2));
+        Assert.That(originalNode.Data[0], Is.Not.EqualTo(clonedNode.Data[1]));
     }
 }

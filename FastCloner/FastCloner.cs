@@ -8,6 +8,11 @@ namespace FastCloner;
 public static class FastCloner
 {
     /// <summary>
+    /// Cloning objects with nest level above this threshold uses iterative approach instead of recursion.
+    /// </summary>
+    public static int MaxRecursionDepth { get; set; } = 1_000;
+    
+    /// <summary>
     /// Performs deep (full) copy of object and related graph
     /// </summary>
     public static T? DeepClone<T>(T? obj) => FastClonerGenerator.CloneObject(obj);

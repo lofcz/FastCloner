@@ -46,4 +46,5 @@
   <ItemGroup>
     <None Include="icon.jpg" Pack="true" PackagePath=""/>
   </ItemGroup>
+    
 </Project>

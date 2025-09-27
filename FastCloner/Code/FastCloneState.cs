@@ -1,12 +1,36 @@
-﻿namespace FastCloner.Code;
+﻿using System.Reflection;
+
+namespace FastCloner.Code;
 
 using System.Runtime.CompilerServices;
 
 internal sealed class FastCloneState
 {
+    internal static readonly PropertyInfo UseWorkListProp = typeof(FastCloneState).GetProperty("UseWorkList")!;
+    
     private MiniDictionary? loops;
     private readonly object[] baseFromTo = new object[6];
     private int idx;
+
+    // iterative worklist support
+    private WorkItem[]? workItems;
+    private int workCount;
+    public bool UseWorkList { get; set; }
+    private int callDepth;
+
+    private readonly struct WorkItem
+    {
+        public readonly object From;
+        public readonly object To;
+        public readonly Type Type;
+
+        public WorkItem(object from, object to, Type type)
+        {
+            From = from;
+            To = to;
+            Type = type;
+        }
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public object? GetKnownRef(object from)
@@ -35,6 +59,47 @@ internal sealed class FastCloneState
 
         loops ??= new MiniDictionary();
         loops.Insert(from, to);
+    }
+
+    public void EnqueueProcess(object from, object to, Type type)
+    {
+        WorkItem[] local = workItems ??= new WorkItem[16];
+        if (workCount == local.Length)
+        {
+            int newSize = local.Length * 2;
+            WorkItem[] resized = new WorkItem[newSize];
+            Array.Copy(local, resized, workCount);
+            workItems = local = resized;
+        }
+
+        local[workCount++] = new WorkItem(from, to, type);
+    }
+
+    public bool TryPop(out object from, out object to, out Type type)
+    {
+        if (workCount == 0)
+        {
+            from = null;
+            to = null;
+            type = null;
+            return false;
+        }
+
+        WorkItem wi = workItems![--workCount];
+        from = wi.From;
+        to = wi.To;
+        type = wi.Type;
+        return true;
+    }
+
+    public int IncrementDepth()
+    {
+        return ++callDepth;
+    }
+
+    public void DecrementDepth()
+    {
+        if (callDepth > 0) callDepth--;
     }
 
     private sealed class MiniDictionary

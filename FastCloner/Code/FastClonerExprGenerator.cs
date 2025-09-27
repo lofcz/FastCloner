@@ -288,21 +288,25 @@ internal static class FastClonerExprGenerator
                     continue;
                 }
 
-                MethodInfo cloneMethodInfo = memberType.IsValueType()
-                    ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(memberType)
-                    : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
-
+                Expression clonedValueExpression;
                 MemberExpression getMemberValue = Expression.MakeMemberAccess(fromLocal, member);
                 Expression originalMemberValue = getMemberValue;
 
-                Expression callClone = Expression.Call(cloneMethodInfo, originalMemberValue, state);
-
-                if (!memberType.IsValueType())
+                if (memberType.IsValueType())
                 {
-                    callClone = Expression.Convert(callClone, memberType);
+                    MethodInfo structClone = typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(memberType);
+                    clonedValueExpression = Expression.Call(structClone, originalMemberValue, state);
                 }
-
-                Expression clonedValueExpression = callClone;
+                else
+                {
+                    MethodInfo classDeep = typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
+                    MethodInfo classShallowTrack = typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassShallowAndTrack))!;
+                    PropertyInfo useWorkListProp = FastCloneState.UseWorkListProp;
+                    Expression deepCall = Expression.Call(classDeep, originalMemberValue, state);
+                    Expression shallowCall = Expression.Call(classShallowTrack, originalMemberValue, state);
+                    Expression selected = Expression.Condition(Expression.Property(state, useWorkListProp), shallowCall, deepCall);
+                    clonedValueExpression = Expression.Convert(selected, memberType);
+                }
 
                 switch (member)
                 {
