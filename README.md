@@ -4,7 +4,7 @@
 # FastCloner
 
 <img align="left" width="128" height="128" alt="Te Reo Icon" src="https://github.com/user-attachments/assets/54f5be37-543a-411d-b6e6-90a77414926c" />
-Fast deep cloning library, supporting anything from <code>.NET 4.6</code> to modern <code>.NET 8+</code>. Implements both deep and shallow cloning. Extensively tested, focused on performance and stability even on complicated object graphs. FastCloner is designed to work with as few gotchas as possible out of the box. The mapping is zero-config by default. Clone your objects and be done with it <em>fast</em>. FastCloner builds upon <a href="https://github.com/force-net/DeepCloner">DeepClone</a>.
+Fast deep cloning library, supporting anything from <code>.NET 4.6</code> to modern <code>.NET 10+</code>. Implements both deep and shallow cloning. Extensively tested, focused on performance and stability even on complicated object graphs. FastCloner is designed to work with as few gotchas as possible out of the box. The mapping is zero-config by default. Clone your objects and be done with it <em>fast</em>. FastCloner builds upon <a href="https://github.com/force-net/DeepCloner">DeepClone</a>.
 
 <br/><br/>
 
