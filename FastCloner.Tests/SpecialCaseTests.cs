@@ -592,8 +592,8 @@ public class SpecialCaseTests
     {
         public int A { get; set; } = 10;
 
-        [FastClonerIgnore]
-        public string B { get; set; } = "My string";
+        [NonSerialized]
+        public string B = "My string";
     }
 
     [Test]
