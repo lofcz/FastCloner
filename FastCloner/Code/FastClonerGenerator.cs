@@ -169,7 +169,8 @@ internal static class FastClonerGenerator
         try
         {
             int current = state.IncrementDepth();
-            if (current > 1000)
+            
+            if (current >= FastCloner.MaxRecursionDepth)
             {
                 state.DecrementDepth();
                 state.UseWorkList = true;
