@@ -3157,4 +3157,26 @@ public class SpecialCaseTests
         Assert.That(clonedNode.Data, Has.Count.EqualTo(2));
         Assert.That(originalNode.Data[0], Is.Not.EqualTo(clonedNode.Data[1]));
     }
+    
+    [Test]
+    public void SelfReferenced_WithInitOnlyField_Test()
+    {
+    	SelfReferencedWithInitOnlyField original = new SelfReferencedWithInitOnlyField
+    	{
+    		WithReadOnlyField = new ClassWithReadOnlyField()
+    	};
+    
+    	SelfReferencedWithInitOnlyField clone = original.DeepClone();
+    	
+    	Assert.That(clone, Is.Not.SameAs(original));
+    	Assert.That(clone.WithReadOnlyField, Is.Not.SameAs(original.WithReadOnlyField));
+    	Assert.That(clone.WithReadOnlyField.ReadOnlyValue, Is.EqualTo(original.WithReadOnlyField.ReadOnlyValue));
+    }
+    
+    private class SelfReferencedWithInitOnlyField
+    {
+    	public SelfReferencedWithInitOnlyField? Predecessor { get; set; }
+    
+    	public ClassWithReadOnlyField WithReadOnlyField { get; set; }
+    }
 }

@@ -18,10 +18,20 @@ internal static class FieldAccessorGenerator
 
         UnaryExpression targetCast = Expression.Convert(targetParam, field.DeclaringType);
         UnaryExpression valueCast = Expression.Convert(valueParam, field.FieldType);
-        BinaryExpression assign = Expression.Assign(Expression.Field(targetCast, field), valueCast);
+        Expression body;
+        
+        if (field.IsInitOnly)
+        {
+            MethodInfo setValueMethod = typeof(FieldInfo).GetMethod(nameof(FieldInfo.SetValue), [typeof(object), typeof(object)])!;
+            body = Expression.Call(Expression.Constant(field), setValueMethod, targetCast, valueCast);
+        }
+        else
+        {
+            body = Expression.Assign(Expression.Field(targetCast, field), valueCast);
+        }
 
         Expression<Action<object, object>> lambda = Expression.Lambda<Action<object, object>>(
-            assign,
+            body,
             targetParam,
             valueParam
         );

@@ -91,7 +91,22 @@ internal static class ClonerToExprGenerator
             }
             else
             {
-                expressionList.Add(Expression.Assign(Expression.Field(toLocal, fieldInfo), Expression.Field(fromLocal, fieldInfo)));
+                Expression sourceValue = Expression.Field(fromLocal, fieldInfo);
+                if (fieldInfo.IsInitOnly)
+                {
+                    ConstantExpression setter = Expression.Constant(FieldAccessorGenerator.GetFieldSetter(fieldInfo));
+                    expressionList.Add(
+                        Expression.Invoke(
+                            setter,
+                            Expression.Convert(toLocal, typeof(object)),
+                            Expression.Convert(sourceValue, typeof(object))
+                        )
+                    );
+                }
+                else
+                {
+                    expressionList.Add(Expression.Assign(Expression.Field(toLocal, fieldInfo), sourceValue));
+                }
             }
         }
 
