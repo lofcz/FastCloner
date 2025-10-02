@@ -3235,4 +3235,33 @@ public class SpecialCaseTests
         private decimal readOnlyField = 1m;
         public decimal ReadOnlyValue => readOnlyField;
     }
+    
+    [Test]
+    public void SelfReferenced_WithMultipleReadOnlyProperties_Test()
+    {
+        SelfReferencedWithMultipleReadOnlyProperties original = new SelfReferencedWithMultipleReadOnlyProperties
+        {
+            WithMultipleReadOnlyProperties = new ClassWithMultipleReadOnlyProperties()
+        };
+    
+        SelfReferencedWithMultipleReadOnlyProperties clone = original.DeepClone();
+    	
+        Assert.That(clone, Is.Not.SameAs(original));
+        Assert.That(clone.WithMultipleReadOnlyProperties, Is.Not.SameAs(original.WithMultipleReadOnlyProperties));
+        Assert.That(clone.WithMultipleReadOnlyProperties.Name, Is.EqualTo(original.WithMultipleReadOnlyProperties.Name));
+        Assert.That(clone.WithMultipleReadOnlyProperties.Id, Is.EqualTo(original.WithMultipleReadOnlyProperties.Id));
+    }
+    
+    private class SelfReferencedWithMultipleReadOnlyProperties
+    {
+        public SelfReferencedWithMultipleReadOnlyProperties? Predecessor { get; set; }
+    
+        public ClassWithMultipleReadOnlyProperties WithMultipleReadOnlyProperties { get; set; }
+    }
+
+    private class ClassWithMultipleReadOnlyProperties
+    {
+        public int Id { get; } = 1;
+        public string Name { get; } = "Test";
+    }
 }

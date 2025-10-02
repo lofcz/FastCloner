@@ -7,7 +7,7 @@ internal static class FieldAccessorGenerator
 {
     internal static Action<object, object> GetFieldSetter(FieldInfo field)
     {
-        return (Action<object, object>)FastClonerCache.GetOrAddField(field.DeclaringType, _ => CreateFieldSetter(field));
+        return (Action<object, object>)FastClonerCache.GetOrAddField(field.DeclaringType, field.Name, _ => CreateFieldSetter(field));
     }
 
     private static Action<object, object> CreateFieldSetter(FieldInfo field)
