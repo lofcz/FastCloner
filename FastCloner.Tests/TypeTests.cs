@@ -8,8 +8,9 @@ using System.Text;
 
 namespace FastCloner.Tests;
 
-[TestFixture]
-public class TypeTests
+[TestFixture(Low)]
+[TestFixture(High)]
+public class TypeTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     [Test]
     public void StandardTypes_Should_Be_Cloned()

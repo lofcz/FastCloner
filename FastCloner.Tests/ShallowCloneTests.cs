@@ -2,8 +2,9 @@
 
 namespace FastCloner.Tests;
 
-[TestFixture]
-public class ShallowCloneTests
+[TestFixture(Low)]
+[TestFixture(High)]
+public class ShallowCloneTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     [Test]
     public void SimpleObject_Should_Be_Cloned()

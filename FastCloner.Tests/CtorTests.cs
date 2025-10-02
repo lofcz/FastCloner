@@ -2,8 +2,9 @@
 
 namespace FastCloner.Tests;
 
-[TestFixture]
-public class CtorTests
+[TestFixture(Low)]
+[TestFixture(High)]
+public class CtorTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     public class T1
     {

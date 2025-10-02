@@ -5,8 +5,9 @@ using System.Collections.Specialized;
 
 namespace FastCloner.Tests;
 
-[TestFixture]
-public class CopyToObjectTests
+[TestFixture(Low)]
+[TestFixture(High)]
+public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     [Test]
     public void InterfaceTest()

@@ -1,7 +1,8 @@
 ﻿namespace FastCloner.Tests;
 
-[TestFixture]
-public class CircularTests
+[TestFixture(Low)]
+[TestFixture(High)]
+public class CircularTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     public class C1
     {

@@ -23,8 +23,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FastCloner.Tests;
 
-[TestFixture]
-public class SpecialCaseTests
+[TestFixture(Low)]
+[TestFixture(High)]
+public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     [OneTimeSetUp]
     public void Setup()

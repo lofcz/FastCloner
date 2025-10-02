@@ -1,7 +1,8 @@
 ﻿namespace FastCloner.Tests;
 
-[TestFixture]
-public class GenericTests
+[TestFixture(Low)]
+[TestFixture(High)]
+public class GenericTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     [Test]
     public void Tuple_Should_Be_Cloned()

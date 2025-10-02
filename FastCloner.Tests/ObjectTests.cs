@@ -4,8 +4,9 @@ using FastCloner.Tests.Objects;
 
 namespace FastCloner.Tests;
 
-[TestFixture]
-public class ObjectTests
+[TestFixture(Low)]
+[TestFixture(High)]
+public class ObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     [Test]
     public void SimpleObject_Should_Be_Cloned()
