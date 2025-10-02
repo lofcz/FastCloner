@@ -245,6 +245,16 @@ internal static class FastClonerGenerator
             return knownRef;
         }
         
+        // internal structure of dictionaries, etc. needs to be rebuilt
+        if (RequiresSpecializedCloner(objType))
+        {
+            Func<object, FastCloneState, object>? specialCloner = (Func<object, FastCloneState, object>?)FastClonerCache.GetOrAddClass(objType, t => GenerateCloner(t, true));
+            if (specialCloner is not null)
+            {
+                return specialCloner(obj, state);
+            }
+        }
+        
         MethodInfo methodInfo = typeof(object).GetPrivateMethod(nameof(MemberwiseClone))!;
         object? shallow = methodInfo.Invoke(obj, null);
         state.AddKnownRef(obj, shallow);
@@ -255,6 +265,13 @@ internal static class FastClonerGenerator
         }
 
         return shallow;
+    }
+    
+    private static bool RequiresSpecializedCloner(Type type)
+    {
+        return type.IsArray || 
+               FastClonerExprGenerator.IsDictionaryType(type) || 
+               FastClonerExprGenerator.IsSetType(type);
     }
 
     internal static T CloneStructInternal<T>(T obj, FastCloneState state)
