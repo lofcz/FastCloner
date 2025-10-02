@@ -2,8 +2,9 @@
 
 namespace FastCloner.Tests;
 
-[TestFixture]
-public class InheritanceTests
+[TestFixture(Low)]
+[TestFixture(High)]
+public class InheritanceTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     public class C1 : IDisposable
     {

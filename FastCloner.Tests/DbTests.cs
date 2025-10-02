@@ -13,8 +13,9 @@ namespace FastCloner.Tests;
 using NHibernate;
 using NHibernate.Proxy;
 
-[TestFixture]
-public class DbTests
+[TestFixture(Low)]
+[TestFixture(High)]
+public class DbTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     private ISessionFactory sessionFactory;
     private const string DbFile = "test.db";

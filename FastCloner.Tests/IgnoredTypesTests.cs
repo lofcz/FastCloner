@@ -3,8 +3,9 @@ using System.Runtime.CompilerServices;
 
 namespace FastCloner.Tests;
 
-[TestFixture, NonParallelizable]
-public class IgnoredTypesTests
+[TestFixture(Low)]
+[TestFixture(High)]
+public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     public class SimpleClass
     {

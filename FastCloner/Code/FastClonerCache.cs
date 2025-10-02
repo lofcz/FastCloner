@@ -17,14 +17,14 @@ internal static class FastClonerCache
     private static readonly ClrCache<object> deepClassToCache = new ClrCache<object>();
     private static readonly ClrCache<object> shallowClassToCache = new ClrCache<object>();
     private static readonly ConcurrentLazyCache<object> typeConvertCache = new ConcurrentLazyCache<object>();
-    private static readonly ClrCache<object?> fieldCache = new ClrCache<object?>();
+    private static readonly GenericClrCache<Tuple<Type, string>, object?> fieldCache = new GenericClrCache<Tuple<Type, string>, object?>();
     private static readonly ClrCache<Dictionary<string, Type>> ignoredEventInfoCache = new ClrCache<Dictionary<string, Type>>();
     private static readonly ClrCache<List<MemberInfo>> allMembersCache = new ClrCache<List<MemberInfo>>();
     private static readonly GenericClrCache<MemberInfo, bool> memberIgnoreStatusCache = new GenericClrCache<MemberInfo, bool>();
     private static readonly ClrCache<bool> typeContainsIgnoredMembersCache = new ClrCache<bool>();
     private static readonly ClrCache<object> specialTypesCache = new ClrCache<object>();
 
-    public static object? GetOrAddField(Type type, Func<Type, object?> valueFactory) => fieldCache.GetOrAdd(type, valueFactory);
+    public static object? GetOrAddField(Type type, string name, Func<Type, object?> valueFactory) => fieldCache.GetOrAdd(new Tuple<Type, string>(type, name), k => valueFactory(k.Item1));
     public static object? GetOrAddClass(Type type, Func<Type, object?> valueFactory) => classCache.GetOrAdd(type, valueFactory);
     public static object? GetOrAddStructAsObject(Type type, Func<Type, object?> valueFactory) => structCache.GetOrAdd(type, valueFactory);
     public static object GetOrAddDeepClassTo(Type type, Func<Type, object> valueFactory) => deepClassToCache.GetOrAdd(type, valueFactory);

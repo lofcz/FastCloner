@@ -3,8 +3,9 @@ using System.Text;
 
 namespace FastCloner.Tests;
 
-[TestFixture]
-public class ArrayTests
+[TestFixture(Low)]
+[TestFixture(High)]
+public class ArrayTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     struct MyIntStruct
     {

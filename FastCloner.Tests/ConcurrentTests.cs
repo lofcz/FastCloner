@@ -3,8 +3,9 @@ using FastCloner.Code;
 
 namespace FastCloner.Tests;
 
-[TestFixture]
-public class ConcurrentTests
+[TestFixture(Low)]
+[TestFixture(High)]
+public class ConcurrentTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     private class TestClass
     {
@@ -15,6 +16,9 @@ public class ConcurrentTests
     public void GenerateCloner_IsCalledOnlyOnce()
     {
         // Arrange
+        // clear cache between fixtures
+        FastClonerCache.ClearCache();
+        
         CountHolder generatorCallCount = new CountHolder();
         Type testType = typeof(TestClassForSingleCallTest);
 

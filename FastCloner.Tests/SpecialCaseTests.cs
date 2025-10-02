@@ -23,8 +23,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FastCloner.Tests;
 
-[TestFixture]
-public class SpecialCaseTests
+[TestFixture(Low)]
+[TestFixture(High)]
+public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     [OneTimeSetUp]
     public void Setup()
@@ -3178,5 +3179,90 @@ public class SpecialCaseTests
     	public SelfReferencedWithInitOnlyField? Predecessor { get; set; }
     
     	public ClassWithReadOnlyField WithReadOnlyField { get; set; }
+    }
+    
+    [Test]
+    public void SelfReferenced_WithInitOnlyValueTypeField_Test()
+    {
+        SelfReferencedWithInitOnlyValueTypeField original = new SelfReferencedWithInitOnlyValueTypeField
+        {
+            WithReadOnlyValueTypeField = new ClassWithReadOnlyValueField()
+        };
+    
+        SelfReferencedWithInitOnlyValueTypeField clone = original.DeepClone();
+    	
+        Assert.That(clone, Is.Not.SameAs(original));
+        Assert.That(clone.WithReadOnlyValueTypeField, Is.Not.SameAs(original.WithReadOnlyValueTypeField));
+        Assert.That(clone.WithReadOnlyValueTypeField.ReadOnlyValue, Is.EqualTo(original.WithReadOnlyValueTypeField.ReadOnlyValue));
+    }
+    
+    private class SelfReferencedWithInitOnlyValueTypeField
+    {
+        public SelfReferencedWithInitOnlyValueTypeField? Predecessor { get; set; }
+        
+        public ClassWithReadOnlyValueField WithReadOnlyValueTypeField { get; set; }
+    }
+
+    private class ClassWithReadOnlyValueField
+    {
+        private readonly decimal readOnlyField = 1m;
+        public decimal ReadOnlyValue => readOnlyField;
+    }
+    
+    [Test]
+    public void SelfReferenced_WithWritableValueTypeField_Test()
+    {
+        SelfReferencedWithWritableValueTypeField original = new SelfReferencedWithWritableValueTypeField
+        {
+            WithWritableValueTypeField = new ClassWithWritableValueTypeField()
+        };
+    
+        SelfReferencedWithWritableValueTypeField clone = original.DeepClone();
+    	
+        Assert.That(clone, Is.Not.SameAs(original));
+        Assert.That(clone.WithWritableValueTypeField, Is.Not.SameAs(original.WithWritableValueTypeField));
+        Assert.That(clone.WithWritableValueTypeField.ReadOnlyValue, Is.EqualTo(original.WithWritableValueTypeField.ReadOnlyValue));
+    }
+    
+    private class SelfReferencedWithWritableValueTypeField
+    {
+        public SelfReferencedWithWritableValueTypeField? Predecessor { get; set; }
+        
+        public ClassWithWritableValueTypeField WithWritableValueTypeField { get; set; }
+    }
+
+    private class ClassWithWritableValueTypeField
+    {
+        private decimal readOnlyField = 1m;
+        public decimal ReadOnlyValue => readOnlyField;
+    }
+    
+    [Test]
+    public void SelfReferenced_WithMultipleReadOnlyProperties_Test()
+    {
+        SelfReferencedWithMultipleReadOnlyProperties original = new SelfReferencedWithMultipleReadOnlyProperties
+        {
+            WithMultipleReadOnlyProperties = new ClassWithMultipleReadOnlyProperties()
+        };
+    
+        SelfReferencedWithMultipleReadOnlyProperties clone = original.DeepClone();
+    	
+        Assert.That(clone, Is.Not.SameAs(original));
+        Assert.That(clone.WithMultipleReadOnlyProperties, Is.Not.SameAs(original.WithMultipleReadOnlyProperties));
+        Assert.That(clone.WithMultipleReadOnlyProperties.Name, Is.EqualTo(original.WithMultipleReadOnlyProperties.Name));
+        Assert.That(clone.WithMultipleReadOnlyProperties.Id, Is.EqualTo(original.WithMultipleReadOnlyProperties.Id));
+    }
+    
+    private class SelfReferencedWithMultipleReadOnlyProperties
+    {
+        public SelfReferencedWithMultipleReadOnlyProperties? Predecessor { get; set; }
+    
+        public ClassWithMultipleReadOnlyProperties WithMultipleReadOnlyProperties { get; set; }
+    }
+
+    private class ClassWithMultipleReadOnlyProperties
+    {
+        public int Id { get; } = 1;
+        public string Name { get; } = "Test";
     }
 }

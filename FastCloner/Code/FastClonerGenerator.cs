@@ -109,6 +109,12 @@ internal static class FastClonerGenerator
         object result = cloner(obj, state);
         while (state.TryPop(out object from, out object to, out Type type))
         {
+            // boxed value types - MemberwiseClone already created a value copy.
+            if (type.IsValueType())
+            {
+                continue;
+            }
+            
             Func<object, object, FastCloneState, object> clonerTo = (Func<object, object, FastCloneState, object>)FastClonerCache.GetOrAddDeepClassTo(type, t => ClonerToExprGenerator.GenerateClonerInternal(t, true));
             clonerTo(from, to, state);
         }
@@ -163,7 +169,20 @@ internal static class FastClonerGenerator
         if (state.UseWorkList)
         {
             object? knownA = state.GetKnownRef(obj);
-            return knownA ?? CloneClassShallowAndTrack(obj, state);
+            if (knownA is not null)
+            {
+                return knownA;
+            }
+            
+            // value types: avoid the worklist because ClonerToExprGenerator.GenerateClonerInternal doesn't support value types
+            if (objType.IsValueType())
+            {
+                object cloned = cloner(obj, state);
+                state.AddKnownRef(obj, cloned);
+                return cloned;
+            }
+            
+            return CloneClassShallowAndTrack(obj, state);
         }
 
         try
@@ -175,7 +194,20 @@ internal static class FastClonerGenerator
                 state.DecrementDepth();
                 state.UseWorkList = true;
                 object? knownB = state.GetKnownRef(obj);
-                return knownB ?? CloneClassShallowAndTrack(obj, state);
+                if (knownB is not null)
+                {
+                    return knownB;
+                }
+                
+                // value types: avoid the worklist because ClonerToExprGenerator.GenerateClonerInternal doesn't support value types
+                if (objType.IsValueType())
+                {
+                    object cloned = cloner(obj, state);
+                    state.AddKnownRef(obj, cloned);
+                    return cloned;
+                }
+                
+                return CloneClassShallowAndTrack(obj, state);
             }
 
             object? knownRef = state.GetKnownRef(obj);
@@ -200,8 +232,9 @@ internal static class FastClonerGenerator
         {
             return null;
         }
-
-        if (FastClonerSafeTypes.CanReturnSameObject(objType))
+        
+        // boxed structs can be mutated and must be deep-cloned
+        if (FastClonerSafeTypes.CanReturnSameObject(objType) && !objType.IsValueType())
         {
             return obj;
         }
@@ -210,6 +243,16 @@ internal static class FastClonerGenerator
         if (knownRef is not null)
         {
             return knownRef;
+        }
+        
+        // internal structure of dictionaries, etc. needs to be rebuilt
+        if (RequiresSpecializedCloner(objType))
+        {
+            Func<object, FastCloneState, object>? specialCloner = (Func<object, FastCloneState, object>?)FastClonerCache.GetOrAddClass(objType, t => GenerateCloner(t, true));
+            if (specialCloner is not null)
+            {
+                return specialCloner(obj, state);
+            }
         }
         
         MethodInfo methodInfo = typeof(object).GetPrivateMethod(nameof(MemberwiseClone))!;
@@ -222,6 +265,13 @@ internal static class FastClonerGenerator
         }
 
         return shallow;
+    }
+    
+    private static bool RequiresSpecializedCloner(Type type)
+    {
+        return type.IsArray || 
+               FastClonerExprGenerator.IsDictionaryType(type) || 
+               FastClonerExprGenerator.IsSetType(type);
     }
 
     internal static T CloneStructInternal<T>(T obj, FastCloneState state)
@@ -393,6 +443,22 @@ internal static class FastClonerGenerator
         Func<object, object, FastCloneState, object>? cloner = (Func<object, object, FastCloneState, object>?)(isDeep
             ? FastClonerCache.GetOrAddDeepClassTo(type, t => ClonerToExprGenerator.GenerateClonerInternal(t, true))
             : FastClonerCache.GetOrAddShallowClassTo(type, t => ClonerToExprGenerator.GenerateClonerInternal(t, false)));
-        return cloner is null ? objTo : cloner(objFrom, objTo, new FastCloneState());
+        
+        if (cloner is null)
+            return objTo;
+        
+        FastCloneState state = new FastCloneState();
+        object result = cloner(objFrom, objTo, state);
+        
+        if (isDeep)
+        {
+            while (state.TryPop(out object from, out object to, out Type workItemType))
+            {
+                Func<object, object, FastCloneState, object> clonerTo = (Func<object, object, FastCloneState, object>)FastClonerCache.GetOrAddDeepClassTo(workItemType, t => ClonerToExprGenerator.GenerateClonerInternal(t, true));
+                clonerTo(from, to, state);
+            }
+        }
+        
+        return result;
     }
 }
