@@ -72,7 +72,7 @@ var clone = FastCloner.FastCloner.ShallowClone(new { Hello = "world", MyList = n
 
 ## Limitations
 
-FastCloner uses caching by default, which makes evaluating properties harder. Cloning unmanaged resources, such as `IntPtr`s may result in side-effects, as there is no metadata for the length of buffers such pointers often point to. `ReadOnly` and `Immutable` collections are tested to behave well if they follow basic conventions. Many other features, such as cloning `Dictionary`ies properly while keeping hashcodes, `INotifyPropertyChanged`, `delegate`s, `event`s, `HttpRequest`s / responses, and others are supported. If something doesn't work out of the box, let me know in the [issues](https://github.com/lofcz/FastCloner/issues), the repository is actively maintained.
+FastCloner uses caching by default, which makes evaluating properties harder. Cloning unmanaged resources, such as `IntPtr`s may result in side-effects, as there is no metadata for the length of buffers such pointers often point to. `ReadOnly` and `Immutable` collections are tested to behave well if they follow basic conventions. Many other features, such as cloning `Dictionary`ies properly while keeping hashcodes, `INotifyPropertyChanged`, `delegate`s, `event`s, `HttpRequest`s / responses, and others are supported. FastCloner supports cloning deeply nested objects where recursion isn't possible by switching to a slightly slower iterative approach when needed. The threshold for this can be configured by changing `FastCloner.MaxRecursionDepth`. If something doesn't work out of the box, let me know in the [issues](https://github.com/lofcz/FastCloner/issues), the repository is actively maintained.
 
 Cache can be invalidated to reduce the memory footprint, if needed:
 
@@ -86,7 +86,7 @@ FastCloner aims to _work correctly_ and meet reasonable expectations by default 
 
 ## Contributing
 
-If you are looking to add new functionality, please open an issue first to verify your intent is aligned with the scope of the project. The library is covered by [~300 tests](https://github.com/lofcz/FastCloner/tree/next/FastCloner.Tests), please run them against your work before proposing changes. When reporting issues, providing a minimal reproduction we can plug in as a new test greatly reduces turnaround time.
+If you are looking to add new functionality, please open an issue first to verify your intent is aligned with the scope of the project. The library is covered by over [500 tests](https://github.com/lofcz/FastCloner/tree/next/FastCloner.Tests), please run them against your work before proposing changes. When reporting issues, providing a minimal reproduction we can plug in as a new test greatly reduces turnaround time.
 
 ## License
 
