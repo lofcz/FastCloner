@@ -109,6 +109,12 @@ internal static class FastClonerGenerator
         object result = cloner(obj, state);
         while (state.TryPop(out object from, out object to, out Type type))
         {
+            // boxed value types - MemberwiseClone already created a value copy.
+            if (type.IsValueType())
+            {
+                continue;
+            }
+            
             Func<object, object, FastCloneState, object> clonerTo = (Func<object, object, FastCloneState, object>)FastClonerCache.GetOrAddDeepClassTo(type, t => ClonerToExprGenerator.GenerateClonerInternal(t, true));
             clonerTo(from, to, state);
         }
@@ -226,8 +232,9 @@ internal static class FastClonerGenerator
         {
             return null;
         }
-
-        if (FastClonerSafeTypes.CanReturnSameObject(objType))
+        
+        // boxed structs can be mutated and must be deep-cloned
+        if (FastClonerSafeTypes.CanReturnSameObject(objType) && !objType.IsValueType())
         {
             return obj;
         }
