@@ -3179,4 +3179,60 @@ public class SpecialCaseTests
     
     	public ClassWithReadOnlyField WithReadOnlyField { get; set; }
     }
+    
+    [Test]
+    public void SelfReferenced_WithInitOnlyValueTypeField_Test()
+    {
+        SelfReferencedWithInitOnlyValueTypeField original = new SelfReferencedWithInitOnlyValueTypeField
+        {
+            WithReadOnlyValueTypeField = new ClassWithReadOnlyValueField()
+        };
+    
+        SelfReferencedWithInitOnlyValueTypeField clone = original.DeepClone();
+    	
+        Assert.That(clone, Is.Not.SameAs(original));
+        Assert.That(clone.WithReadOnlyValueTypeField, Is.Not.SameAs(original.WithReadOnlyValueTypeField));
+        Assert.That(clone.WithReadOnlyValueTypeField.ReadOnlyValue, Is.EqualTo(original.WithReadOnlyValueTypeField.ReadOnlyValue));
+    }
+    
+    private class SelfReferencedWithInitOnlyValueTypeField
+    {
+        public SelfReferencedWithInitOnlyValueTypeField? Predecessor { get; set; }
+        
+        public ClassWithReadOnlyValueField WithReadOnlyValueTypeField { get; set; }
+    }
+
+    private class ClassWithReadOnlyValueField
+    {
+        private readonly decimal readOnlyField = 1m;
+        public decimal ReadOnlyValue => readOnlyField;
+    }
+    
+    [Test]
+    public void SelfReferenced_WithWritableValueTypeField_Test()
+    {
+        SelfReferencedWithWritableValueTypeField original = new SelfReferencedWithWritableValueTypeField
+        {
+            WithWritableValueTypeField = new ClassWithWritableValueTypeField()
+        };
+    
+        SelfReferencedWithWritableValueTypeField clone = original.DeepClone();
+    	
+        Assert.That(clone, Is.Not.SameAs(original));
+        Assert.That(clone.WithWritableValueTypeField, Is.Not.SameAs(original.WithWritableValueTypeField));
+        Assert.That(clone.WithWritableValueTypeField.ReadOnlyValue, Is.EqualTo(original.WithWritableValueTypeField.ReadOnlyValue));
+    }
+    
+    private class SelfReferencedWithWritableValueTypeField
+    {
+        public SelfReferencedWithWritableValueTypeField? Predecessor { get; set; }
+        
+        public ClassWithWritableValueTypeField WithWritableValueTypeField { get; set; }
+    }
+
+    private class ClassWithWritableValueTypeField
+    {
+        private decimal readOnlyField = 1m;
+        public decimal ReadOnlyValue => readOnlyField;
+    }
 }

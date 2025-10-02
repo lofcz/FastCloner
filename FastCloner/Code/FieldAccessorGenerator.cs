@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -17,16 +16,18 @@ internal static class FieldAccessorGenerator
         ParameterExpression valueParam = Expression.Parameter(typeof(object), "value");
 
         UnaryExpression targetCast = Expression.Convert(targetParam, field.DeclaringType);
-        UnaryExpression valueCast = Expression.Convert(valueParam, field.FieldType);
+        
         Expression body;
         
         if (field.IsInitOnly)
         {
             MethodInfo setValueMethod = typeof(FieldInfo).GetMethod(nameof(FieldInfo.SetValue), [typeof(object), typeof(object)])!;
+            UnaryExpression valueCast = Expression.Convert(valueParam, typeof(object));
             body = Expression.Call(Expression.Constant(field), setValueMethod, targetCast, valueCast);
         }
         else
         {
+            UnaryExpression valueCast = Expression.Convert(valueParam, field.FieldType);
             body = Expression.Assign(Expression.Field(targetCast, field), valueCast);
         }
 
