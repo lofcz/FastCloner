@@ -26,7 +26,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <Version>3.3.15</Version>
+    <Version>3.3.16</Version>
 
     <Title>FastCloner</Title>
     <Description>Fast deep cloning library for .NET 8+. Supports both deep and shallow cloning. Extensively tested, focused on performance and stability even on complicated object graphs.</Description>
