@@ -81,6 +81,8 @@ internal static class FastClonerGenerator
             UseWorkList = TypeHasDirectSelfReference(rootType)
         };
         
+        object result;
+        
         if (!state.UseWorkList)
         {
             try
@@ -91,12 +93,18 @@ internal static class FastClonerGenerator
                 {
                     state.DecrementDepth();
                     state.UseWorkList = true;
+                    result = cloner(obj, state);
                 }
                 else
                 {
-                    object resultNormal = cloner(obj, state);
+                    result = cloner(obj, state);
                     state.DecrementDepth();
-                    return resultNormal;
+                    
+                    // if UseWorkList was set during recursive cloning, process the worklist
+                    if (!state.UseWorkList)
+                    {
+                        return result;
+                    }
                 }
             }
             catch
@@ -105,8 +113,11 @@ internal static class FastClonerGenerator
                 throw;
             }
         }
-
-        object result = cloner(obj, state);
+        else
+        {
+            result = cloner(obj, state);
+        }
+        
         while (state.TryPop(out object from, out object to, out Type type))
         {
             // boxed value types - MemberwiseClone already created a value copy.
