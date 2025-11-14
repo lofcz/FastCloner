@@ -1,11 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net46;netstandard2.0</TargetFrameworks>
+    <TargetFrameworks>net10.0;net8.0;net46;netstandard2.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>preview</LangVersion>
-    
     <Deterministic>true</Deterministic>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
@@ -29,7 +28,7 @@
     <Version>3.3.16</Version>
 
     <Title>FastCloner</Title>
-    <Description>Fast deep cloning library for .NET 8+. Supports both deep and shallow cloning. Extensively tested, focused on performance and stability even on complicated object graphs.</Description>
+    <Description>The deep cloning library for .NET – zero-config, works out of the box. Works on anything from .NET 4.6 to modern .NET 10+ with no dependencies. Implements both deep and shallow cloning. Extensively tested, focused on performance and stability even on complicated object graphs. FastCloner is designed to work with as few gotchas as possible out of the box. The mapping is zero-config by default. Clone your objects and be done with it fast. FastCloner builds upon DeepClone.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     
     <Authors>Matěj Štágl, Adrian Mos, DeepCloner Collaborators</Authors>

@@ -26,11 +26,12 @@ public class AhoCorasick
             Node current = root;
             foreach (char c in pattern)
             {
-                if (!current.Children.ContainsKey(c))
+                if (!current.Children.TryGetValue(c, out Node value))
                 {
-                    current.Children[c] = new Node();
+                    value = new Node();
+                    current.Children[c] = value;
                 }
-                current = current.Children[c];
+                current = value;
             }
             
             current.IsEndOfPattern = true;

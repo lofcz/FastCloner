@@ -18,18 +18,11 @@ internal sealed class FastCloneState
     public bool UseWorkList { get; set; }
     private int callDepth;
 
-    private readonly struct WorkItem
+    private readonly struct WorkItem(object from, object to, Type type)
     {
-        public readonly object From;
-        public readonly object To;
-        public readonly Type Type;
-
-        public WorkItem(object from, object to, Type type)
-        {
-            From = from;
-            To = to;
-            Type = type;
-        }
+        public readonly object From = from;
+        public readonly object To = to;
+        public readonly Type Type = type;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

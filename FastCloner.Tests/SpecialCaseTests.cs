@@ -3106,7 +3106,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         // Arrange
         LargeNode root = new LargeNode { Data = [0] };
         LargeNode current = root;
-        const int nodeCount = 10_000; // stackoverflow for n >= 8000
+        const int nodeCount = 50_000; // stackoverflow for n >= 8000
 
         for (int i = 1; i < nodeCount; i++)
         {

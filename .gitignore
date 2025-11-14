@@ -350,3 +350,5 @@ MigrationBackup/
 .ionide/
 /Documentation/Help
 .idea
+.cursorignore
+/.vscode
