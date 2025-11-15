@@ -1,5 +1,5 @@
-[![FastCloner](https://badgen.net/nuget/v/FastCloner?v=302&icon=nuget&label=FastCloner)](https://www.nuget.org/packages/FastCloner)
-[![FastCloner.Contrib](https://badgen.net/nuget/v/FastCloner.Contrib?v=302&icon=nuget&label=FastCloner.Contrib)](https://www.nuget.org/packages/FastCloner.Contrib)
+[![FastCloner](https://shields.io/nuget/v/FastCloner?v=302&icon=nuget&label=FastCloner)](https://www.nuget.org/packages/FastCloner)
+[![FastCloner.Contrib](https://shields.io/nuget/v/FastCloner.Contrib?v=302&icon=nuget&label=FastCloner.Contrib)](https://www.nuget.org/packages/FastCloner.Contrib)
 
 # FastCloner
 
