@@ -24,6 +24,7 @@
         <IncludeBuildOutput>false</IncludeBuildOutput>
         <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
         <PackageTags>deepclone,clone,fastclone,cloner,source-generator,sourcegen,codegen,aot,ahead-of-time</PackageTags>
+        <PackageIcon>icon.jpg</PackageIcon>
     </PropertyGroup>
 
     <ItemGroup>
