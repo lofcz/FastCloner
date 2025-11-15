@@ -1,0 +1,23 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient id="purpleGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#9932CC"/>
+            <stop offset="100%" style="stop-color:#4B0082"/>
+        </linearGradient>
+    </defs>
+
+    <rect width="200" height="200" fill="url(#purpleGradient)" rx="20"/>
+    
+    <rect x="50" y="60" width="70" height="80"
+          fill="white" opacity="0.9"
+          transform="rotate(-5, 85, 100)"/>
+
+    <rect x="80" y="60" width="70" height="80"
+          fill="white" opacity="0.7"
+          transform="rotate(5, 115, 100)"/>
+    
+    <path d="M85 100 L115 100 M110 95 L115 100 L110 105"
+          stroke="white"
+          stroke-width="3"
+          fill="none"/>
+</svg>

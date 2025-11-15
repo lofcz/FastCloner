@@ -68,6 +68,8 @@
     <ProjectReference Include="..\FastCloner.Contrib\FastCloner.Contrib.csproj" />
     <ProjectReference Include="..\FastCloner\FastCloner.csproj" />
 
+    <ProjectReference Include="..\FastCloner.SourceGenerator.Shared\FastCloner.SourceGenerator.Shared.csproj" />
+
     <ProjectReference Include="..\FastCloner.SourceGenerator\FastCloner.SourceGenerator.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="true" />

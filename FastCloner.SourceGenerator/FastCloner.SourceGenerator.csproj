@@ -3,30 +3,71 @@
     <PropertyGroup>
         <TargetFramework>netstandard2.0</TargetFramework>
         <LangVersion>preview</LangVersion>
+        <Nullable>enable</Nullable>
         <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
         <CompilerGeneratedFilesOutputPath>Generated</CompilerGeneratedFilesOutputPath>
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
         <IncludeBuildOutput>false</IncludeBuildOutput>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <PackageId>FastCloner.SourceGenerator</PackageId>
+        <Version>1.0.0</Version>
+        <Authors>Matěj Štágl</Authors>
+        <Description>Source generator for FastCloner that generates high-performance deep clone methods at compile time.</Description>
+        <PackageTags>cloning;source-generator;roslyn;performance</PackageTags>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageProjectUrl>https://github.com/lofcz/FastCloner</PackageProjectUrl>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <RepositoryUrl>https://github.com/lofcz/FastCloner</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <NoWarn>$(NoWarn);NU5128</NoWarn>
+        <DevelopmentDependency>true</DevelopmentDependency>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+        <PackageTags>deepclone,clone,fastclone,cloner,source-generator,sourcegen,codegen,aot,ahead-of-time</PackageTags>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+        <None Include="icon.jpg" Pack="true" PackagePath=""/>
     </ItemGroup>
 
     <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="[4.14.0, )" PrivateAssets="all" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="build\FastCloner.SourceGenerator.props" Pack="true" PackagePath="build" />
+        <None Include="README.md" Pack="true" PackagePath="\" />
+        <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
         <ProjectReference Include="..\FastCloner.SourceGenerator.Analyzers\FastCloner.SourceGenerator.Analyzers.csproj"
                           PrivateAssets="all"
-                          ReferenceOutputAssembly="false"
-                          Pack="true"
-                          PackagePath="analyzers/dotnet/cs" />
+                          ReferenceOutputAssembly="false" />
+        <None Include="..\FastCloner.SourceGenerator.Analyzers\bin\$(Configuration)\netstandard2.0\FastCloner.SourceGenerator.Analyzers.dll" 
+              Pack="true" 
+              PackagePath="analyzers/dotnet/cs" 
+              Visible="false" />
         
         <ProjectReference Include="..\FastCloner.SourceGenerator.CodeFixes\FastCloner.SourceGenerator.CodeFixes.csproj"
                           PrivateAssets="all"
-                          ReferenceOutputAssembly="false"
-                          Pack="true"
-                          PackagePath="analyzers/dotnet/cs" />
+                          ReferenceOutputAssembly="false" />
+        <None Include="..\FastCloner.SourceGenerator.CodeFixes\bin\$(Configuration)\netstandard2.0\FastCloner.SourceGenerator.CodeFixes.dll" 
+              Pack="true" 
+              PackagePath="analyzers/dotnet/cs" 
+              Visible="false" />
         
-        <ProjectReference Include="..\FastCloner.SourceGenerator.Shared\FastCloner.SourceGenerator.Shared.csproj" />
+        <ProjectReference Include="..\FastCloner.SourceGenerator.Shared\FastCloner.SourceGenerator.Shared.csproj"
+                          PrivateAssets="none" />
+        <None Include="..\FastCloner.SourceGenerator.Shared\bin\$(Configuration)\netstandard2.0\FastCloner.SourceGenerator.Shared.dll" 
+              Pack="true" 
+              PackagePath="lib/netstandard2.0" 
+              Visible="false" />
     </ItemGroup>
+    
+    <Target Name="GetDependencyTargetPaths">
+        <ItemGroup>
+            <TargetPathWithTargetPlatformMoniker Include="..\FastCloner.SourceGenerator.Analyzers\bin\$(Configuration)\netstandard2.0\FastCloner.SourceGenerator.Analyzers.dll" IncludeRuntimeDependency="false" />
+            <TargetPathWithTargetPlatformMoniker Include="..\FastCloner.SourceGenerator.CodeFixes\bin\$(Configuration)\netstandard2.0\FastCloner.SourceGenerator.CodeFixes.dll" IncludeRuntimeDependency="false" />
+            <TargetPathWithTargetPlatformMoniker Include="..\FastCloner.SourceGenerator.Shared\bin\$(Configuration)\netstandard2.0\FastCloner.SourceGenerator.Shared.dll" IncludeRuntimeDependency="false" />
+        </ItemGroup>
+    </Target>
     
 </Project>
