@@ -54,17 +54,25 @@ internal static class NestedTypeCollector
 
                  var requiresFastCloner = (!keySafe && !keyClon) || (!valSafe && !valClon);
 
+                 var collKind = TypeAnalyzer.GetCollectionKind(type);
+                 var keyTypeName = dictTypes.Value.KeyType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                 var valTypeName = dictTypes.Value.ValueType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                 var concreteType = TypeAnalyzer.GetConcreteTypeForCollection(type, collKind, $"{keyTypeName}, {valTypeName}");
+
                  var model = new MemberModel(
                     "NestedHelper", // Dummy name
                     type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                     false, true, false,
                     MemberTypeKind.Dictionary,
                     null,
-                    dictTypes.Value.KeyType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-                    dictTypes.Value.ValueType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                    keyTypeName,
+                    valTypeName,
                     false, false,
                     keySafe, keyClon, valSafe, valClon,
-                    requiresFastCloner
+                    requiresFastCloner,
+                    collKind,
+                    concreteType,
+                    type.IsValueType
                  );
                  
                  if (!nestedTypes.ContainsKey(model.TypeFullName))
@@ -81,6 +89,15 @@ internal static class NestedTypeCollector
                  var requiresFastCloner = !elemSafe && !elemClon;
 
                  var kind = type is IArrayTypeSymbol ? MemberTypeKind.Array : MemberTypeKind.Collection;
+                 
+                 var collectionKind = CollectionKind.None;
+                 string? concreteType = null;
+
+                 if (kind == MemberTypeKind.Collection)
+                 {
+                     collectionKind = TypeAnalyzer.GetCollectionKind(type);
+                     concreteType = TypeAnalyzer.GetConcreteTypeForCollection(type, collectionKind, elemType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                 }
 
                  var model = new MemberModel(
                     "NestedHelper",
@@ -91,7 +108,10 @@ internal static class NestedTypeCollector
                     null, null,
                     elemSafe, elemClon,
                     false, false, false, false,
-                    requiresFastCloner
+                    requiresFastCloner,
+                    collectionKind,
+                    concreteType,
+                    type.IsValueType
                  );
 
                  if (!nestedTypes.ContainsKey(model.TypeFullName))

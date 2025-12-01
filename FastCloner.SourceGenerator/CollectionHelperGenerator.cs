@@ -1,6 +1,4 @@
-using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace FastCloner.SourceGenerator;
 
@@ -62,16 +60,24 @@ internal static class CollectionHelperGenerator
             context.NeedsStateClass = true;
         }
 
-        WriteHelperMethodSignature(context, typeName, methodName, needsState);
+        WriteHelperMethodSignature(context, typeName, methodName, needsState, implicitModel.IsStruct);
         sb.AppendLine("        {");
-        sb.AppendLine("            if (source == null) return null;");
+        
+        // For non-nullable structs, source cannot be null.
+        if (!implicitModel.IsStruct) 
+        {
+            sb.AppendLine("            if (source == null) return null;");
+        }
 
         if (needsState)
         {
             sb.AppendLine("            if (state != null)");
             sb.AppendLine("            {");
             sb.AppendLine("                var known = state.GetKnownRef(source);");
-            sb.AppendLine($"                if (known != null) return ({typeName})known;");
+            if (implicitModel.IsStruct)
+                sb.AppendLine($"                if (known != null) return ({typeName})known;");
+            else
+                sb.AppendLine($"                if (known != null) return ({typeName})known;");
             sb.AppendLine("            }");
             sb.AppendLine();
         }
@@ -131,50 +137,59 @@ internal static class CollectionHelperGenerator
 
         var typeName = member.TypeFullName;
         var methodName = context.GetMethodName(typeName);
-        var isSafe = member.ElementIsSafe;
-        var hasClonableAttr = member.ElementHasClonableAttr;
+        var kind = member.CollectionKind;
         var needsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(context, member);
-        var sb = context.Source;
-
-        // Identify concrete type and operations
-        var isInterface = typeName.StartsWith("global::System.Collections.Generic.I") || 
-                          typeName.StartsWith("System.Collections.Generic.I");
+        var isValueType = member.IsValueType;
         
-        // Map interfaces to concrete types
-        string concreteType = typeName;
-        if (isInterface)
+        // Handle special collections
+        if (kind.ToString().StartsWith("Immutable"))
         {
-            if (typeName.Contains("Set<")) 
-                concreteType = typeName.Replace("ISet", "HashSet").Replace("IReadOnlySet", "HashSet");
-            else
-                concreteType = typeName.Replace("IList", "List")
-                                     .Replace("ICollection", "List")
-                                     .Replace("IEnumerable", "List")
-                                     .Replace("IReadOnlyList", "List")
-                                     .Replace("IReadOnlyCollection", "List");
+            WriteImmutableCollectionCloneMethod(context, member, typeName, methodName, kind, needsState, isValueType);
+            return;
         }
 
-        var isQueue = typeName.Contains("Queue<");
-        var isStack = typeName.Contains("Stack<");
-        var isLinkedList = typeName.Contains("LinkedList<");
-        var isHashSet = typeName.Contains("HashSet<") || concreteType.Contains("HashSet<");
+        if (kind == CollectionKind.ReadOnlyCollection)
+        {
+            WriteReadOnlyCollectionCloneMethod(context, member, typeName, methodName, needsState, isValueType);
+            return;
+        }
 
+        var isSafe = member.ElementIsSafe;
+        var hasClonableAttr = member.ElementHasClonableAttr;
+        var sb = context.Source;
+
+        // Use pre-computed collection kind and concrete type
+        var concreteType = member.ConcreteTypeFullName ?? typeName;
+        
+        // Determine operations based on kind
         var addMethod = "Add";
+        var isQueue = kind == CollectionKind.Queue || kind == CollectionKind.ConcurrentQueue;
+        var isStack = kind == CollectionKind.Stack || kind == CollectionKind.ConcurrentStack;
+        var isLinkedList = kind == CollectionKind.LinkedList;
+        
         if (isQueue) addMethod = "Enqueue";
         else if (isStack) addMethod = "Push";
         else if (isLinkedList) addMethod = "AddLast";
 
         // Determine if capacity can be passed to constructor
-        var supportsCapacity = !isLinkedList; // LinkedList doesn't take capacity
+        // Only standard List, HashSet, Queue, Stack support new T(int capacity)
+        var supportsCapacity = kind == CollectionKind.List || 
+                               kind == CollectionKind.HashSet || 
+                               kind == CollectionKind.Queue || 
+                               kind == CollectionKind.Stack;
 
         if (needsState)
         {
             context.NeedsStateClass = true;
         }
 
-        WriteHelperMethodSignature(context, typeName, methodName, needsState);
+        WriteHelperMethodSignature(context, typeName, methodName, needsState, isValueType);
         sb.AppendLine("        {");
-        sb.AppendLine("            if (source == null) return null;");
+        
+        if (!isValueType)
+        {
+            sb.AppendLine("            if (source == null) return null;");
+        }
 
         if (needsState)
         {
@@ -210,15 +225,7 @@ internal static class CollectionHelperGenerator
                 sb.AppendLine();
             }
 
-            // For Stack, we need to reverse iteration if we want to preserve order when Pushing
-            // Actually, Stack(IEnumerable) constructor reverses it for us (pushes items in order).
-            // But when we iterate a Stack, we get items from Top to Bottom.
-            // If we Push them in that order, we reverse the stack.
-            // Wait, standard Stack<T> copy constructor: new Stack<T>(otherStack) preserves order.
-            // But we can't use copy constructor if we need to deep clone elements.
-            // To preserve order when deep cloning a Stack:
-            // Iterate source (Top->Bottom), create a temporary list/array, reverse it, then Push?
-            // Or just reverse iteration.
+            // For Stack, we need to take care to preserve the order:
             
             if (isStack)
             {
@@ -255,17 +262,135 @@ internal static class CollectionHelperGenerator
         sb.AppendLine();
     }
 
+    private static void WriteImmutableCollectionCloneMethod(CloneGeneratorContext context, MemberModel member, string typeName, string methodName, CollectionKind kind, bool needsState, bool isValueType)
+    {
+        var sb = context.Source;
+        var isSafe = member.ElementIsSafe;
+        var hasClonableAttr = member.ElementHasClonableAttr;
+
+        if (needsState)
+            context.NeedsStateClass = true;
+
+        WriteHelperMethodSignature(context, typeName, methodName, needsState, isValueType);
+        sb.AppendLine("        {");
+        
+        if (!isValueType)
+        {
+            sb.AppendLine("            if (source == null) return null;");
+        }
+        
+        if (needsState)
+        {
+            sb.AppendLine("            if (state != null)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                var known = state.GetKnownRef(source);");
+            sb.AppendLine($"                if (known != null) return ({typeName})known;");
+            sb.AppendLine("            }");
+            sb.AppendLine();
+        }
+
+        // Logic: Create a temporary List, clone items into it, then create Immutable collection
+        sb.AppendLine($"            var temp = new global::System.Collections.Generic.List<{member.ElementTypeName}>();");
+        
+        // Loop and clone
+        sb.AppendLine("            foreach (var item in source)");
+        sb.AppendLine("            {");
+        string itemExpr = GetItemCloneExpression(context, member, "item", isSafe, hasClonableAttr, needsState);
+        sb.AppendLine($"                temp.Add({itemExpr});");
+        sb.AppendLine("            }");
+
+        // Handle Stack reversal
+        if (kind == CollectionKind.ImmutableStack)
+        {
+            sb.AppendLine("            temp.Reverse();"); 
+        }
+
+        // Create immutable from temp
+        // Map kind to factory method
+        string factoryMethod = kind switch
+        {
+            CollectionKind.ImmutableList => "global::System.Collections.Immutable.ImmutableList.CreateRange(temp)",
+            CollectionKind.ImmutableArray => "global::System.Collections.Immutable.ImmutableArray.CreateRange(temp)",
+            CollectionKind.ImmutableHashSet => "global::System.Collections.Immutable.ImmutableHashSet.CreateRange(temp)",
+            CollectionKind.ImmutableSortedSet => "global::System.Collections.Immutable.ImmutableSortedSet.CreateRange(temp)",
+            CollectionKind.ImmutableQueue => "global::System.Collections.Immutable.ImmutableQueue.CreateRange(temp)",
+            CollectionKind.ImmutableStack => "global::System.Collections.Immutable.ImmutableStack.CreateRange(temp)",
+            _ => "global::System.Collections.Immutable.ImmutableList.CreateRange(temp)" // default fallback
+        };
+
+        sb.AppendLine($"            var result = {factoryMethod};");
+
+        if (needsState)
+        {
+            sb.AppendLine("            state?.AddKnownRef(source, result);");
+        }
+
+        sb.AppendLine("            return result;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+    }
+
+    private static void WriteReadOnlyCollectionCloneMethod(CloneGeneratorContext context, MemberModel member, string typeName, string methodName, bool needsState, bool isValueType)
+    {
+        var sb = context.Source;
+        var isSafe = member.ElementIsSafe;
+        var hasClonableAttr = member.ElementHasClonableAttr;
+
+        if (needsState)
+            context.NeedsStateClass = true;
+
+        WriteHelperMethodSignature(context, typeName, methodName, needsState, isValueType);
+        sb.AppendLine("        {");
+        
+        if (!isValueType)
+        {
+            sb.AppendLine("            if (source == null) return null;");
+        }
+        
+        if (needsState)
+        {
+            sb.AppendLine("            if (state != null)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                var known = state.GetKnownRef(source);");
+            sb.AppendLine($"                if (known != null) return ({typeName})known;");
+            sb.AppendLine("            }");
+            sb.AppendLine();
+        }
+
+        // Logic: Create a temporary List, clone items into it, then create ReadOnlyCollection
+        sb.AppendLine($"            var temp = new global::System.Collections.Generic.List<{member.ElementTypeName}>(source.Count);");
+        
+        sb.AppendLine("            foreach (var item in source)");
+        sb.AppendLine("            {");
+        string itemExpr = GetItemCloneExpression(context, member, "item", isSafe, hasClonableAttr, needsState);
+        sb.AppendLine($"                temp.Add({itemExpr});");
+        sb.AppendLine("            }");
+
+        sb.AppendLine($"            var result = new global::System.Collections.ObjectModel.ReadOnlyCollection<{member.ElementTypeName}>(temp);");
+
+        if (needsState)
+        {
+            sb.AppendLine("            state?.AddKnownRef(source, result);");
+        }
+
+        sb.AppendLine("            return result;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+    }
+
     private static string GetItemCloneExpression(CloneGeneratorContext context, MemberModel member, string itemVar, bool isSafe, bool hasClonableAttr, bool parentNeedsState)
     {
         if (isSafe)
         {
             return itemVar;
         }
-        else if (hasClonableAttr)
+
+        if (hasClonableAttr)
         {
             return $"{itemVar}?.FastDeepClone()";
         }
-        else if (context.TryGetMemberModel(member.ElementTypeName!, out var nestedModel))
+
+        if (context.TryGetMemberModel(member.ElementTypeName!, out var nestedModel))
         {
             // Use helper for nested collection/dictionary
             var helperName = context.GetOrCreateHelperMethodName(nestedModel);
@@ -273,7 +398,8 @@ internal static class CollectionHelperGenerator
             var actualStateVar = parentNeedsState ? "state" : "null";
             return GetHelperMethodCall(context, helperName, itemVar, elementNeedsState, actualStateVar);
         }
-        else if (context.TryGetImplicitTypeModel(member.ElementTypeName!, out var implicitModel))
+
+        if (context.TryGetImplicitTypeModel(member.ElementTypeName!, out var implicitModel))
         {
             // Use helper for implicit type
             var helperName = context.GetOrCreateHelperMethodName(implicitModel.FullyQualifiedName);
@@ -281,16 +407,15 @@ internal static class CollectionHelperGenerator
             var actualStateVar = parentNeedsState ? "state" : "null";
             return GetHelperMethodCall(context, helperName, itemVar, elementNeedsState, actualStateVar);
         }
-        else if (context.IsFastClonerAvailable)
+
+        if (context.IsFastClonerAvailable)
         {
             // Use runtime FastCloner for elements that require it (e.g. generics, unclonable types)
             return $"({member.ElementTypeName}?)FastCloner.DeepClone({itemVar})";
         }
-        else
-        {
-            // Fallback to shallow copy (should be caught by diagnostics if it was required)
-            return itemVar;
-        }
+
+        // Fallback to shallow copy (should be caught by diagnostics if it was required)
+        return itemVar;
     }
 
     private static void WriteDictionaryCloneMethod(CloneGeneratorContext context, MemberModel member)
@@ -299,33 +424,49 @@ internal static class CollectionHelperGenerator
 
         var typeName = member.TypeFullName;
         var methodName = context.GetMethodName(typeName);
+        var kind = member.CollectionKind;
         var needsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(context, member);
-        var sb = context.Source;
+        var isValueType = member.IsValueType;
 
-        // Identify concrete type
-        var isInterface = typeName.StartsWith("global::System.Collections.Generic.I") || 
-                          typeName.StartsWith("System.Collections.Generic.I");
-        
-        string concreteType = typeName;
-        if (isInterface)
+        // Handle special dictionaries
+        if (kind.ToString().StartsWith("Immutable"))
         {
-             concreteType = typeName.Replace("IDictionary", "Dictionary")
-                                    .Replace("IReadOnlyDictionary", "Dictionary");
+            WriteImmutableDictionaryCloneMethod(context, member, typeName, methodName, kind, needsState, isValueType);
+            return;
         }
 
-        var isSortedDictionary = typeName.Contains("SortedDictionary<") || concreteType.Contains("SortedDictionary<");
-        
-        // SortedDictionary constructor doesn't take capacity
-        var supportsCapacity = !isSortedDictionary;
+        if (kind == CollectionKind.ReadOnlyDictionary)
+        {
+            WriteReadOnlyDictionaryCloneMethod(context, member, typeName, methodName, needsState, isValueType);
+            return;
+        }
+
+        var sb = context.Source;
+
+        // Use pre-computed concrete type and kind
+        var concreteType = member.ConcreteTypeFullName ?? typeName;
+
+        // SortedDictionary and ConcurrentDictionary don't take capacity in constructor (or not just capacity)
+        // SortedList DOES take capacity. Standard Dictionary DOES take capacity.
+        var supportsCapacity = kind == CollectionKind.Dictionary || 
+                               kind == CollectionKind.SortedList ||
+                               kind == CollectionKind.List || 
+                               kind == CollectionKind.None;
+
+        var isConcurrent = kind == CollectionKind.ConcurrentDictionary;
 
         if (needsState)
         {
             context.NeedsStateClass = true;
         }
 
-        WriteHelperMethodSignature(context, typeName, methodName, needsState);
+        WriteHelperMethodSignature(context, typeName, methodName, needsState, isValueType);
         sb.AppendLine("        {");
-        sb.AppendLine("            if (source == null) return null;");
+        
+        if (!isValueType)
+        {
+            sb.AppendLine("            if (source == null) return null;");
+        }
 
         if (needsState)
         {
@@ -355,7 +496,120 @@ internal static class CollectionHelperGenerator
 
         sb.AppendLine("            foreach (var kvp in source)");
         sb.AppendLine("            {");
+        
+        // Determine Key and Value expressions
+        var (keyExpr, valExpr) = GetKeyValueExpressions(context, member, needsState);
 
+        if (isConcurrent)
+        {
+            sb.AppendLine($"                result.TryAdd({keyExpr}, {valExpr});");
+        }
+        else
+        {
+            sb.AppendLine($"                result.Add({keyExpr}, {valExpr});");
+        }
+
+        sb.AppendLine("            }");
+        sb.AppendLine();
+        sb.AppendLine("            return result;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+    }
+
+    private static void WriteImmutableDictionaryCloneMethod(CloneGeneratorContext context, MemberModel member, string typeName, string methodName, CollectionKind kind, bool needsState, bool isValueType)
+    {
+        var sb = context.Source;
+        if (needsState) context.NeedsStateClass = true;
+
+        WriteHelperMethodSignature(context, typeName, methodName, needsState, isValueType);
+        sb.AppendLine("        {");
+        
+        if (!isValueType)
+        {
+            sb.AppendLine("            if (source == null) return null;");
+        }
+        
+        if (needsState)
+        {
+            sb.AppendLine("            if (state != null)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                var known = state.GetKnownRef(source);");
+            sb.AppendLine($"                if (known != null) return ({typeName})known;");
+            sb.AppendLine("            }");
+            sb.AppendLine();
+        }
+
+        // Logic: Create a temporary Dictionary, clone items into it, then create Immutable collection
+        sb.AppendLine($"            var temp = new global::System.Collections.Generic.Dictionary<{member.KeyTypeName}, {member.ValueTypeName}>(source.Count);");
+        
+        sb.AppendLine("            foreach (var kvp in source)");
+        sb.AppendLine("            {");
+        var (keyExpr, valExpr) = GetKeyValueExpressions(context, member, needsState);
+        sb.AppendLine($"                temp.Add({keyExpr}, {valExpr});");
+        sb.AppendLine("            }");
+
+        string factoryMethod = kind == CollectionKind.ImmutableSortedDictionary
+            ? "global::System.Collections.Immutable.ImmutableSortedDictionary.CreateRange(temp)"
+            : "global::System.Collections.Immutable.ImmutableDictionary.CreateRange(temp)";
+
+        sb.AppendLine($"            var result = {factoryMethod};");
+
+        if (needsState)
+        {
+            sb.AppendLine("            state?.AddKnownRef(source, result);");
+        }
+
+        sb.AppendLine("            return result;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+    }
+
+    private static void WriteReadOnlyDictionaryCloneMethod(CloneGeneratorContext context, MemberModel member, string typeName, string methodName, bool needsState, bool isValueType)
+    {
+        var sb = context.Source;
+        if (needsState) context.NeedsStateClass = true;
+
+        WriteHelperMethodSignature(context, typeName, methodName, needsState, isValueType);
+        sb.AppendLine("        {");
+        
+        if (!isValueType)
+        {
+            sb.AppendLine("            if (source == null) return null;");
+        }
+        
+        if (needsState)
+        {
+            sb.AppendLine("            if (state != null)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                var known = state.GetKnownRef(source);");
+            sb.AppendLine($"                if (known != null) return ({typeName})known;");
+            sb.AppendLine("            }");
+            sb.AppendLine();
+        }
+
+        // Logic: Create a temporary Dictionary, clone items into it, then create ReadOnlyDictionary
+        sb.AppendLine($"            var temp = new global::System.Collections.Generic.Dictionary<{member.KeyTypeName}, {member.ValueTypeName}>(source.Count);");
+        
+        sb.AppendLine("            foreach (var kvp in source)");
+        sb.AppendLine("            {");
+        var (keyExpr, valExpr) = GetKeyValueExpressions(context, member, needsState);
+        sb.AppendLine($"                temp.Add({keyExpr}, {valExpr});");
+        sb.AppendLine("            }");
+
+        sb.AppendLine($"            var result = new global::System.Collections.ObjectModel.ReadOnlyDictionary<{member.KeyTypeName}, {member.ValueTypeName}>(temp);");
+
+        if (needsState)
+        {
+            sb.AppendLine("            state?.AddKnownRef(source, result);");
+        }
+
+        sb.AppendLine("            return result;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+    }
+
+    private static (string keyExpr, string valExpr) GetKeyValueExpressions(CloneGeneratorContext context, MemberModel member, bool needsState)
+    {
         string keyExpr = "kvp.Key";
         if (!member.KeyIsSafe)
         {
@@ -409,13 +663,8 @@ internal static class CollectionHelperGenerator
                 valExpr = $"({member.ValueTypeName})FastCloner.DeepClone(kvp.Value)";
             }
         }
-
-        sb.AppendLine($"                result.Add({keyExpr}, {valExpr});");
-        sb.AppendLine("            }");
-        sb.AppendLine();
-        sb.AppendLine("            return result;");
-        sb.AppendLine("        }");
-        sb.AppendLine();
+        
+        return (keyExpr, valExpr);
     }
 
     private static void WriteArrayCloneMethod(CloneGeneratorContext context, MemberModel member)
@@ -434,7 +683,8 @@ internal static class CollectionHelperGenerator
             context.NeedsStateClass = true;
         }
 
-        WriteHelperMethodSignature(context, typeName, methodName, needsState);
+        // Arrays are always reference types
+        WriteHelperMethodSignature(context, typeName, methodName, needsState, false);
         sb.AppendLine("        {");
         sb.AppendLine("            if (source == null) return null;");
 
@@ -504,19 +754,30 @@ internal static class CollectionHelperGenerator
         sb.AppendLine();
     }
 
-    private static void WriteHelperMethodSignature(CloneGeneratorContext context, string typeName, string methodName, bool needsState)
+    private static void WriteHelperMethodSignature(CloneGeneratorContext context, string typeName, string methodName, bool needsState, bool isValueType)
     {
         var typeParams = GetTypeParametersString(context.Model);
         var constraints = GetTypeConstraintsString(context.Model);
         var sb = context.Source;
-
-        if (needsState)
+        
+        string typeSuffix = "?";
+        if (isValueType)
         {
-            sb.AppendLine($"        private static {typeName}? {methodName}{typeParams}({typeName}? source, FcGeneratedCloneState? state){constraints}");
+            typeSuffix = ""; // Value types are strict. If nullable, typeName has it.
         }
         else
         {
-            sb.AppendLine($"        private static {typeName}? {methodName}{typeParams}({typeName}? source){constraints}");
+            // Reference types.
+            if (typeName.EndsWith("?")) typeSuffix = ""; // Already has it
+        }
+
+        if (needsState)
+        {
+            sb.AppendLine($"        private static {typeName}{typeSuffix} {methodName}{typeParams}({typeName}{typeSuffix} source, FcGeneratedCloneState? state){constraints}");
+        }
+        else
+        {
+            sb.AppendLine($"        private static {typeName}{typeSuffix} {methodName}{typeParams}({typeName}{typeSuffix} source){constraints}");
         }
     }
 
@@ -528,10 +789,8 @@ internal static class CollectionHelperGenerator
         {
             return $"{methodName}{typeParams}({sourceExpression}, {stateVar})";
         }
-        else
-        {
-            return $"{methodName}{typeParams}({sourceExpression})";
-        }
+
+        return $"{methodName}{typeParams}({sourceExpression})";
     }
 
     private static string GetTypeParametersString(TypeModel model)

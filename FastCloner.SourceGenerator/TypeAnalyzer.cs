@@ -14,45 +14,81 @@ internal static class TypeAnalyzer
     /// </summary>
     public static bool IsSafeType(ITypeSymbol type, Compilation compilation)
     {
-        while (true)
-        {
-            // Handle nullable types
-            if (type is INamedTypeSymbol namedType && namedType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
-            {
-                type = namedType.TypeArguments[0];
-                continue;
-            }
-
-            // Primitives and enums
-            if (type.IsValueType || type.TypeKind == TypeKind.Enum)
-            {
-                var fullName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
-                    .Replace("global::", ""); // SafeTypeCatalog doesn't use global:: prefix
-
-                if (SafeTypeCatalog.SafeTypeNames.Contains(fullName)) return true;
-
-                // Check if it's a simple value type (all fields are safe)
-                if (type.IsValueType && !type.IsReferenceType)
-                {
-                    return IsSimpleValueType(type, compilation);
-                }
-            }
-
-            // String is safe (immutable)
-            if (type.SpecialType == SpecialType.System_String) return true;
-
-            return false;
-        }
+        return IsSafeTypeInternal(type, compilation, new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default));
     }
 
-    private static bool IsSimpleValueType(ITypeSymbol type, Compilation compilation)
+    private static bool IsSafeTypeInternal(ITypeSymbol type, Compilation compilation, HashSet<ITypeSymbol> visited)
+    {
+        if (type == null) return false;
+
+        // Handle nullable types
+        if (type is INamedTypeSymbol namedType && namedType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+        {
+            return IsSafeTypeInternal(namedType.TypeArguments[0], compilation, visited);
+        }
+
+        // Primitives and enums
+        if (type.SpecialType == SpecialType.System_String) return true;
+        if (type.TypeKind == TypeKind.Enum) return true;
+        
+        // Primitive value types (Int32, Boolean, etc.)
+        if (type.IsValueType && type.SpecialType != SpecialType.None)
+        {
+             return true;
+        }
+
+        // Check SafeTypeCatalog for known safe types
+        var fullName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+            .Replace("global::", ""); // SafeTypeCatalog doesn't use global:: prefix
+
+        if (SafeTypeCatalog.SafeTypeNames.Contains(fullName)) return true;
+        
+        // Additional safe types (if not in catalog)
+        if (fullName == "System.Uri" || fullName == "System.Version") return true;
+
+        // System.Type and Reflection types are effectively immutable/singletons
+        if (IsOrInheritsFrom(type, "System.Type") || 
+            IsOrInheritsFrom(type, "System.Reflection.MemberInfo") ||
+            IsOrInheritsFrom(type, "System.Reflection.Assembly"))
+        {
+            return true;
+        }
+
+        // Recursively check Tuples and KeyValuePairs
+        if (type is INamedTypeSymbol namedSym && namedSym.IsGenericType)
+        {
+            if (fullName.StartsWith("System.Tuple") || 
+                fullName.StartsWith("System.ValueTuple") || 
+                fullName.StartsWith("System.Collections.Generic.KeyValuePair"))
+            {
+                if (!visited.Add(type)) return true; // Cycle protection
+
+                foreach (var arg in namedSym.TypeArguments)
+                {
+                    if (!IsSafeTypeInternal(arg, compilation, visited)) return false;
+                }
+                return true;
+            }
+        }
+
+        // Check if it's a simple value type (struct with all safe fields)
+        if (type.IsValueType && !type.IsReferenceType)
+        {
+             if (!visited.Add(type)) return true; // Cycle protection
+             return IsSimpleValueType(type, compilation, visited);
+        }
+
+        return false;
+    }
+
+    private static bool IsSimpleValueType(ITypeSymbol type, Compilation compilation, HashSet<ITypeSymbol> visited)
     {
         // Check all fields recursively
         foreach (var member in type.GetMembers())
         {
             if (member is IFieldSymbol field && !field.IsStatic && !field.IsConst)
             {
-                if (!IsSafeType(field.Type, compilation))
+                if (!IsSafeTypeInternal(field.Type, compilation, visited))
                     return false;
             }
         }
@@ -208,7 +244,7 @@ internal static class TypeAnalyzer
     public static bool HasClonableAttribute(ITypeSymbol type)
     {
         return type.GetAttributes()
-            .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerClonableAttribute");
+            .Any(a => GetFullMetadataName(a.AttributeClass) == "FastCloner.SourceGenerator.Shared.FastClonerClonableAttribute");
     }
 
     /// <summary>
@@ -349,5 +385,187 @@ internal static class TypeAnalyzer
         }
 
         return (isStruct, isSealed, hasClonableBaseClass);
+    }
+
+    /// <summary>
+    /// Identifies the kind of collection (List, Set, Queue, etc.) for optimized code generation.
+    /// </summary>
+    public static CollectionKind GetCollectionKind(ITypeSymbol type)
+    {
+        // Check for specific types first (including derived)
+        if (IsOrInheritsFrom(type, "System.Collections.Generic.Stack`1")) return CollectionKind.Stack;
+        if (IsOrInheritsFrom(type, "System.Collections.Generic.Queue`1")) return CollectionKind.Queue;
+        if (IsOrInheritsFrom(type, "System.Collections.Generic.LinkedList`1")) return CollectionKind.LinkedList;
+        if (IsOrInheritsFrom(type, "System.Collections.Generic.SortedSet`1")) return CollectionKind.SortedSet;
+
+        // Observable & ReadOnly wrappers
+        if (IsOrInheritsFrom(type, "System.Collections.ObjectModel.ObservableCollection`1")) return CollectionKind.ObservableCollection;
+        if (IsOrInheritsFrom(type, "System.Collections.ObjectModel.ReadOnlyCollection`1")) return CollectionKind.ReadOnlyCollection;
+        if (IsOrInheritsFrom(type, "System.Collections.ObjectModel.ReadOnlyDictionary`2")) return CollectionKind.ReadOnlyDictionary;
+
+        // Immutable Collections
+        if (IsOrInheritsFrom(type, "System.Collections.Immutable.ImmutableArray`1")) return CollectionKind.ImmutableArray;
+        
+        if (IsOrInheritsFrom(type, "System.Collections.Immutable.ImmutableList`1") || 
+            HasInterface(type, "System.Collections.Immutable.IImmutableList`1")) return CollectionKind.ImmutableList;
+
+        if (IsOrInheritsFrom(type, "System.Collections.Immutable.ImmutableHashSet`1") || 
+            HasInterface(type, "System.Collections.Immutable.IImmutableSet`1")) return CollectionKind.ImmutableHashSet;
+            
+        if (IsOrInheritsFrom(type, "System.Collections.Immutable.ImmutableSortedSet`1")) return CollectionKind.ImmutableSortedSet;
+
+        if (IsOrInheritsFrom(type, "System.Collections.Immutable.ImmutableQueue`1") || 
+            HasInterface(type, "System.Collections.Immutable.IImmutableQueue`1")) return CollectionKind.ImmutableQueue;
+
+        if (IsOrInheritsFrom(type, "System.Collections.Immutable.ImmutableStack`1") || 
+            HasInterface(type, "System.Collections.Immutable.IImmutableStack`1")) return CollectionKind.ImmutableStack;
+
+        if (IsOrInheritsFrom(type, "System.Collections.Immutable.ImmutableDictionary`2") || 
+            HasInterface(type, "System.Collections.Immutable.IImmutableDictionary`2")) return CollectionKind.ImmutableDictionary;
+
+        if (IsOrInheritsFrom(type, "System.Collections.Immutable.ImmutableSortedDictionary`2")) return CollectionKind.ImmutableSortedDictionary;
+        
+        // Concurrent collections
+        if (IsOrInheritsFrom(type, "System.Collections.Concurrent.ConcurrentQueue`1")) return CollectionKind.ConcurrentQueue;
+        if (IsOrInheritsFrom(type, "System.Collections.Concurrent.ConcurrentStack`1")) return CollectionKind.ConcurrentStack;
+        if (IsOrInheritsFrom(type, "System.Collections.Concurrent.ConcurrentBag`1")) return CollectionKind.ConcurrentBag;
+        if (IsOrInheritsFrom(type, "System.Collections.Concurrent.ConcurrentDictionary`2")) return CollectionKind.ConcurrentDictionary;
+
+        // Dictionaries
+        if (IsOrInheritsFrom(type, "System.Collections.Generic.SortedDictionary`2")) return CollectionKind.SortedDictionary;
+        if (IsOrInheritsFrom(type, "System.Collections.Generic.SortedList`2")) return CollectionKind.SortedList;
+        if (IsOrInheritsFrom(type, "System.Collections.Generic.Dictionary`2") ||
+            IsOrInheritsFrom(type, "System.Collections.Generic.IDictionary`2") ||
+            IsOrInheritsFrom(type, "System.Collections.Generic.IReadOnlyDictionary`2") ||
+            HasInterface(type, "System.Collections.Generic.IDictionary`2") ||
+            HasInterface(type, "System.Collections.Generic.IReadOnlyDictionary`2"))
+            return CollectionKind.Dictionary;
+
+        // Sets
+        if (IsOrInheritsFrom(type, "System.Collections.Generic.HashSet`1") || 
+            IsOrInheritsFrom(type, "System.Collections.Generic.ISet`1") ||
+            IsOrInheritsFrom(type, "System.Collections.Generic.IReadOnlySet`1") ||
+            HasInterface(type, "System.Collections.Generic.ISet`1") ||
+            HasInterface(type, "System.Collections.Generic.IReadOnlySet`1")) 
+            return CollectionKind.HashSet;
+
+        // Default to List (covers List<T>, arrays handled elsewhere, custom collections, IList, etc.)
+        return CollectionKind.List;
+    }
+
+    /// <summary>
+    /// Gets a concrete type name for interface/abstract collections.
+    /// </summary>
+    public static string GetConcreteTypeForCollection(ITypeSymbol type, CollectionKind kind, string elementTypeName)
+    {
+        // If it's a concrete type (class/struct) and not abstract, use it directly
+        if ((type.TypeKind == TypeKind.Class || type.TypeKind == TypeKind.Struct) && !type.IsAbstract)
+        {
+            return type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        }
+
+        // Map interfaces/abstract types to standard concrete implementations
+        switch (kind)
+        {
+            case CollectionKind.HashSet:
+                return $"global::System.Collections.Generic.HashSet<{elementTypeName}>";
+            case CollectionKind.SortedSet:
+                return $"global::System.Collections.Generic.SortedSet<{elementTypeName}>";
+            case CollectionKind.Queue:
+                return $"global::System.Collections.Generic.Queue<{elementTypeName}>";
+            case CollectionKind.Stack:
+                return $"global::System.Collections.Generic.Stack<{elementTypeName}>";
+            case CollectionKind.LinkedList:
+                return $"global::System.Collections.Generic.LinkedList<{elementTypeName}>";
+            case CollectionKind.ConcurrentQueue:
+                return $"global::System.Collections.Concurrent.ConcurrentQueue<{elementTypeName}>";
+            case CollectionKind.ConcurrentStack:
+                return $"global::System.Collections.Concurrent.ConcurrentStack<{elementTypeName}>";
+            case CollectionKind.ConcurrentBag:
+                return $"global::System.Collections.Concurrent.ConcurrentBag<{elementTypeName}>";
+
+            case CollectionKind.ObservableCollection:
+                return $"global::System.Collections.ObjectModel.ObservableCollection<{elementTypeName}>";
+            case CollectionKind.ReadOnlyCollection:
+                return $"global::System.Collections.ObjectModel.ReadOnlyCollection<{elementTypeName}>";
+            case CollectionKind.ReadOnlyDictionary:
+                return $"global::System.Collections.ObjectModel.ReadOnlyDictionary<{elementTypeName}>";
+
+            case CollectionKind.ImmutableArray:
+                return $"global::System.Collections.Immutable.ImmutableArray<{elementTypeName}>";
+            case CollectionKind.ImmutableList:
+                return $"global::System.Collections.Immutable.ImmutableList<{elementTypeName}>";
+            case CollectionKind.ImmutableHashSet:
+                return $"global::System.Collections.Immutable.ImmutableHashSet<{elementTypeName}>";
+            case CollectionKind.ImmutableSortedSet:
+                return $"global::System.Collections.Immutable.ImmutableSortedSet<{elementTypeName}>";
+            case CollectionKind.ImmutableQueue:
+                return $"global::System.Collections.Immutable.ImmutableQueue<{elementTypeName}>";
+            case CollectionKind.ImmutableStack:
+                return $"global::System.Collections.Immutable.ImmutableStack<{elementTypeName}>";
+            case CollectionKind.ImmutableDictionary:
+                return $"global::System.Collections.Immutable.ImmutableDictionary<{elementTypeName}>";
+            case CollectionKind.ImmutableSortedDictionary:
+                return $"global::System.Collections.Immutable.ImmutableSortedDictionary<{elementTypeName}>";
+            
+            // Dictionaries (elementTypeName here is actually Key,Value pair or we need overload? 
+            // NOTE: elementTypeName here is passed as single string. For dictionaries it might be complicated.
+            // But usually we just need to replace generic args.
+            // If called for dictionary, elementTypeName should be "TKey, TValue".
+            case CollectionKind.Dictionary:
+                return $"global::System.Collections.Generic.Dictionary<{elementTypeName}>";
+            case CollectionKind.SortedDictionary:
+                return $"global::System.Collections.Generic.SortedDictionary<{elementTypeName}>";
+            case CollectionKind.SortedList:
+                return $"global::System.Collections.Generic.SortedList<{elementTypeName}>";
+            case CollectionKind.ConcurrentDictionary:
+                return $"global::System.Collections.Concurrent.ConcurrentDictionary<{elementTypeName}>";
+
+            default:
+                // Default to List for everything else (IList, ICollection, IEnumerable, etc.)
+                return $"global::System.Collections.Generic.List<{elementTypeName}>";
+        }
+    }
+
+    private static bool IsOrInheritsFrom(ITypeSymbol type, string fullMetadataName)
+    {
+        if (type == null) return false;
+        
+        // Check type itself
+        if (GetFullMetadataName(type) == fullMetadataName) return true;
+        
+        // Check base types
+        var baseType = type.BaseType;
+        while (baseType != null)
+        {
+            if (GetFullMetadataName(baseType) == fullMetadataName) return true;
+            baseType = baseType.BaseType;
+        }
+        
+        return false;
+    }
+
+    private static bool HasInterface(ITypeSymbol type, string fullMetadataName)
+    {
+        foreach (var iface in type.AllInterfaces)
+        {
+            if (GetFullMetadataName(iface) == fullMetadataName) return true;
+        }
+        return false;
+    }
+
+    private static string GetFullMetadataName(ITypeSymbol symbol)
+    {
+        if (symbol == null || IsRootNamespace(symbol)) return string.Empty;
+        
+        var ns = symbol.ContainingNamespace;
+        var nsName = ns?.IsGlobalNamespace == false ? ns.ToDisplayString() : string.Empty;
+        
+        return string.IsNullOrEmpty(nsName) ? symbol.MetadataName : $"{nsName}.{symbol.MetadataName}";
+    }
+
+    private static bool IsRootNamespace(ISymbol symbol) 
+    {
+       return symbol is INamespaceSymbol s && s.IsGlobalNamespace;
     }
 }

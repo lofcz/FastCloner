@@ -86,7 +86,10 @@ internal static class ImplicitTypeAnalyzer
                             ElementIsSafe: false, ElementHasClonableAttr: false,
                             KeyIsSafe: false, KeyIsClonable: false,
                             ValueIsSafe: false, ValueIsClonable: false,
-                            RequiresFastCloner: false
+                            RequiresFastCloner: false,
+                            CollectionKind: CollectionKind.None,
+                            ConcreteTypeFullName: null,
+                            IsValueType: componentType.IsValueType
                         );
                         return true;
                     }

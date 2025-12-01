@@ -26,6 +26,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="ObjectDumper.NET" Version="4.3.4-pre" />
+    <PackageReference Include="System.Collections.Immutable" Version="10.0.0" />
     <PackageReference Include="System.Data.SqlClient" Version="4.9.0" />
     <PackageReference Include="System.Data.SQLite.Core" Version="1.0.119" />
     <PackageReference Include="System.Drawing.Common" Version="8.0.3" />
@@ -70,17 +71,11 @@
 
     <ProjectReference Include="..\FastCloner.SourceGenerator.Shared\FastCloner.SourceGenerator.Shared.csproj" />
 
-    <ProjectReference Include="..\FastCloner.SourceGenerator\FastCloner.SourceGenerator.csproj"
-                      OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="true" />
+    <ProjectReference Include="..\FastCloner.SourceGenerator\FastCloner.SourceGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
 
-    <ProjectReference Include="..\FastCloner.SourceGenerator.Analyzers\FastCloner.SourceGenerator.Analyzers.csproj"
-                      OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="true" />
+    <ProjectReference Include="..\FastCloner.SourceGenerator.Analyzers\FastCloner.SourceGenerator.Analyzers.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
 
-    <ProjectReference Include="..\FastCloner.SourceGenerator.CodeFixes\FastCloner.SourceGenerator.CodeFixes.csproj"
-                      OutputItemType="Analyzer"
-                      ReferenceOutputAssembly="true" />
+    <ProjectReference Include="..\FastCloner.SourceGenerator.CodeFixes\FastCloner.SourceGenerator.CodeFixes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
   </ItemGroup>
 
 </Project>

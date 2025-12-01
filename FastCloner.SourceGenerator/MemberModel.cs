@@ -18,6 +18,36 @@ internal enum MemberTypeKind
     Other           // Everything else - shallow copy fallback
 }
 
+internal enum CollectionKind
+{
+    None,
+    List,
+    HashSet,
+    Queue,
+    Stack,
+    LinkedList,
+    SortedSet,
+    ConcurrentQueue,
+    ConcurrentStack,
+    ConcurrentBag,
+    Dictionary,
+    SortedDictionary,
+    SortedList,
+    ConcurrentDictionary,
+    ObservableCollection,
+    ReadOnlyCollection,
+    ReadOnlyDictionary,
+    // Immutable collections
+    ImmutableList,
+    ImmutableArray,
+    ImmutableHashSet,
+    ImmutableSortedSet,
+    ImmutableQueue,
+    ImmutableStack,
+    ImmutableDictionary,
+    ImmutableSortedDictionary
+}
+
 /// <summary>
 /// Represents a member (property or field) model for code generation.
 /// This is a record struct for proper equality comparison in incremental generation.
@@ -40,12 +70,15 @@ internal readonly record struct MemberModel(
     bool KeyIsClonable,              // For dictionary key optimization
     bool ValueIsSafe,                // For dictionary value optimization
     bool ValueIsClonable,            // For dictionary value optimization
-    bool RequiresFastCloner          // If true, this member requires FastCloner library to be cloned correctly
+    bool RequiresFastCloner,         // If true, this member requires FastCloner library to be cloned correctly
+    CollectionKind CollectionKind,   // Specific kind of collection (List, Set, Queue, etc.)
+    string? ConcreteTypeFullName,    // Concrete type to instantiate (if interface/abstract)
+    bool IsValueType                 // Whether the member type is a value type (struct)
 ) : IEquatable<MemberModel>
 {
     public static MemberModel Create(IPropertySymbol property, bool nullabilityEnabled, Compilation compilation)
     {
-        var (typeKind, elementName, keyName, valueName, elementSafe, elementClonable, keySafe, keyClonable, valSafe, valClonable, requiresFastCloner) 
+        var (typeKind, elementName, keyName, valueName, elementSafe, elementClonable, keySafe, keyClonable, valSafe, valClonable, requiresFastCloner, collectionKind, concreteType) 
             = AnalyzeType(property.Type, compilation);
         
         return new MemberModel(
@@ -64,12 +97,15 @@ internal readonly record struct MemberModel(
             keyClonable,
             valSafe,
             valClonable,
-            requiresFastCloner);
+            requiresFastCloner,
+            collectionKind,
+            concreteType,
+            property.Type.IsValueType);
     }
 
     public static MemberModel Create(IFieldSymbol field, bool nullabilityEnabled, Compilation compilation)
     {
-        var (typeKind, elementName, keyName, valueName, elementSafe, elementClonable, keySafe, keyClonable, valSafe, valClonable, requiresFastCloner) 
+        var (typeKind, elementName, keyName, valueName, elementSafe, elementClonable, keySafe, keyClonable, valSafe, valClonable, requiresFastCloner, collectionKind, concreteType) 
             = AnalyzeType(field.Type, compilation);
         
         return new MemberModel(
@@ -88,25 +124,28 @@ internal readonly record struct MemberModel(
             keyClonable,
             valSafe,
             valClonable,
-            requiresFastCloner);
+            requiresFastCloner,
+            collectionKind,
+            concreteType,
+            field.Type.IsValueType);
     }
     
-    private static (MemberTypeKind kind, string? elem, string? key, string? val, bool elemSafe, bool elemClon, bool keySafe, bool keyClon, bool valSafe, bool valClon, bool requiresFastCloner) 
+    private static (MemberTypeKind kind, string? elem, string? key, string? val, bool elemSafe, bool elemClon, bool keySafe, bool keyClon, bool valSafe, bool valClon, bool requiresFastCloner, CollectionKind collKind, string? concreteType) 
         AnalyzeType(ITypeSymbol type, Compilation compilation)
     {
         // Check if safe type (primitives, strings, etc.)
         if (TypeAnalyzer.IsSafeType(type, compilation))
-            return (MemberTypeKind.Safe, null, null, null, false, false, false, false, false, false, false);
+            return (MemberTypeKind.Safe, null, null, null, false, false, false, false, false, false, false, CollectionKind.None, null);
         
         // Check if has clonable attribute
         if (TypeAnalyzer.HasClonableAttribute(type))
-            return (MemberTypeKind.Clonable, null, null, null, false, false, false, false, false, false, false);
+            return (MemberTypeKind.Clonable, null, null, null, false, false, false, false, false, false, false, CollectionKind.None, null);
         
         // Check if System.Object or Type Parameter (generic T)
         // For generics, we don't know at compile time if it's clonable.
         // We generate a smart fallback that handles safe types at runtime.
         if (type.SpecialType == SpecialType.System_Object || type.TypeKind == Microsoft.CodeAnalysis.TypeKind.TypeParameter)
-            return (MemberTypeKind.Object, null, null, null, false, false, false, false, false, false, false);
+            return (MemberTypeKind.Object, null, null, null, false, false, false, false, false, false, false, CollectionKind.None, null);
         
         // IMPORTANT: Check array BEFORE collection (arrays implement ICollection<T>)
         if (type is IArrayTypeSymbol arrayType)
@@ -116,7 +155,7 @@ internal readonly record struct MemberModel(
             var elemClon = TypeAnalyzer.HasClonableAttribute(arrayType.ElementType);
             // If element is not safe and not clonable, we need FastCloner to deep clone it
             var requiresFastCloner = !elemSafe && !elemClon;
-            return (MemberTypeKind.Array, elemName, null, null, elemSafe, elemClon, false, false, false, false, requiresFastCloner);
+            return (MemberTypeKind.Array, elemName, null, null, elemSafe, elemClon, false, false, false, false, requiresFastCloner, CollectionKind.None, null);
         }
         
         // Check dictionary BEFORE collection (dictionaries implement ICollection<KeyValuePair<K,V>>)
@@ -136,7 +175,10 @@ internal readonly record struct MemberModel(
                 // If key or value is not safe/clonable, we might need FastCloner
                 var requiresFastCloner = (!keySafe && !keyClon) || (!valSafe && !valClon);
                 
-                return (MemberTypeKind.Dictionary, null, keyName, valName, false, false, keySafe, keyClon, valSafe, valClon, requiresFastCloner);
+                var collKind = TypeAnalyzer.GetCollectionKind(type);
+                var concreteType = TypeAnalyzer.GetConcreteTypeForCollection(type, collKind, $"{keyName}, {valName}");
+
+                return (MemberTypeKind.Dictionary, null, keyName, valName, false, false, keySafe, keyClon, valSafe, valClon, requiresFastCloner, collKind, concreteType);
             }
         }
         
@@ -149,18 +191,22 @@ internal readonly record struct MemberModel(
             var elemClon = elemType != null && TypeAnalyzer.HasClonableAttribute(elemType);
             // If element is not safe and not clonable, we need FastCloner
             var requiresFastCloner = !elemSafe && !elemClon;
-            return (MemberTypeKind.Collection, elemName, null, null, elemSafe, elemClon, false, false, false, false, requiresFastCloner);
+            
+            var collKind = TypeAnalyzer.GetCollectionKind(type);
+            var concreteType = TypeAnalyzer.GetConcreteTypeForCollection(type, collKind, elemName!);
+            
+            return (MemberTypeKind.Collection, elemName, null, null, elemSafe, elemClon, false, false, false, false, requiresFastCloner, collKind, concreteType);
         }
 
         // Check for implicit candidate (must be after collection)
         if (TypeAnalyzer.IsImplicitCandidate(type))
         {
             // It's a candidate for implicit cloning (generated recursively)
-            return (MemberTypeKind.Implicit, null, null, null, false, false, false, false, false, false, false);
+            return (MemberTypeKind.Implicit, null, null, null, false, false, false, false, false, false, false, CollectionKind.None, null);
         }
         
         // Everything else - shallow copy fallback
         // If it's "Other", it's an unknown type. We definitely need FastCloner to deep clone it.
-        return (MemberTypeKind.Other, null, null, null, false, false, false, false, false, false, true);
+        return (MemberTypeKind.Other, null, null, null, false, false, false, false, false, false, true, CollectionKind.None, null);
     }
 }
