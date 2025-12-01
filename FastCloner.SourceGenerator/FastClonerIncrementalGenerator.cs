@@ -31,9 +31,9 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
                     
                     var compilation = ctx.SemanticModel.Compilation;
                     
-                    if (TypeModel.TryCreate(namedTypeSymbol, nullabilityEnabled, compilation, out var model, out var error))
+                    if (TypeModelFactory.TryCreate(namedTypeSymbol, nullabilityEnabled, compilation, out var model, out var error))
                     {
-                        return Result<TypeModel>.Success(model);
+                        return Result<TypeModel>.Success(model!);
                     }
                     else
                     {

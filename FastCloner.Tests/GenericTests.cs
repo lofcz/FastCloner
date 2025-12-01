@@ -52,7 +52,7 @@ public class GenericTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionD
 
     public class Generic<T>
     {
-        public T Value { get; set; }
+        public T Value { get; set; } = default!;
     }
 
     [Test]

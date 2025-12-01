@@ -1,0 +1,228 @@
+using FastCloner.SourceGenerator;
+using FastCloner.SourceGenerator.Shared;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using NUnit.Framework;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
+using System.Reflection;
+
+namespace FastCloner.Tests;
+
+[TestFixture]
+[SourceGeneratorCompatible]
+public class DiagnosticTests
+{
+    // This class tests that the Source Generator correctly reports diagnostics.
+    // Since FCG004 is an error that breaks the build, we cannot test it by defining the class directly in the test project.
+    // Instead, we use CSharpGeneratorDriver to run the generator on a code string in memory and verify the diagnostics.
+
+    [Test]
+    public void ClassWithUnclonableMember_And_NoFastClonerRuntime_Should_NOT_Report_FCG004_If_ImplicitlyClonable()
+    {
+        // Arrange
+        var source = @"
+using FastCloner.SourceGenerator.Shared;
+using System.Collections.Generic;
+
+namespace TestNamespace;
+
+// UnclonableClass is effectively safe (only int member), so it should be implicitly clonable
+public class UnclonableClass
+{
+    public int Value { get; set; }
+}
+
+[FastClonerClonable]
+[FastClonerSimulateNoRuntime]
+public class ClassWithUnclonableMember
+{
+    public UnclonableClass Member { get; set; }
+}
+";
+        // Act
+        var diagnostics = RunGenerator(source);
+
+        // Assert
+        var fcg004 = diagnostics.FirstOrDefault(d => d.Id == "FCG004");
+        Assert.That(fcg004, Is.Null, "Should NOT report FCG004 because UnclonableClass is implicitly clonable (only safe members)");
+    }
+
+    [Test]
+    public void ClassWithTrulyUnsafeMember_Should_Report_FCG004()
+    {
+        // Arrange
+        var source = @"
+using FastCloner.SourceGenerator.Shared;
+using System;
+
+namespace TestNamespace;
+
+public class TrulyUnsafe
+{
+    public TrulyUnsafe(int x) { } // No parameterless ctor
+}
+
+[FastClonerClonable]
+[FastClonerSimulateNoRuntime]
+public class ClassWithUnsafe
+{
+    public TrulyUnsafe Member { get; set; }
+}
+";
+        // Act
+        var diagnostics = RunGenerator(source);
+
+        // Assert
+        var fcg004 = diagnostics.FirstOrDefault(d => d.Id == "FCG004");
+        Assert.That(fcg004, Is.Not.Null, "Should report FCG004 for truly unsafe type (no parameterless ctor)");
+    }
+
+    [Test]
+    public void ClassWithHttpClient_Should_Report_FCG004()
+    {
+        // HttpClient is unsafe (internal state) and has members like BaseAddress (Uri) which are not implicitly clonable
+        // (Uri has no parameterless ctor). So it should fail when FastCloner is missing.
+        var source = @"
+using FastCloner.SourceGenerator.Shared;
+using System.Net.Http;
+
+namespace TestNamespace;
+
+[FastClonerClonable]
+[FastClonerSimulateNoRuntime]
+public class ClassWithHttpClient
+{
+    public HttpClient Client { get; set; }
+}
+";
+        // Act
+        var diagnostics = RunGenerator(source);
+
+        // Assert
+        var fcg004 = diagnostics.FirstOrDefault(d => d.Id == "FCG004");
+        Assert.That(fcg004, Is.Not.Null, "Should report FCG004 for HttpClient (complex BCL type)");
+    }
+
+    [Test]
+    public void ClassWithIndirectHttpClient_Should_Report_FCG004()
+    {
+        // Wrapper contains HttpClient. Wrapper itself looks like a POCO, but its member is unsafe.
+        // So Wrapper is NOT implicitly clonable.
+        // So ClassWithIndirectHttpClient should fail because Wrapper requires FastCloner.
+        var source = @"
+using FastCloner.SourceGenerator.Shared;
+using System.Net.Http;
+
+namespace TestNamespace;
+
+public class WrapperOfHttpClient
+{
+    public HttpClient Client { get; set; }
+}
+
+[FastClonerClonable]
+[FastClonerSimulateNoRuntime]
+public class ClassWithIndirectHttpClient
+{
+    public WrapperOfHttpClient Wrapper { get; set; }
+}
+";
+        // Act
+        var diagnostics = RunGenerator(source);
+
+        // Assert
+        var fcg004 = diagnostics.FirstOrDefault(d => d.Id == "FCG004");
+        Assert.That(fcg004, Is.Not.Null, "Should report FCG004 for indirect HttpClient (Wrapper contains unsafe member)");
+        Assert.That(fcg004.GetMessage(), Does.Contain("Wrapper"), "Should identify Wrapper as the offending member in the root type");
+    }
+
+    [Test]
+    public void GenericClass_And_NoFastClonerRuntime_Should_NOT_Report_FCG004()
+    {
+        // Arrange
+        var source = @"
+using FastCloner.SourceGenerator.Shared;
+using System.Collections.Generic;
+
+namespace TestNamespace;
+
+[FastClonerClonable]
+[FastClonerSimulateNoRuntime]
+public class GenericClass<T>
+{
+    public T Value { get; set; }
+}
+";
+        // Act
+        var diagnostics = RunGenerator(source);
+
+        // Assert
+        var fcg004 = diagnostics.FirstOrDefault(d => d.Id == "FCG004");
+        Assert.That(fcg004, Is.Null, "Should NOT report FCG004 for generic types, as they now fallback gracefully");
+    }
+    
+    [Test]
+    public void GenericListClass_Should_Use_FastCloner_For_Items()
+    {
+        // This test verifies that we can clone a generic list of unclonable items using FastCloner runtime
+        // Note: In the test environment, FastCloner runtime IS available, so we don't get FCG004 here.
+        
+        var original = new GenericListClass<UnclonableClass>
+        {
+            Items = new List<UnclonableClass> 
+            { 
+                new UnclonableClass { Value = 1 },
+                new UnclonableClass { Value = 2 }
+            }
+        };
+
+        var clone = original.FastDeepClone();
+
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone.Items, Is.Not.Null);
+        Assert.That(clone.Items.Count, Is.EqualTo(2));
+        Assert.That(clone.Items[0], Is.Not.SameAs(original.Items[0])); // Should be deep cloned
+    }
+
+    // Helper method to run the generator
+    private static ImmutableArray<Diagnostic> RunGenerator(string source)
+    {
+        var syntaxTree = CSharpSyntaxTree.ParseText(source);
+        
+        var references = new List<MetadataReference>
+        {
+            MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(FastClonerClonableAttribute).Assembly.Location),
+            MetadataReference.CreateFromFile(Assembly.Load("System.Runtime").Location),
+            MetadataReference.CreateFromFile(Assembly.Load("netstandard").Location)
+        };
+
+        var compilation = CSharpCompilation.Create(
+            "TestAssembly",
+            new[] { syntaxTree },
+            references,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+        var generator = new FastClonerIncrementalGenerator();
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(generator);
+
+        driver = driver.RunGenerators(compilation);
+        var result = driver.GetRunResult();
+
+        return result.Diagnostics;
+    }
+
+    public class UnclonableClass
+    {
+        public int Value { get; set; }
+    }
+
+    // Test for List<T> where T is generic - should use FastCloner
+    [FastClonerClonable]
+    public partial class GenericListClass<T>
+    {
+        public List<T> Items { get; set; }
+    }
+}

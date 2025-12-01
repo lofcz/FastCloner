@@ -79,7 +79,7 @@ public class TypeTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDept
 
     public class EventHandlerTest1
     {
-        public event Action<int> Event;
+        public event Action<int>? Event;
 
         public int Call(int x)
         {

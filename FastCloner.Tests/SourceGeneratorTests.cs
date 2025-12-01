@@ -112,6 +112,19 @@ public class SourceGeneratorTests
         public SimpleClass3[]? Array { get; set; }
         public List<SimpleClass3>? List { get; set; }
     }
+
+    [FastClonerClonable]
+    public class DictionaryContainer
+    {
+        public Dictionary<string, SimpleClass3>? Dict { get; set; }
+    }
+
+    [FastClonerClonable]
+    public class RecursiveCollectionContainer
+    {
+        public List<List<int>>? NestedList { get; set; }
+        public Dictionary<string, Dictionary<string, string>>? NestedDict { get; set; }
+    }
     
     [Test]
     [SourceGeneratorCompatible]
@@ -222,5 +235,211 @@ public class SourceGeneratorTests
         Assert.That(clone.List[1].Double, Is.EqualTo(4940.4943048).Within(0.0001), "List[1] should not be modified");
         Assert.That(clone.List.Count, Is.EqualTo(2), "List count should not change");
         Assert.That(clone.List, Does.Not.Contain(original.List[2]), "Clone should not have new item added to original");
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void Dictionary_DeepClone_Should_Clone_Keys_And_Values()
+    {
+        // Arrange
+        var original = new DictionaryContainer
+        {
+            Dict = new Dictionary<string, SimpleClass3>
+            {
+                { "Key1", new SimpleClass3 { String = "Value 1" } },
+                { "Key2", new SimpleClass3 { String = "Value 2" } }
+            }
+        };
+
+        // Act
+        var clone = original.FastDeepClone();
+
+        // Assert
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone!.Dict, Is.Not.Null);
+        Assert.That(clone.Dict!.Count, Is.EqualTo(2));
+        Assert.That(clone.Dict["Key1"].String, Is.EqualTo("Value 1"));
+        Assert.That(clone.Dict["Key2"].String, Is.EqualTo("Value 2"));
+
+        // Verify deep clone - values should be new instances
+        Assert.That(clone.Dict["Key1"], Is.Not.SameAs(original.Dict!["Key1"]));
+        Assert.That(clone.Dict["Key2"], Is.Not.SameAs(original.Dict["Key2"]));
+        
+        // Modify original
+        original.Dict["Key1"].String = "MODIFIED";
+        
+        // Verify clone is unaffected
+        Assert.That(clone.Dict["Key1"].String, Is.EqualTo("Value 1"));
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void RecursiveCollection_Should_Be_DeepCloned()
+    {
+        // Arrange
+        var original = new RecursiveCollectionContainer
+        {
+            NestedList = [ [1, 2], [3, 4] ],
+            NestedDict = new Dictionary<string, Dictionary<string, string>>
+            {
+                { "Group1", new Dictionary<string, string> { { "A", "1" } } },
+                { "Group2", new Dictionary<string, string> { { "B", "2" } } }
+            }
+        };
+
+        // Act
+        var clone = original.FastDeepClone();
+
+        // Assert
+        Assert.That(clone, Is.Not.Null);
+        
+        // Check nested list
+        Assert.That(clone!.NestedList, Is.Not.Null);
+        Assert.That(clone.NestedList!.Count, Is.EqualTo(2));
+        Assert.That(clone.NestedList[0], Is.Not.SameAs(original.NestedList![0]));
+        Assert.That(clone.NestedList[0], Is.EqualTo(new[] { 1, 2 }));
+        
+        // Check nested dict
+        Assert.That(clone.NestedDict, Is.Not.Null);
+        Assert.That(clone.NestedDict!.Count, Is.EqualTo(2));
+        Assert.That(clone.NestedDict["Group1"], Is.Not.SameAs(original.NestedDict!["Group1"]));
+        Assert.That(clone.NestedDict["Group1"]["A"], Is.EqualTo("1"));
+        
+        // Verify independence
+        original.NestedList[0].Add(99);
+        original.NestedDict["Group1"]["A"] = "MODIFIED";
+        
+        Assert.That(clone.NestedList[0].Count, Is.EqualTo(2));
+        Assert.That(clone.NestedDict["Group1"]["A"], Is.EqualTo("1"));
+    }
+
+    [FastClonerClonable]
+    public partial class EnumerableSamples
+    {
+        public List<int>? ListInts { get; set; }
+        public int[]? ArrayInts { get; set; }
+        public IList<int>? IListInts { get; set; }
+        public ICollection<int>? ICollectionInts { get; set; }
+        public IEnumerable<int>? IEnumerableInts { get; set; }
+        public IReadOnlyList<int>? IReadOnlyListInts { get; set; }
+        public IReadOnlyCollection<int>? IReadOnlyCollectionInts { get; set; }
+        public HashSet<int>? HashSetInts { get; set; }
+        public Queue<int>? QueueInts { get; set; }
+        public Stack<int>? StackInts { get; set; }
+        public LinkedList<int>? LinkedListInts { get; set; }
+        public Dictionary<int, string>? DictionaryInts { get; set; }
+        public IReadOnlyDictionary<int, string>? IReadOnlyDictionaryInts { get; set; }
+        public SortedDictionary<int, string>? SortedDictionaryInts { get; set; }
+        public SortedList<int, string>? SortedListInts { get; set; }
+        public IReadOnlyDictionary<int, MyPersonCls>? IReadOnlyDictionaryIntPeople { get; set; }
+    }
+
+    public class MyPersonCls
+    {
+        public string MySuperName { get; set; }
+        public MyPersonNestedClass MyDict { get; set; }
+    }
+
+    public class MyPersonNestedClass
+    {
+        public Dictionary<string, string> Dict { get; set; }
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void EnumerableSamples_Should_Be_DeepCloned()
+    {
+        // Arrange
+        var original = new EnumerableSamples
+        {
+            ListInts = new List<int> { 1, 2, 3 },
+            ArrayInts = new int[] { 4, 5, 6 },
+            IListInts = new List<int> { 7, 8, 9 },
+            ICollectionInts = new List<int> { 10, 11, 12 },
+            IEnumerableInts = new List<int> { 13, 14, 15 },
+            IReadOnlyListInts = new List<int> { 16, 17, 18 },
+            IReadOnlyCollectionInts = new List<int> { 19, 20, 21 },
+            HashSetInts = new HashSet<int> { 22, 23, 24 },
+            QueueInts = new Queue<int>(new[] { 25, 26, 27 }),
+            StackInts = new Stack<int>(new[] { 28, 29, 30 }),
+            LinkedListInts = new LinkedList<int>(new[] { 31, 32, 33 }),
+            DictionaryInts = new Dictionary<int, string> { { 1, "One" }, { 2, "Two" } },
+            IReadOnlyDictionaryInts = new Dictionary<int, string> { { 3, "Three" }, { 4, "Four" } },
+            SortedDictionaryInts = new SortedDictionary<int, string> { { 5, "Five" }, { 6, "Six" } },
+            SortedListInts = new SortedList<int, string> { { 7, "Seven" }, { 8, "Eight" } },
+            IReadOnlyDictionaryIntPeople = new Dictionary<int, MyPersonCls> { { 9, new MyPersonCls { MySuperName = "Nine" } } }
+        };
+
+        // Act
+        var clone = original.FastDeepClone();
+
+        // Assert
+        Assert.That(clone, Is.Not.Null);
+
+        // List
+        Assert.That(clone!.ListInts, Is.Not.SameAs(original.ListInts));
+        Assert.That(clone.ListInts, Is.EquivalentTo(original.ListInts));
+
+        // Array
+        Assert.That(clone.ArrayInts, Is.Not.SameAs(original.ArrayInts));
+        Assert.That(clone.ArrayInts, Is.EquivalentTo(original.ArrayInts));
+
+        // IList
+        Assert.That(clone.IListInts, Is.Not.SameAs(original.IListInts));
+        Assert.That(clone.IListInts, Is.EquivalentTo(original.IListInts));
+        Assert.That(clone.IListInts, Is.InstanceOf<List<int>>()); // Typically clones to List for interfaces
+
+        // ICollection
+        Assert.That(clone.ICollectionInts, Is.Not.SameAs(original.ICollectionInts));
+        Assert.That(clone.ICollectionInts, Is.EquivalentTo(original.ICollectionInts));
+
+        // IEnumerable
+        Assert.That(clone.IEnumerableInts, Is.Not.SameAs(original.IEnumerableInts));
+        Assert.That(clone.IEnumerableInts, Is.EquivalentTo(original.IEnumerableInts));
+
+        // IReadOnlyList
+        Assert.That(clone.IReadOnlyListInts, Is.Not.SameAs(original.IReadOnlyListInts));
+        Assert.That(clone.IReadOnlyListInts, Is.EquivalentTo(original.IReadOnlyListInts));
+
+        // IReadOnlyCollection
+        Assert.That(clone.IReadOnlyCollectionInts, Is.Not.SameAs(original.IReadOnlyCollectionInts));
+        Assert.That(clone.IReadOnlyCollectionInts, Is.EquivalentTo(original.IReadOnlyCollectionInts));
+
+        // HashSet
+        Assert.That(clone.HashSetInts, Is.Not.SameAs(original.HashSetInts));
+        Assert.That(clone.HashSetInts, Is.EquivalentTo(original.HashSetInts));
+
+        // Queue
+        Assert.That(clone.QueueInts, Is.Not.SameAs(original.QueueInts));
+        Assert.That(clone.QueueInts, Is.EquivalentTo(original.QueueInts));
+
+        // Stack
+        Assert.That(clone.StackInts, Is.Not.SameAs(original.StackInts));
+        Assert.That(clone.StackInts, Is.EquivalentTo(original.StackInts));
+
+        // LinkedList
+        Assert.That(clone.LinkedListInts, Is.Not.SameAs(original.LinkedListInts));
+        Assert.That(clone.LinkedListInts, Is.EquivalentTo(original.LinkedListInts));
+
+        // Dictionary
+        Assert.That(clone.DictionaryInts, Is.Not.SameAs(original.DictionaryInts));
+        Assert.That(clone.DictionaryInts, Is.EquivalentTo(original.DictionaryInts));
+
+        // IReadOnlyDictionary
+        Assert.That(clone.IReadOnlyDictionaryInts, Is.Not.SameAs(original.IReadOnlyDictionaryInts));
+        Assert.That(clone.IReadOnlyDictionaryInts, Is.EquivalentTo(original.IReadOnlyDictionaryInts));
+
+        // SortedDictionary
+        Assert.That(clone.SortedDictionaryInts, Is.Not.SameAs(original.SortedDictionaryInts));
+        Assert.That(clone.SortedDictionaryInts, Is.EquivalentTo(original.SortedDictionaryInts));
+
+        // SortedList
+        Assert.That(clone.SortedListInts, Is.Not.SameAs(original.SortedListInts));
+        Assert.That(clone.SortedListInts, Is.EquivalentTo(original.SortedListInts));
+
+        // Nested Implicit
+        Assert.That(clone.IReadOnlyDictionaryIntPeople, Is.Not.SameAs(original.IReadOnlyDictionaryIntPeople));
+        Assert.That(clone.IReadOnlyDictionaryIntPeople![9], Is.Not.SameAs(original.IReadOnlyDictionaryIntPeople![9]));
+        Assert.That(clone.IReadOnlyDictionaryIntPeople[9].MySuperName, Is.EqualTo("Nine"));
     }
 }

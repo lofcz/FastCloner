@@ -220,9 +220,9 @@ public class ArrayTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDep
 
     public class Ac
     {
-        public int[] A { get; set; }
+        public int[] A { get; set; } = null!;
 
-        public int[] B { get; set; }
+        public int[] B { get; set; } = null!;
     }
 
     [Test]
