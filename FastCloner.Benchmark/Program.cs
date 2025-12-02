@@ -1,5 +1,4 @@
-﻿using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Configs;
+﻿using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Reports;
 using BenchmarkDotNet.Running;
 
@@ -13,7 +12,7 @@ class Program
         ManualConfig config = DefaultConfig.Instance
             .WithOptions(ConfigOptions.DisableOptimizationsValidator);
         
-        Summary summary = BenchmarkRunner.Run<BenchDolly>(config);
+        Summary summary = BenchmarkRunner.Run<BenchMinimal>(config);
         Console.WriteLine(summary);
     }
 }

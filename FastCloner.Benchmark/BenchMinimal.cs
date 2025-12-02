@@ -1,5 +1,14 @@
+using AutoMapper;
 using BenchmarkDotNet.Attributes;
+using FastCloner.SourceGenerator.Shared;
 using Force.DeepCloner;
+using MessagePack;
+using Microsoft.Extensions.Logging.Abstractions;
+using NClone;
+using Newtonsoft.Json;
+using ProtoBuf;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Text.Json;
 
 namespace FastCloner.Benchmark;
 
@@ -9,6 +18,7 @@ namespace FastCloner.Benchmark;
 public class BenchMinimal
 {
     private TestObject testData;
+    private IMapper mapper;
     
     [GlobalSetup]
     public void Setup()
@@ -23,12 +33,18 @@ public class BenchMinimal
                 Description = "Nested test"
             }
         };
+
+        var config = new MapperConfiguration((IMapperConfigurationExpression cfg) => {
+            cfg.CreateMap<TestObject, TestObject>();
+            cfg.CreateMap<NestedObject, NestedObject>();
+        }, new NullLoggerFactory());
+        mapper = config.CreateMapper();
     }
     
     [Benchmark(Baseline = true)]
     public object? FastCloner()
     {
-        return global::FastCloner.FastCloner.DeepClone(testData);
+        return testData.FastDeepClone();
     }
 
     [Benchmark]
@@ -67,17 +83,95 @@ public class BenchMinimal
         return global::ObjectCloner.ObjectCloner.DeepClone(testData);
     }
 
-    
+    [Benchmark]
+    public object? NewtonsoftJson()
+    {
+        var json = JsonConvert.SerializeObject(testData);
+        return JsonConvert.DeserializeObject<TestObject>(json);
+    }
+
+    [Benchmark]
+    public object? SystemTextJson()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(testData);
+        return System.Text.Json.JsonSerializer.Deserialize<TestObject>(json);
+    }
+
+    // crashes
+    /*[Benchmark]
+    public object? BinaryFormatter()
+    {
+#pragma warning disable SYSLIB0011
+        using var stream = new MemoryStream();
+        var formatter = new BinaryFormatter();
+        formatter.Serialize(stream, testData);
+        stream.Seek(0, SeekOrigin.Begin);
+        return formatter.Deserialize(stream);
+#pragma warning restore SYSLIB0011
+    }*/
+
+    [Benchmark]
+    public object? MessagePack()
+    {
+        var bytes = MessagePackSerializer.Serialize(testData);
+        return MessagePackSerializer.Deserialize<TestObject>(bytes);
+    }
+
+    [Benchmark]
+    public object? ProtobufNet()
+    {
+        using var stream = new MemoryStream();
+        Serializer.Serialize(stream, testData);
+        stream.Seek(0, SeekOrigin.Begin);
+        return Serializer.Deserialize<TestObject>(stream);
+    }
+
+    [Benchmark]
+    public object? AutoMapper()
+    {
+        return mapper.Map<TestObject>(testData);
+    }
+
+    [Benchmark]
+    public object? AnyCloneBenchmark()
+    {
+        return AnyClone.CloneExtensions.Clone(testData);
+    }
+
+    [Benchmark]
+    public object? NClone()
+    {
+        return Clone.ObjectGraph(testData);
+    }
+
+
+    [Serializable]
+    [FastClonerClonable]
+    [MessagePackObject]
+    [ProtoContract]
     public class TestObject
     {
+        [Key(0)]
+        [ProtoMember(1)]
         public int Id { get; set; }
+        [Key(1)]
+        [ProtoMember(2)]
         public string Name { get; set; }
+        [Key(2)]
+        [ProtoMember(3)]
         public NestedObject NestedObject { get; set; }
     }
 
+    [Serializable]
+    [MessagePackObject]
+    [ProtoContract]
     public class NestedObject
     {
+        [Key(0)]
+        [ProtoMember(1)]
         public int Value { get; set; }
+        [Key(1)]
+        [ProtoMember(2)]
         public string Description { get; set; }
     }
 }
