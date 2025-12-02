@@ -63,13 +63,12 @@ public class MyClass
     public string StrVal { get; set; }
 }
 
-// Only classes where FastDeepClone() extension method should be generated
-// need to use [FastClonerClonable]!
+// [FastClonerClonable] is only required on types where you call .FastDeepClone()
 var original = new GenericClass<List<MyClass>> { Value = new List<MyClass> { new MyClass { StrVal = "hello world" } } };
 var clone = original.FastDeepClone();
 ```
 
-## Advanced usage
+## Advanced Usage
 
 Sometimes, you might want to exclude certain fields/events/properties from cloning:
 ```csharp
