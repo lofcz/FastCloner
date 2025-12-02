@@ -20,6 +20,8 @@
         <ProjectReference Include="..\FastCloner.SourceGenerator.CodeFixes\FastCloner.SourceGenerator.CodeFixes.csproj"
                           OutputItemType="Analyzer"
                           ReferenceOutputAssembly="false" />
+        
+        <ProjectReference Include="..\FastCloner.SourceGenerator.Shared\FastCloner.SourceGenerator.Shared.csproj" />
     </ItemGroup>
     
 </Project>

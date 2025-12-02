@@ -1,7 +1,2 @@
 <Project>
-  <ItemGroup>
-    <!-- Automatically set PrivateAssets=all for this package so it doesn't propagate transitively -->
-    <PackageReference Update="FastCloner.SourceGenerator" PrivateAssets="all" />
-  </ItemGroup>
 </Project>
-

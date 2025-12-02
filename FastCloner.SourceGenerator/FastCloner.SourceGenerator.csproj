@@ -20,8 +20,6 @@
         <RepositoryUrl>https://github.com/lofcz/FastCloner</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <NoWarn>$(NoWarn);NU5128</NoWarn>
-        <DevelopmentDependency>true</DevelopmentDependency>
-        <IncludeBuildOutput>false</IncludeBuildOutput>
         <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
         <PackageTags>deepclone,clone,fastclone,cloner,source-generator,sourcegen,codegen,aot,ahead-of-time</PackageTags>
         <PackageIcon>icon.jpg</PackageIcon>
@@ -56,7 +54,7 @@
               Visible="false" />
         
         <ProjectReference Include="..\FastCloner.SourceGenerator.Shared\FastCloner.SourceGenerator.Shared.csproj"
-                          PrivateAssets="none" />
+                          PrivateAssets="all" />
         <None Include="..\FastCloner.SourceGenerator.Shared\bin\$(Configuration)\netstandard2.0\FastCloner.SourceGenerator.Shared.dll" 
               Pack="true" 
               PackagePath="lib/netstandard2.0" 

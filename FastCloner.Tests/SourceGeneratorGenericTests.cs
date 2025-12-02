@@ -26,7 +26,7 @@ public class SourceGeneratorGenericTests
     
     [FastClonerClonable]
     [FastClonerSimulateNoRuntime]
-    public class GenericClassWithConstraint<T> where T : class, new()
+    public class GenericClassWithConstraint<T>
     {
         public T Value { get; set; }
     }
