@@ -1,0 +1,5 @@
+This project uses the following open source software:
+
+DeepCloner - MIT License
+Copyright (c) 2016 force
+https://github.com/force-net/DeepCloner
