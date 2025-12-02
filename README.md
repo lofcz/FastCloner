@@ -10,15 +10,15 @@
 [![Infidex](https://shields.io/nuget/v/FastCloner.SourceGenerator?v=304&icon=nuget&label=FastCloner.SourceGenerator)](https://www.nuget.org/packages/FastCloner.SourceGenerator)
 [![License:MIT](https://img.shields.io/badge/License-MIT-34D058.svg)](https://opensource.org/license/mit)
 
-The fastest deep cloning library, supporting anything from <code>.NET 4.6</code> to modern <code>.NET 10+</code> with no dependencies. FastCloner uses a unique source generator capable of analyzing object graphs and cloning object without explicit annotations. For types that cannot be cloned, such as <code>HttpClient</code>, FastCloner uses a highly optimized reflection-based fallback. Zero dependencies, blazingly fast, built for developers who need cloning that _just works_.
+The fastest deep cloning library, supporting anything from <code>.NET 4.6</code> to modern <code>.NET 10+</code> with no dependencies. FastCloner uses a unique source generator capable of analyzing object graphs and cloning objects without explicit annotations. For types that cannot be cloned, such as <code>HttpClient</code>, FastCloner uses a highly optimized reflection-based fallback. Zero dependencies, blazingly fast, built for developers who need cloning that _just works_.
  
 </div>
 
 ## ✨ Features
 
-- **The Fastest** - Benchmarked to beat all other libraries with third-party independent benchmarks verifing the speed
+- **The Fastest** - Benchmarked to beat all other libraries with third-party independent benchmarks verifying the speed
 - **The Most Correct** - Cloning objects is hard: `<T>`, `abstract`, immutables, read-only, pointers, circular dependencies, deeply nested graphs.. we have over [500 tests](https://github.com/lofcz/FastCloner/tree/next/FastCloner.Tests) verifying correct behavior in these cases and we are transparent about the [limitations](https://github.com/lofcz/FastCloner?tab=readme-ov-file#limitations)
-- **Novel Algorithm** - FastCloner recognizes that certain that cloning code cannot be generated in certain scenarios and uses highly optimized reflection based approach instead for these types - this only happens for the members that need this, not entire objects
+- **Novel Algorithm** - FastCloner recognizes that certain cloning code cannot be generated in certain scenarios and uses highly optimized reflection-based approach instead for these types - this only happens for the members that need this, not entire objects
 - **Embeddable** - FastCloner has no dependencies outside the standard library. Source generator and reflection parts can be installed independently
 - **Gentle & Caring** - FastCloner detects standard attributes like `[NonSerialized]` making it easy to try without polluting codebase with custom attributes. Type usage graph for generics is built automatically producing performant cloning code without manual annotations
 - **Easy Integration** - `FastDeepClone()` for AOT cloning, `DeepClone()` for reflection cloning. That's it!
@@ -63,7 +63,7 @@ public class MyClass
     public string StrVal { get; set; }
 }
 
-// only classes where FastDeepClone() extension method should be generated
+// Only classes where FastDeepClone() extension method should be generated
 // need to use [FastClonerClonable]!
 var original = new GenericClass<List<MyClass>> { Value = new List<MyClass> { new MyClass { StrVal = "hello world" } } };
 var clone = original.FastDeepClone();
@@ -84,7 +84,7 @@ TestPropsWithIgnored original = new TestPropsWithIgnored { A = 42, B = "Test val
 TestPropsWithIgnored clone = original.DeepClone(); // clone.B is null (default value of a given type)
 ```
 
-You might also need to exclude certain types from being cloned ever. To do that, put offending types on a blacklist:
+You might also need to exclude certain types from ever being cloned. To do that, put offending types on a blacklist:
 ```cs
 FastCloner.FastCloner.IgnoreType(typeof(PropertyChangedEventHandler)); // or FastCloner.FastCloner.IgnoreTypes([ .. ])
 ```
@@ -106,7 +106,7 @@ FastCloner.FastCloner.ClearCache();
 
 - Cloning unmanaged resources, such as `IntPtr`s may result in side-effects, as there is no metadata for the length of buffers such pointers often point to.
 - `ReadOnly` and `Immutable` collections are tested to behave well if they follow basic conventions.
-- With reflection, cloning deeply nested objects switches from recursion to iterative approach on-fly. The threshold for this can be configured by changing `FastCloner.MaxRecursionDepth`, iterative approach is marginally slower.
+- With reflection, cloning deeply nested objects switches from recursion to iterative approach on the fly. The threshold for this can be configured by changing `FastCloner.MaxRecursionDepth`, iterative approach is marginally slower.
 
 ## Performance
 
@@ -134,7 +134,7 @@ Intel Core i7-8700 CPU 3.20GHz (Max: 3.19GHz) (Coffee Lake), 1 CPU, 12 logical a
 | AnyCloneBenchmark  | 5,102.40 ns | 239.089 ns | 704.959 ns | 5,370.93 ns | 497.81 |   68.98 |   13 | 0.9003 |      - |    5656 B |       78.56 |
 ```
 
-You can run the benchmark [locally](https://github.com/lofcz/FastCloner/blob/next/FastCloner.Benchmark/BenchMinimal.cs) to verify the results. There are also [third-party benchmarks](https://github.com/AnderssonPeter/Dolly?tab=readme-ov-file#benchmarks) in some of competing libraries confirming these results.
+You can run the benchmark [locally](https://github.com/lofcz/FastCloner/blob/next/FastCloner.Benchmark/BenchMinimal.cs) to verify the results. There are also [third-party benchmarks](https://github.com/AnderssonPeter/Dolly?tab=readme-ov-file#benchmarks) in some of the competing libraries confirming these results.
 
 ## Contributing
 
