@@ -16,7 +16,7 @@ The fastest deep cloning library, supporting anything from <code>.NET 4.6</code>
 
 ## ✨ Features
 
-- **The Fastest** - [Benchmarked](https://github.com/lofcz/FastCloner?tab=readme-ov-file#performance) to beat all other libraries with third-party independent benchmarks verifying the speed. **300x** speed-up vs using `Newtonsoft.Json` and **160x** vs `System.Text.Json`
+- **The Fastest** - [Benchmarked](https://github.com/lofcz/FastCloner?tab=readme-ov-file#performance) to beat all other libraries with third-party independent benchmarks verifying the speed. **300x** speed-up vs `Newtonsoft.Json` and **160x** vs `System.Text.Json`
 - **The Most Correct** - Cloning objects is hard: `<T>`, `abstract`, immutables, read-only, pointers, circular dependencies, deeply nested graphs.. we have over [500 tests](https://github.com/lofcz/FastCloner/tree/next/FastCloner.Tests) verifying correct behavior in these cases and we are transparent about the [limitations](https://github.com/lofcz/FastCloner?tab=readme-ov-file#limitations)
 - **Novel Algorithm** - FastCloner recognizes that certain cloning code cannot be generated in certain scenarios and uses highly optimized reflection-based approach instead for these types - this only happens for the members that need this, not entire objects
 - **Embeddable** - FastCloner has no dependencies outside the standard library. Source generator and reflection parts can be installed independently
