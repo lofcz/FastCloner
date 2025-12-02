@@ -137,7 +137,7 @@ You can run the benchmark [locally](https://github.com/lofcz/FastCloner/blob/nex
 
 ## Contributing
 
-If you are looking to add new functionality, please open an issue first to verify your intent is aligned with the scope of the project. The library is covered by over [500 tests](https://github.com/lofcz/FastCloner/tree/next/FastCloner.Tests), please run them against your work before proposing changes. When reporting issues, providing a minimal reproduction we can plug in as a new test greatly reduces turnaround time.
+If you are looking to add new functionality, please open an issue first to verify your intent is aligned with the scope of the project. The library is covered by over [500 tests](https://github.com/lofcz/FastCloner/tree/next/src/FastCloner.Tests), please run them against your work before proposing changes. When reporting issues, providing a minimal reproduction we can plug in as a new test greatly reduces turnaround time.
 
 ## License
 
