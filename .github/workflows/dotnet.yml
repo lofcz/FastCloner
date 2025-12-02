@@ -32,13 +32,13 @@ jobs:
         node-version: '22'
         
     - name: Restore dependencies
-      run: dotnet restore FastClonerCi.slnf
+      run: dotnet restore src/FastClonerCi.slnf
 
     - name: Build
-      run: dotnet build FastClonerCi.slnf --no-restore
+      run: dotnet build src/FastClonerCi.slnf --no-restore
 
     - name: Test
-      run: dotnet test FastClonerCi.slnf --no-build --verbosity normal
+      run: dotnet test src/FastClonerCi.slnf --no-build --verbosity normal
 
     - name: Update GitHub status check
       if: always()
@@ -46,7 +46,7 @@ jobs:
       with: 
         authToken: ${{secrets.GITHUB_TOKEN}}
         context: 'Tests'
-        description: 'The tests ${{ job.status == ''success'' && ''passed'' || ''failed'' }}'
+        description: "The tests ${{ job.status == 'success' && 'passed' || 'failed' }}"
         state: ${{ job.status == 'success' && 'success' || 'failure' }}
         sha: ${{ github.event.pull_request.head.sha || github.sha }}
         target_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -69,7 +69,7 @@ jobs:
         node-version: '22'
         
     - name: Build FastCloner for netstandard2.0
-      run: dotnet build FastCloner/ --framework netstandard2.0
+      run: dotnet build src/FastCloner/ --framework netstandard2.0
 
     - name: Update GitHub status check
       if: always()
@@ -77,7 +77,7 @@ jobs:
       with: 
         authToken: ${{secrets.GITHUB_TOKEN}}
         context: 'Build (netstandard2.0)'
-        description: 'The build for netstandard2.0 ${{ job.status == ''success'' && ''passed'' || ''failed'' }}'
+        description: "The build for netstandard2.0 ${{ job.status == 'success' && 'passed' || 'failed' }}"
         state: ${{ job.status == 'success' && 'success' || 'failure' }}
         sha: ${{ github.event.pull_request.head.sha || github.sha }}
         target_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -100,7 +100,7 @@ jobs:
         node-version: '22'
         
     - name: Build FastCloner for net46
-      run: dotnet build FastCloner/ --framework net46
+      run: dotnet build src/FastCloner/ --framework net46
 
     - name: Update GitHub status check
       if: always()
@@ -108,7 +108,7 @@ jobs:
       with: 
         authToken: ${{secrets.GITHUB_TOKEN}}
         context: 'Build (net46)'
-        description: 'The build for net46 ${{ job.status == ''success'' && ''passed'' || ''failed'' }}'
+        description: "The build for net46 ${{ job.status == 'success' && 'passed' || 'failed' }}"
         state: ${{ job.status == 'success' && 'success' || 'failure' }}
         sha: ${{ github.event.pull_request.head.sha || github.sha }}
         target_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}

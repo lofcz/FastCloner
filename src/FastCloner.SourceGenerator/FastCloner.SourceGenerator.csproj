@@ -21,8 +21,9 @@
         <RepositoryType>git</RepositoryType>
         <NoWarn>$(NoWarn);NU5128</NoWarn>
         <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
-        <PackageTags>deepclone,clone,fastclone,cloner,source-generator,sourcegen,codegen,aot,ahead-of-time</PackageTags>
+        <PackageTags>deepclone,clone,fastclone,cloner,source-generator,sourcegen,codegen,aot,ahead-of-time,copier</PackageTags>
         <PackageIcon>icon.jpg</PackageIcon>
+        <Title>FastCloner - SourceGenerator</Title>
     </PropertyGroup>
 
     <ItemGroup>

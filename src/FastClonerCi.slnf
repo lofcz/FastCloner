@@ -1,6 +1,6 @@
 ﻿{
   "solution": {
-    "path": "FastCloner.sln",
+    "path": "FastCloner.slnx",
     "projects": [
       "FastCloner\\FastCloner.csproj",
       "FastCloner.Tests\\FastCloner.Tests.csproj",

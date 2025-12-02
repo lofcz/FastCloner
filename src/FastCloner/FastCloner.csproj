@@ -17,7 +17,7 @@
     <PackageIcon>icon.jpg</PackageIcon>
     <RepositoryUrl>https://github.com/lofcz/FastCloner</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>deepclone,clone,fastclone,cloner,replicate,duplicate</PackageTags>
+    <PackageTags>deepclone,clone,fastclone,cloner,replicate,duplicate,copier</PackageTags>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -28,19 +28,19 @@
     <Version>3.3.17</Version>
 
     <Title>FastCloner</Title>
-    <Description>The deep cloning library for .NET – zero-config, works out of the box. Works on anything from .NET 4.6 to modern .NET 10+ with no dependencies. Implements both deep and shallow cloning. Extensively tested, focused on performance and stability even on complicated object graphs. FastCloner is designed to work with as few gotchas as possible out of the box. The mapping is zero-config by default. Clone your objects and be done with it fast. FastCloner builds upon DeepClone.</Description>
+    <Description>The fastest deep cloning library, supporting anything from .NET 4.6 to modern .NET 10+ with no dependencies. FastCloner uses a unique source generator capable of analyzing object graphs and cloning object without explicit annotations. For types that cannot be cloned, such as HttpClient, FastCloner uses a highly optimized reflection-based fallback. Zero dependencies, blazingly fast, built for developers who need cloning that just works.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     
     <Authors>Matěj Štágl, FastCloner Collaborators</Authors>
     <Company />
     <Product>FastCloner</Product>
-    <Copyright> Matěj Štágl</Copyright>
+    <Copyright>Matěj Štágl</Copyright>
     <PackageProjectUrl>https://github.com/lofcz/FastCloner</PackageProjectUrl>
     <NeutralLanguage>en</NeutralLanguage>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
   <ItemGroup>
-    <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
   <ItemGroup>
     <None Include="icon.jpg" Pack="true" PackagePath=""/>

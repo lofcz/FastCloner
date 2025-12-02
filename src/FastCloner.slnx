@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/Docs/">
+    <File Path="../README.md" />
+  </Folder>
+  <Project Path="FastCloner.Benchmark/FastCloner.Benchmark.csproj" />
+  <Project Path="FastCloner.Contrib/FastCloner.Contrib.csproj" />
+  <Project Path="FastCloner.SourceGenerator.Analyzers/FastCloner.SourceGenerator.Analyzers.csproj" />
+  <Project Path="FastCloner.SourceGenerator.CodeFixes/FastCloner.SourceGenerator.CodeFixes.csproj" />
+  <Project Path="FastCloner.SourceGenerator.Console/FastCloner.SourceGenerator.Console.csproj" />
+  <Project Path="FastCloner.SourceGenerator.Shared/FastCloner.SourceGenerator.Shared.csproj" />
+  <Project Path="FastCloner.SourceGenerator/FastCloner.SourceGenerator.csproj" />
+  <Project Path="FastCloner.Tests/FastCloner.Tests.csproj" />
+  <Project Path="FastCloner/FastCloner.csproj" />
+</Solution>

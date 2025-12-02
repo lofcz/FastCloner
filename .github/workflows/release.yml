@@ -126,17 +126,17 @@ jobs:
     # Restore project dependencies
     - name: Restore dependencies
       if: env.SHOULD_RELEASE == 'true'
-      run: dotnet restore
+      run: dotnet restore src/FastCloner.slnx
       
     # Build solution
     - name: Build
       if: env.SHOULD_RELEASE == 'true'
-      run: dotnet build --configuration Release --no-restore
+      run: dotnet build src/FastCloner.slnx --configuration Release --no-restore
       
     # Create NuGet packages
     - name: Pack
       if: env.SHOULD_RELEASE == 'true'
-      run: dotnet pack --configuration Release --no-build --output nupkgs
+      run: dotnet pack src/FastCloner.slnx --configuration Release --no-build --output nupkgs
     
     # Create GitHub release
     - name: Create Release

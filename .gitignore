@@ -353,3 +353,4 @@ MigrationBackup/
 .cursorignore
 /.vscode
 /reference
+/src/reference
