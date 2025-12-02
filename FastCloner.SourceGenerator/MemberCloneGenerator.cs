@@ -82,8 +82,9 @@ internal static class MemberCloneGenerator
                 // Use Cloner<T> helper for generic/object/unknown types
                 // This handles both FastCloner availability and safe type fallbacks
                 context.NeedsClonerClass = true;
+
                 return member.IsProperty
-                    ? $"{memberName} = Cloner<{member.TypeFullName}>.Clone({sourceVar}.{memberName})"
+                    ? $"{memberName} = Cloner<{member.TypeFullName}>.Clone({sourceVar}.{memberName}, {stateVar})"
                     : string.Empty;
         }
     }
@@ -135,7 +136,7 @@ internal static class MemberCloneGenerator
             default:
                 // Use Cloner<T> helper
                 context.NeedsClonerClass = true;
-                sb.AppendLine($"            {resultVar}.{memberName} = Cloner<{member.TypeFullName}>.Clone({sourceVar}.{memberName});");
+                sb.AppendLine($"            {resultVar}.{memberName} = Cloner<{member.TypeFullName}>.Clone({sourceVar}.{memberName}, {stateVar});");
                 break;
         }
     }

@@ -53,18 +53,42 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
                         ctx.TargetNode.GetLocation()));
             });
 
+        // Secondary pipeline: Collect usages of generic types to optimize dispatch
+        var usagePipeline = context.SyntaxProvider.CreateSyntaxProvider(
+            predicate: GenericUsageCollector.IsCandidate,
+            transform: GenericUsageCollector.Collect)
+            .Where(x => x.Count > 0)
+            .Collect()
+            .Select(static (arrays, _) =>
+            {
+                var list = new System.Collections.Generic.List<GenericUsage>();
+                foreach (var array in arrays)
+                {
+                    foreach (var usage in array)
+                    {
+                        list.Add(usage);
+                    }
+                }
+                return new EquatableArray<GenericUsage>(list.Distinct().ToArray());
+            });
+
+        // Combine type models with collected usages
+        var combinedPipeline = pipeline.Combine(usagePipeline);
+
         // OPTIMAL PERFORMANCE: No Compilation combine!
         // All type analysis is pre-computed in TypeModel during the transform step.
         // This ensures the generator only re-runs when decorated types actually change,
         // not on every keypress.
-        context.RegisterSourceOutput(pipeline, static (ctx, result) =>
+        context.RegisterSourceOutput(combinedPipeline, static (ctx, source) =>
         {
+            var (result, usages) = source;
+            
             result.Handle(
                 model =>
                 {
                     try
                     {
-                        var generator = new CloneCodeGenerator(model);
+                        var generator = new CloneCodeGenerator(model, usages);
                         var generatedSource = generator.Generate();
                         
                         ctx.AddSource($"{model.Name}FastDeepClone.g.cs", SourceText.From(generatedSource, Encoding.UTF8));

@@ -12,10 +12,12 @@ namespace FastCloner.SourceGenerator;
 internal sealed class CloneCodeGenerator
 {
     private readonly CloneGeneratorContext _context;
+    private readonly EquatableArray<GenericUsage> _usages;
 
-    public CloneCodeGenerator(TypeModel model)
+    public CloneCodeGenerator(TypeModel model, EquatableArray<GenericUsage> usages)
     {
         _context = new CloneGeneratorContext(model);
+        _usages = usages;
     }
 
     public string Generate()
@@ -87,14 +89,15 @@ internal sealed class CloneCodeGenerator
             WritePrivateFastDeepCloneMethod(typeName, fullTypeName);
         }
 
+        // Generate Cloner<T> helper class (private nested class)
+        // Must be generated before helpers to register its dependencies
+        WriteClonerClass();
+
         // Generate helper methods for nested types
         CollectionHelperGenerator.GenerateHelpers(_context);
 
         // Generate FastCloneState helper class (private nested class)
         WriteFastCloneStateClass();
-
-        // Generate Cloner<T> helper class (private nested class)
-        WriteClonerClass();
 
         sb.AppendLine("    }");
     }
@@ -291,29 +294,95 @@ internal sealed class CloneCodeGenerator
         sb.AppendLine("        /// <summary>");
         sb.AppendLine("        /// Helper class for cloning generic types.");
         sb.AppendLine("        /// </summary>");
-        sb.AppendLine("        private static class Cloner<T>");
+        
+        var typeParams = GetTypeParametersString();
+        var constraints = GetTypeConstraintsString();
+        
+        sb.AppendLine($"        private static class Cloner{typeParams}{constraints}");
         sb.AppendLine("        {");
 
+        sb.AppendLine("            public static T Clone(T source, object? state)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                if (source == null) return default;");
+        
+        // Generate dispatch for known usages (Available even without FastCloner runtime)
+        foreach (var usage in _usages)
+        {
+            // Filter usages relevant to THIS generic type definition
+            if (usage.GenericTypeMetadataName != _context.Model.FullyQualifiedName)
+                continue;
+
+            // Register dependencies
+            foreach (var nested in usage.NestedHelpers)
+            {
+                _context.GetOrCreateHelperMethodName(nested);
+            }
+            foreach (var implicitType in usage.ImplicitTypes)
+            {
+                _context.RegisterImplicitType(implicitType);
+                _context.GetOrCreateHelperMethodName(implicitType.FullyQualifiedName);
+            }
+                
+            var argType = usage.ArgumentTypeMetadataName;
+            
+            if (usage.IsSafe)
+            {
+                sb.AppendLine($"                if (typeof(T) == typeof({argType})) return (T)(object)source;");
+            }
+            else if (usage.IsClonable && !string.IsNullOrEmpty(usage.ExtensionClassFQN))
+            {
+                // Generate dispatch to concrete FastDeepClone
+                sb.AppendLine($"                if (typeof(T) == typeof({argType}))");
+                sb.AppendLine($"                    return (T)(object)({usage.ExtensionClassFQN}.FastDeepClone(({argType})(object)source)!);");
+            }
+            else if (usage.CollectionModel != null)
+            {
+                // Get helper name for the collection type
+                MemberModel collectionModel = usage.CollectionModel.Value;
+                var helperName = _context.GetOrCreateHelperMethodName(collectionModel);
+                
+                // Determine if helper needs state
+                var needsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(_context, collectionModel);
+                
+                var callArgs = needsState 
+                    ? $"(({argType})(object)source, state as FcGeneratedCloneState)" 
+                    : $"(({argType})(object)source)";
+
+                sb.AppendLine($"                if (typeof(T) == typeof({argType}))");
+                sb.AppendLine($"                    return (T)(object){helperName}{typeParams}{callArgs};");
+            }
+            else
+            {
+                // Check if it is an implicit type itself
+                if (_context.TryGetImplicitTypeModel(argType, out var implicitModel))
+                {
+                     // Generate dispatch to implicit helper
+                     var helperName = _context.GetOrCreateHelperMethodName(argType);
+                     var needsState = implicitModel.CanHaveCircularReferences && _context.CanHaveCircularReferences;
+                     var callArgs = needsState 
+                        ? $"(({argType})(object)source, state as FcGeneratedCloneState)" 
+                        : $"(({argType})(object)source)";
+
+                     sb.AppendLine($"                if (typeof(T) == typeof({argType}))");
+                     sb.AppendLine($"                    return (T)(object){helperName}{typeParams}{callArgs};");
+                }
+            }
+        }
+        
         if (_context.IsFastClonerAvailable)
         {
-            sb.AppendLine("            public static T Clone(T source)");
-            sb.AppendLine("            {");
-            sb.AppendLine("                if (source == null) return default;");
             sb.AppendLine("                // If FastCloner is available, delegate to it for deep cloning");
             sb.AppendLine("                return (T)FastCloner.DeepClone(source);");
-            sb.AppendLine("            }");
         }
         else
         {
-            sb.AppendLine("            public static T Clone(T source)");
-            sb.AppendLine("            {");
             sb.AppendLine("                // Fallback: If FastCloner is not available, we can only safely clone");
             sb.AppendLine("                // types that are effectively safe (value types, strings, etc.) by returning them.");
             sb.AppendLine("                // For other types, this results in a shallow copy/identity return,");
             sb.AppendLine("                // which is the best we can do without the runtime library.");
             sb.AppendLine("                return source;");
-            sb.AppendLine("            }");
         }
+        sb.AppendLine("            }");
 
         sb.AppendLine("        }");
     }

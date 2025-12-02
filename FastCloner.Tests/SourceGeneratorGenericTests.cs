@@ -25,15 +25,23 @@ public class SourceGeneratorGenericTests
     }
     
     [FastClonerClonable]
+    [FastClonerSimulateNoRuntime]
     public class GenericClassWithConstraint<T> where T : class, new()
     {
         public T Value { get; set; }
+    }
+
+    public class SampleUnannotatedClass
+    {
+        public List<string> StringList { get; set; }
     }
 
     [Test]
     [SourceGeneratorCompatible]
     public void GenericClassWithConstraint_Should_Be_Cloned()
     {
+        var myTest = new GenericClassWithConstraint<Dictionary<string, SampleUnannotatedClass>>();
+        
         var original = new GenericClassWithConstraint<List<int>> { Value = new List<int> { 1, 2, 3 } };
         var clone = original.FastDeepClone();
 

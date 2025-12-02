@@ -62,6 +62,14 @@ internal sealed class CloneGeneratorContext
         return _typeNameToMethodName[typeName];
     }
 
+    public void RegisterImplicitType(TypeModel model)
+    {
+        if (!_implicitTypeModels.ContainsKey(model.FullyQualifiedName))
+        {
+            _implicitTypeModels[model.FullyQualifiedName] = model;
+        }
+    }
+
     /// <summary>
     /// Gets or creates a helper method name for a type (implicit), tracking it for generation.
     /// </summary>
