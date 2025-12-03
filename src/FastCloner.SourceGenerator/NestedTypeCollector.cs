@@ -11,6 +11,10 @@ internal static class NestedTypeCollector
         bool nullabilityEnabled,
         Dictionary<string, MemberModel> nestedTypes)
     {
+        // Skip safe types (they don't need helpers)
+        if (TypeAnalyzer.IsSafeType(type, compilation))
+            return;
+
         // Recursively find nested Collection/Dictionary types that need cloning
         
         if (TypeAnalyzer.IsDictionaryType(type))
