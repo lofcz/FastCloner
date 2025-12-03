@@ -6,8 +6,8 @@
 
 **The fastest and most reliable .NET deep cloning library.**    
 
-[![Infidex](https://shields.io/nuget/v/FastCloner?v=304&icon=nuget&label=FastCloner)](https://www.nuget.org/packages/FastCloner)
-[![Infidex](https://shields.io/nuget/v/FastCloner.SourceGenerator?v=304&icon=nuget&label=FastCloner.SourceGenerator)](https://www.nuget.org/packages/FastCloner.SourceGenerator)
+[![FastCloner](https://shields.io/nuget/v/FastCloner?v=304&icon=nuget&label=FastCloner)](https://www.nuget.org/packages/FastCloner)
+[![FastCloner](https://shields.io/nuget/v/FastCloner.SourceGenerator?v=304&icon=nuget&label=FastCloner.SourceGenerator)](https://www.nuget.org/packages/FastCloner.SourceGenerator)
 [![License:MIT](https://img.shields.io/badge/License-MIT-34D058.svg)](https://opensource.org/license/mit)
 
 The fastest deep cloning library, supporting anything from <code>.NET 4.6</code> to modern <code>.NET 10+</code> with no dependencies. FastCloner uses a unique source generator capable of analyzing object graphs and cloning objects without explicit annotations. For types that cannot be cloned, such as <code>HttpClient</code>, FastCloner uses a highly optimized reflection-based fallback. Zero dependencies, blazingly fast, built for developers who need cloning that _just works_.
@@ -16,7 +16,7 @@ The fastest deep cloning library, supporting anything from <code>.NET 4.6</code>
 
 ## ✨ Features
 
-- **The Fastest** - [Benchmarked](https://github.com/lofcz/FastCloner?tab=readme-ov-file#performance) to beat all other libraries with third-party independent benchmarks verifying the speed. **300x** speed-up vs `Newtonsoft.Json` and **160x** vs `System.Text.Json`
+- **The Fastest** - [Benchmarked](https://github.com/lofcz/FastCloner?tab=readme-ov-file#performance) to beat all other libraries with third-party independent benchmarks verifying the performance. **300x** speed-up vs `Newtonsoft.Json` and **160x** vs `System.Text.Json`
 - **The Most Correct** - Cloning objects is hard: `<T>`, `abstract`, immutables, read-only, pointers, circular dependencies, deeply nested graphs.. we have over [500 tests](https://github.com/lofcz/FastCloner/tree/next/FastCloner.Tests) verifying correct behavior in these cases and we are transparent about the [limitations](https://github.com/lofcz/FastCloner?tab=readme-ov-file#limitations)
 - **Novel Algorithm** - FastCloner recognizes that certain cloning code cannot be generated in certain scenarios and uses highly optimized reflection-based approach instead for these types - this only happens for the members that need this, not entire objects
 - **Embeddable** - FastCloner has no dependencies outside the standard library. Source generator and reflection parts can be installed independently
