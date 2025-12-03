@@ -4,3 +4,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("FastCloner.SourceGenerator")]
 [assembly: InternalsVisibleTo("FastCloner.SourceGenerator.Analyzers")]
 [assembly: InternalsVisibleTo("FastCloner.SourceGenerator.CodeFixes")]
+[assembly: InternalsVisibleTo("FastCloner.SourceGenerator.Console")]

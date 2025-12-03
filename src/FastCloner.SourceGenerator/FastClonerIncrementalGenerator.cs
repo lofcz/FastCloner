@@ -31,14 +31,9 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
                     
                     var compilation = ctx.SemanticModel.Compilation;
                     
-                    if (TypeModelFactory.TryCreate(namedTypeSymbol, nullabilityEnabled, compilation, out var model, out var error))
-                    {
-                        return Result<TypeModel>.Success(model!);
-                    }
-                    else
-                    {
-                        return Result<TypeModel>.Error(error!);
-                    }
+                    return TypeModelFactory.TryCreate(namedTypeSymbol, nullabilityEnabled, compilation, out var model, out var error) ? 
+                        Result<TypeModel>.Success(model!) : 
+                        Result<TypeModel>.Error(error!);
                 }
                 
                 return Result<TypeModel>.Error(
@@ -54,21 +49,28 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
             });
 
         // Secondary pipeline: Collect usages of generic types to optimize dispatch
-        var usagePipeline = context.SyntaxProvider.CreateSyntaxProvider(
+        var explicitUsages = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: GenericUsageCollector.IsCandidate,
             transform: GenericUsageCollector.Collect)
-            .Where(x => x.Count > 0)
-            .Collect()
-            .Select(static (arrays, _) =>
+            .Where(x => x.Count > 0);
+
+        var includedUsages = context.SyntaxProvider.ForAttributeWithMetadataName<EquatableArray<GenericUsage>>(
+            fullyQualifiedMetadataName: "FastCloner.SourceGenerator.Shared.FastClonerIncludeAttribute",
+            predicate: static (node, _) => node is ClassDeclarationSyntax || node is StructDeclarationSyntax,
+            transform: IncludeAttributeCollector.Collect)
+            .Where(x => x.Count > 0);
+
+        var usagePipeline = explicitUsages.Collect().Combine(includedUsages.Collect())
+            .Select(static (pair, _) =>
             {
+                var (explicitList, includedList) = pair;
                 var list = new System.Collections.Generic.List<GenericUsage>();
-                foreach (var array in arrays)
-                {
-                    foreach (var usage in array)
-                    {
-                        list.Add(usage);
-                    }
-                }
+                
+                foreach (var array in explicitList) 
+                    list.AddRange(array);
+                foreach (var array in includedList) 
+                    list.AddRange(array);
+
                 return new EquatableArray<GenericUsage>(list.Distinct().ToArray());
             });
 
@@ -91,7 +93,17 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
                         var generator = new CloneCodeGenerator(model, usages);
                         var generatedSource = generator.Generate();
                         
-                        ctx.AddSource($"{model.Name}FastDeepClone.g.cs", SourceText.From(generatedSource, Encoding.UTF8));
+                        // Use FullyQualifiedName to avoid collisions when same class name exists in different namespaces
+                        var safeName = model.FullyQualifiedName
+                            .Replace("global::", "")
+                            .Replace(".", "_")
+                            .Replace("<", "_")
+                            .Replace(">", "_")
+                            .Replace(" ", "")
+                            .Replace(",", "_")
+                            .Replace(":", "_");
+
+                        ctx.AddSource($"{safeName}_FastDeepClone.g.cs", SourceText.From(generatedSource, Encoding.UTF8));
                     }
                     catch (System.Exception ex)
                     {
