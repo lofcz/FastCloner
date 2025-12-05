@@ -43,10 +43,17 @@ internal static class ImplicitTypeAnalyzer
         var implicitNestedMembers = new Dictionary<string, MemberModel>();
         
         bool success = true;
+        bool hasUnsafeReferenceMember = false;
+
         foreach (var analysis in memberAnalyses)
         {
             var m = analysis.Model;
             
+            if (!m.IsValueType && !TypeAnalyzer.IsSafeType(analysis.Type, compilation))
+            {
+                hasUnsafeReferenceMember = true;
+            }
+
             // If member is safe or clonable, it's fine.
             // If it requires FastCloner (Other) or is Implicit candidate, we must verify if it's implicit.
             if (m.TypeKind == MemberTypeKind.Other || m.TypeKind == MemberTypeKind.Implicit)
@@ -172,8 +179,10 @@ internal static class ImplicitTypeAnalyzer
             var flags = TypeAnalyzer.GetStructureFlags(namedType);
             
             // Can have circular references if any member is implicit (recursive) or clonable
-            // For simplicity, assume YES for implicit types to ensure state passing.
-            bool canHaveCircularRefs = true; 
+            bool canHaveCircularRefs = hasUnsafeReferenceMember || flags.HasClonableBaseClass;
+            
+            // Check if type has a parameterless constructor (IsImplicitCandidate already validates this, but check explicitly)
+            var hasParameterlessConstructor = TypeAnalyzer.HasParameterlessConstructor(namedType);
             
             implicitModel = new TypeModel(
                 TypeAnalyzer.GetNamespace(namedType),
@@ -189,7 +198,8 @@ internal static class ImplicitTypeAnalyzer
                 new EquatableArray<string>(TypeAnalyzer.GetTypeConstraints(namedType).ToArray()),
                 new EquatableArray<TypeModel>(relatedTypesMap.Values.ToArray()),
                 new EquatableArray<MemberModel>(implicitNestedMembers.Values.ToArray()),
-                nullabilityEnabled);
+                nullabilityEnabled,
+                hasParameterlessConstructor);
                 
             cache[type] = implicitModel;
             return true;

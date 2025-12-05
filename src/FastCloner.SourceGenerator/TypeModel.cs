@@ -21,4 +21,6 @@ internal sealed record TypeModel(
     EquatableArray<string> TypeConstraints,
     EquatableArray<TypeModel> RelatedTypes, // Implicitly clonable types that we generate helpers for
     EquatableArray<MemberModel> NestedTypes, // Nested collection types that need helpers
-    bool NullabilityEnabled) : IEquatable<TypeModel>;
+    bool NullabilityEnabled,
+    bool HasParameterlessConstructor = true, // Whether the type has a public parameterless constructor (defaults to true for safety)
+    EquatableArray<string> CircularAnalysisLog = default) : IEquatable<TypeModel>;

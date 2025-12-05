@@ -11,23 +11,29 @@ internal sealed class CloneGeneratorContext
     public TypeModel Model { get; }
     public StringBuilder Source { get; } = new();
     
-    private readonly Dictionary<string, string> _typeNameToMethodName = new();
-    private readonly HashSet<string> _neededHelperMethods = new();
+    private readonly Dictionary<string, string> _typeNameToMethodName;
+    private readonly HashSet<string> _neededHelperMethods;
     private readonly Queue<string> _pendingHelperMethods = new();
     private readonly Dictionary<string, MemberModel> _typeNameToMemberModel = new();
     private readonly Dictionary<string, TypeModel> _implicitTypeModels = new();
 
     public bool NeedsStateClass { get; set; }
     public bool NeedsClonerClass { get; set; }
+    public bool UseStaticMethods { get; set; } = true;
     
-    public bool CanHaveCircularReferences { get; }
+    public bool CanHaveCircularReferences { get; set; }
     public bool IsFastClonerAvailable { get; }
+    
+    private readonly Dictionary<string, bool> _circularReferenceOverrides = new();
 
-    public CloneGeneratorContext(TypeModel model)
+    public CloneGeneratorContext(TypeModel model, Dictionary<string, string>? sharedMethodNames = null, HashSet<string>? sharedNeededHelpers = null)
     {
         Model = model;
         CanHaveCircularReferences = model.CanHaveCircularReferences;
         IsFastClonerAvailable = model.IsFastClonerAvailable;
+        
+        _typeNameToMethodName = sharedMethodNames ?? new Dictionary<string, string>();
+        _neededHelperMethods = sharedNeededHelpers ?? new HashSet<string>();
 
         foreach (var related in model.RelatedTypes)
         {
@@ -41,6 +47,20 @@ internal sealed class CloneGeneratorContext
                 _typeNameToMemberModel[nested.TypeFullName] = nested;
             }
         }
+    }
+
+    public void SetCircularReferenceOverride(string typeName, bool needsState)
+    {
+        _circularReferenceOverrides[typeName] = needsState;
+    }
+
+    public bool NeedsCircularState(string typeName, bool defaultFromModel)
+    {
+        if (_circularReferenceOverrides.TryGetValue(typeName, out var overrideValue))
+        {
+            return overrideValue;
+        }
+        return defaultFromModel;
     }
 
     public bool HasPendingHelperMethods => _pendingHelperMethods.Count > 0;
@@ -68,6 +88,14 @@ internal sealed class CloneGeneratorContext
         {
             _implicitTypeModels[model.FullyQualifiedName] = model;
         }
+    }
+
+    /// <summary>
+    /// Registers a method name for a type without marking it for generation (assumes it exists elsewhere).
+    /// </summary>
+    public void RegisterExternalMethod(string typeFullName, string methodName)
+    {
+        _typeNameToMethodName[typeFullName] = methodName;
     }
 
     /// <summary>

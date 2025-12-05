@@ -34,6 +34,10 @@
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="[4.14.0, )" PrivateAssets="all" />
     </ItemGroup>
 
+    <PropertyGroup>
+        <DefineConstants Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">$(DefineConstants);MODERN</DefineConstants>
+    </PropertyGroup>
+
     <ItemGroup>
         <None Include="build\FastCloner.SourceGenerator.props" Pack="true" PackagePath="build" />
         <None Include="README.md" Pack="true" PackagePath="\" />

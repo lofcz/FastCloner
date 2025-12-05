@@ -442,4 +442,167 @@ public class SourceGeneratorTests
         Assert.That(clone.IReadOnlyDictionaryIntPeople![9], Is.Not.SameAs(original.IReadOnlyDictionaryIntPeople![9]));
         Assert.That(clone.IReadOnlyDictionaryIntPeople[9].MySuperName, Is.EqualTo("Nine"));
     }
+
+    // Test classes without public parameterless constructors
+    [FastClonerClonable]
+    public partial class ClassWithoutParameterlessCtor
+    {
+        // Read-only properties set in constructor - these won't be cloned
+        // since FormatterServices.GetUninitializedObject() doesn't call the constructor
+        public string? Name { get; }
+        public int Value { get; }
+        
+        // Writable properties - these will be cloned
+        public string Description { get; set; } = string.Empty;
+        public string? AdditionalData { get; set; }
+
+        // Only constructor requires parameters
+        public ClassWithoutParameterlessCtor(string name, int value)
+        {
+            Name = name;
+            Value = value;
+        }
+
+        // Factory method for convenience
+        public static ClassWithoutParameterlessCtor Create(string name, int value)
+        {
+            return new ClassWithoutParameterlessCtor(name, value);
+        }
+    }
+
+    [FastClonerClonable]
+    public partial class ClassWithCircularRefNoCtor
+    {
+        // Read-only property set in constructor - won't be cloned
+        public string? Name { get; }
+        // Writable property - will be cloned
+        public ClassWithCircularRefNoCtor? Self { get; set; }
+
+        public ClassWithCircularRefNoCtor(string name)
+        {
+            Name = name;
+        }
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void Class_Without_Public_Parameterless_Constructor_Should_Be_Cloned()
+    {
+        // Arrange - ClassWithoutParameterlessCtor requires a parameter in its constructor
+        // Note: Read-only properties set in constructor (Name, Value) won't be cloned since
+        // FormatterServices.GetUninitializedObject() doesn't call the constructor.
+        // Only writable properties set after construction will be cloned.
+        var original = ClassWithoutParameterlessCtor.Create("TestName", 42);
+        original.Description = "Test Description";
+        original.AdditionalData = "Extra Data";
+        
+        // Act - Should use FormatterServices.GetUninitializedObject internally
+        var clone = original.FastDeepClone();
+        
+        // Assert
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone, Is.Not.SameAs(original));
+        // Read-only properties from constructor will be default values (not cloned)
+        Assert.That(clone.Name, Is.Null); // Default value since constructor wasn't called
+        Assert.That(clone.Value, Is.EqualTo(0)); // Default value since constructor wasn't called
+        // Writable properties set after construction will be cloned
+        Assert.That(clone.Description, Is.EqualTo("Test Description"));
+        Assert.That(clone.AdditionalData, Is.EqualTo("Extra Data"));
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void Class_Without_Parameterless_Constructor_With_Circular_References_Should_Be_Cloned()
+    {
+        // Arrange - Test that circular reference tracking works with FormatterServices
+        var original = new ClassWithCircularRefNoCtor("Initial");
+        original.Self = original; // Create circular reference
+        
+        // Act
+        var clone = original.FastDeepClone();
+        
+        // Assert
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone, Is.Not.SameAs(original));
+        Assert.That(clone.Name, Is.Null); // Read-only property from constructor won't be cloned
+        Assert.That(clone.Self, Is.SameAs(clone)); // Circular reference should be preserved
+    }
+
+    // Test classes for complex circular dependency testing
+    [FastClonerClonable]
+    public partial class CircularNodeA
+    {
+        public CircularNodeB? B { get; set; }
+    }
+
+    [FastClonerClonable]
+    public partial class CircularNodeB
+    {
+        public CircularNodeA? A { get; set; }
+    }
+
+    [FastClonerClonable]
+    public partial class CircularNodeC
+    {
+        public CircularNodeC? Self { get; set; }
+    }
+
+    [FastClonerClonable]
+    public partial class CircularNodeD
+    {
+        public CircularNodeE? E { get; set; }
+    }
+
+    [FastClonerClonable]
+    public partial class CircularNodeE
+    {
+        public CircularNodeF? F { get; set; }
+    }
+
+    [FastClonerClonable]
+    public partial class CircularNodeF
+    {
+        public CircularNodeE? E { get; set; }
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void FastDeepClone_Should_Handle_Complex_Circular_Dependencies()
+    {
+        // 1. Direct Cycle A <-> B
+        var a = new CircularNodeA();
+        var b = new CircularNodeB();
+        a.B = b;
+        b.A = a;
+        
+        var cloneA = a.FastDeepClone();
+        Assert.That(cloneA, Is.Not.Null);
+        Assert.That(cloneA, Is.Not.SameAs(a));
+        Assert.That(cloneA!.B, Is.Not.SameAs(b));
+        Assert.That(cloneA.B!.A, Is.SameAs(cloneA)); // Cycle preserved
+        
+        // 2. Self Cycle C -> C
+        var c = new CircularNodeC();
+        c.Self = c;
+        
+        var cloneC = c.FastDeepClone();
+        Assert.That(cloneC, Is.Not.Null);
+        Assert.That(cloneC, Is.Not.SameAs(c));
+        Assert.That(cloneC!.Self, Is.SameAs(cloneC)); // Cycle preserved
+        
+        // 3. Lollipop Graph D -> E <-> F
+        var d = new CircularNodeD();
+        var e = new CircularNodeE();
+        var f = new CircularNodeF();
+        d.E = e;
+        e.F = f;
+        f.E = e;
+        
+        var cloneD = d.FastDeepClone();
+        Assert.That(cloneD, Is.Not.Null);
+        Assert.That(cloneD, Is.Not.SameAs(d));
+        Assert.That(cloneD!.E, Is.Not.SameAs(e));
+        Assert.That(cloneD.E!.F, Is.Not.SameAs(f));
+        Assert.That(cloneD.E!.F!.E, Is.SameAs(cloneD.E)); // Cycle preserved
+    }
 }

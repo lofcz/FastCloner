@@ -771,13 +771,15 @@ internal static class CollectionHelperGenerator
             if (typeName.EndsWith("?")) typeSuffix = ""; // Already has it
         }
 
+        string staticMod = context.UseStaticMethods ? "static " : "";
+
         if (needsState)
         {
-            sb.AppendLine($"        private static {typeName}{typeSuffix} {methodName}{typeParams}({typeName}{typeSuffix} source, FcGeneratedCloneState? state){constraints}");
+            sb.AppendLine($"        private {staticMod}{typeName}{typeSuffix} {methodName}{typeParams}({typeName}{typeSuffix} source, FcGeneratedCloneState? state){constraints}");
         }
         else
         {
-            sb.AppendLine($"        private static {typeName}{typeSuffix} {methodName}{typeParams}({typeName}{typeSuffix} source){constraints}");
+            sb.AppendLine($"        private {staticMod}{typeName}{typeSuffix} {methodName}{typeParams}({typeName}{typeSuffix} source){constraints}");
         }
     }
 

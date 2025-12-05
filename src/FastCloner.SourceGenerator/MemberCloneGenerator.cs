@@ -25,21 +25,43 @@ internal static class MemberCloneGenerator
                     : string.Empty;
 
             case MemberTypeKind.Clonable:
-                // Use generated FastDeepClone for marked types
+            {
+                // Always use InternalFastDeepClone for Clonable types to support circular references
+                // Clonable types might have circular references even if the current type doesn't detect them
+                // (e.g., CircularNodeD -> CircularNodeE, where E has circular refs with F)
+                var extensionClassName = GetExtensionClassName(member.TypeFullName, context.Model.Namespace);
+                
+                // If we don't have state, create a new one to ensure circular reference tracking works
+                string actualStateVar = stateVar;
+                if (stateVar == "null")
+                {
+                    // Create a new state variable for this cloning operation
+                    // This ensures circular references in the member type are tracked
+                    actualStateVar = "new FcGeneratedCloneState()";
+                }
+                
                 return member.IsProperty
-                    ? $"{memberName} = {sourceVar}.{memberName}?.FastDeepClone()"
+                    ? $"{memberName} = {extensionClassName}.InternalFastDeepClone({sourceVar}.{memberName}, {actualStateVar})"
                     : string.Empty;
+            }
 
             case MemberTypeKind.Implicit:
             {
                 var helperMethodName = context.GetOrCreateHelperMethodName(member);
                 context.TryGetImplicitTypeModel(member.TypeFullName, out var implicitModel);
                 // Assume implicitModel exists if TypeKind is Implicit, but handle safely
-                var memberNeedsState = (implicitModel?.CanHaveCircularReferences ?? false) && context.CanHaveCircularReferences;
-                var actualStateVar = memberNeedsState ? stateVar : "null";
+                bool modelDefault = implicitModel?.CanHaveCircularReferences ?? false;
+                var memberNeedsState = context.NeedsCircularState(member.TypeFullName, modelDefault) && context.CanHaveCircularReferences;
+                
+                // If this is a registered type (method name is "Clone") and we're in a state-tracking context,
+                // always pass state to use the private overload, even if the member type doesn't need state itself.
+                // This is critical for circular reference tracking to work correctly.
+                bool isRegisteredType = helperMethodName == "Clone";
+                bool shouldPassState = memberNeedsState || (isRegisteredType && stateVar != "null");
+                var actualStateVar = shouldPassState ? stateVar : "null";
 
                 return member.IsProperty
-                    ? $"{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", memberNeedsState, actualStateVar)}"
+                    ? $"{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", shouldPassState, actualStateVar)}"
                     : string.Empty;
             }
 
@@ -106,17 +128,40 @@ internal static class MemberCloneGenerator
                 break;
 
             case MemberTypeKind.Clonable:
-                // Use generated FastDeepClone for marked types
-                sb.AppendLine($"            {resultVar}.{memberName} = {sourceVar}.{memberName}?.FastDeepClone();");
+            {
+                // Always use InternalFastDeepClone for Clonable types to support circular references
+                // Clonable types might have circular references even if the current type doesn't detect them
+                // (e.g., CircularNodeD -> CircularNodeE, where E has circular refs with F)
+                var extensionClassName = GetExtensionClassName(member.TypeFullName, context.Model.Namespace);
+                
+                // If we don't have state, create a new one to ensure circular reference tracking works
+                string actualStateVar = stateVar;
+                if (stateVar == "null")
+                {
+                    // Create a new state variable for this cloning operation
+                    // This ensures circular references in the member type are tracked
+                    actualStateVar = "new FcGeneratedCloneState()";
+                }
+                
+                sb.AppendLine($"            {resultVar}.{memberName} = {extensionClassName}.InternalFastDeepClone({sourceVar}.{memberName}, {actualStateVar});");
+            }
                 break;
 
             case MemberTypeKind.Implicit:
             {
                 var helperMethodName = context.GetOrCreateHelperMethodName(member);
                 context.TryGetImplicitTypeModel(member.TypeFullName, out var implicitModel);
-                var memberNeedsState = (implicitModel?.CanHaveCircularReferences ?? false) && context.CanHaveCircularReferences;
-                var actualStateVar = memberNeedsState ? stateVar : "null";
-                sb.AppendLine($"            {resultVar}.{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", memberNeedsState, actualStateVar)};");
+                bool modelDefault = implicitModel?.CanHaveCircularReferences ?? false;
+                var memberNeedsState = context.NeedsCircularState(member.TypeFullName, modelDefault) && context.CanHaveCircularReferences;
+                
+                // If this is a registered type (method name is "Clone") and we're in a state-tracking context,
+                // always pass state to use the private overload, even if the member type doesn't need state itself.
+                // This is critical for circular reference tracking to work correctly.
+                bool isRegisteredType = helperMethodName == "Clone";
+                bool shouldPassState = memberNeedsState || (isRegisteredType && stateVar != "null");
+                var actualStateVar = shouldPassState ? stateVar : "null";
+                
+                sb.AppendLine($"            {resultVar}.{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", shouldPassState, actualStateVar)};");
             }
                 break;
 
@@ -194,5 +239,35 @@ internal static class MemberCloneGenerator
             return string.Empty;
 
         return $"<{string.Join(", ", model.TypeParameters)}>";
+    }
+
+    /// <summary>
+    /// Extracts the type name from a fully qualified name (e.g., "FastCloner.Tests.ClassWithCircularRefNoCtor" -> "ClassWithCircularRefNoCtor").
+    /// </summary>
+    private static string GetTypeNameFromFullName(string fullName)
+    {
+        var lastDot = fullName.LastIndexOf('.');
+        if (lastDot >= 0 && lastDot < fullName.Length - 1)
+        {
+            return fullName.Substring(lastDot + 1);
+        }
+        return fullName;
+    }
+
+    /// <summary>
+    /// Gets the extension class name for a type. Extension classes are generated in the same namespace as the type.
+    /// For nested types, the namespace is the containing namespace (not including containing types).
+    /// </summary>
+    private static string GetExtensionClassName(string typeFullName, string currentNamespace)
+    {
+        var typeName = GetTypeNameFromFullName(typeFullName);
+        
+        if (string.IsNullOrEmpty(currentNamespace))
+        {
+            // If no namespace, extension class is at root level
+            return $"{typeName}FastDeepCloneExtensions";
+        }
+        
+        return $"global::{currentNamespace}.{typeName}FastDeepCloneExtensions";
     }
 }

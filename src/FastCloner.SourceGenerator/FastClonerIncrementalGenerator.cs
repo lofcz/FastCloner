@@ -126,5 +126,65 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
                     ctx.ReportDiagnostic(error);
                 });
         });
+
+        // FastClonerContext Pipeline
+        var contextPipeline = context.SyntaxProvider.ForAttributeWithMetadataName<Result<ContextModel>>(
+            fullyQualifiedMetadataName: "FastCloner.SourceGenerator.Shared.FastClonerRegisterAttribute",
+            predicate: static (node, _) => node is ClassDeclarationSyntax,
+            transform: ContextCollector.Collect);
+
+        // Deduplicate pipeline results
+        var dedupedContextPipeline = contextPipeline.Collect().SelectMany((results, _) => 
+        {
+             // Group successes by FQN to remove duplicates (caused by partial classes with attributes)
+             var uniqueSuccesses = results
+                 .Where(r => r.IsSuccess && r.Value != null)
+                 .GroupBy(r => r.Value!.FullyQualifiedName)
+                 .Select(g => g.First());
+
+             var errors = results.Where(r => !r.IsSuccess);
+             
+             return uniqueSuccesses.Concat(errors);
+        });
+
+        context.RegisterSourceOutput(dedupedContextPipeline, static (ctx, result) =>
+        {
+            result.Handle(
+                model =>
+                {
+                    try
+                    {
+                        var generator = new ContextCodeGenerator(model);
+                        var source = generator.Generate();
+                        
+                        var safeName = model.FullyQualifiedName
+                            .Replace("global::", "")
+                            .Replace(".", "_")
+                            .Replace("<", "_")
+                            .Replace(">", "_")
+                            .Replace(" ", "")
+                            .Replace(",", "_")
+                            .Replace(":", "_");
+
+                        ctx.AddSource($"{safeName}_FastClonerContext.g.cs", SourceText.From(source, Encoding.UTF8));
+                    }
+                    catch (System.Exception ex)
+                    {
+                        var location = Location.None;
+                        ctx.ReportDiagnostic(
+                            Diagnostic.Create(
+                                new DiagnosticDescriptor(
+                                    "FCG001",
+                                    "Generator Error",
+                                    "Error generating clone code: {0}",
+                                    "FastCloner",
+                                    DiagnosticSeverity.Error,
+                                    isEnabledByDefault: true),
+                                location,
+                                ex.ToString()));
+                    }
+                },
+                error => ctx.ReportDiagnostic(error));
+        });
     }
 }

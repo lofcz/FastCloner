@@ -46,6 +46,13 @@ internal sealed class CloneCodeGenerator
         sb.AppendLine("using System;");
         sb.AppendLine("using System.Collections.Generic;");
         sb.AppendLine("using System.Reflection;");
+        sb.AppendLine("using FastCloner.SourceGenerator.Shared;");
+
+        // Add FormatterServices if type doesn't have parameterless constructor
+        if (ClassCloneBodyGenerator.NeedsFormatterServices(_context.Model))
+        {
+            sb.AppendLine("using System.Runtime.Serialization;");
+        }
 
         // Only add FastCloner using if the library is available
         if (_context.IsFastClonerAvailable)
@@ -73,6 +80,8 @@ internal sealed class CloneCodeGenerator
         var fullTypeName = _context.Model.FullyQualifiedName;
         var sb = _context.Source;
 
+        // FcGeneratedCloneState is now in FastCloner.SourceGenerator.Shared - no need to generate it
+
         sb.AppendLine("    /// <summary>");
         sb.AppendLine($"    /// Extension methods for cloning {_context.Model.Name}.");
         sb.AppendLine("    /// </summary>");
@@ -82,12 +91,8 @@ internal sealed class CloneCodeGenerator
         // Generate public FastDeepClone() without state parameter
         WritePublicFastDeepCloneMethod(typeName, fullTypeName);
 
-        // Only generate InternalFastDeepClone if circular references are possible
-        // (for types without circular refs, the public method inlines the logic directly)
-        if (_context.CanHaveCircularReferences)
-        {
-            WritePrivateFastDeepCloneMethod(typeName, fullTypeName);
-        }
+        // Always generate InternalFastDeepClone for Clonable types, even if they don't detect circular references
+        WritePrivateFastDeepCloneMethod(typeName, fullTypeName);
 
         // Generate Cloner<T> helper class (private nested class)
         // Must be generated before helpers to register its dependencies
@@ -95,9 +100,6 @@ internal sealed class CloneCodeGenerator
 
         // Generate helper methods for nested types
         CollectionHelperGenerator.GenerateHelpers(_context);
-
-        // Generate FastCloneState helper class (private nested class)
-        WriteFastCloneStateClass();
 
         sb.AppendLine("    }");
     }
@@ -218,71 +220,10 @@ internal sealed class CloneCodeGenerator
 
     private void WriteClassCloneBody(string typeName, string fullTypeName, bool useState, string? stateVarName = null)
     {
-        var sb = _context.Source;
-        // Use object initializer syntax instead of MemberwiseClone for better performance
-        // Create new instance using object initializer
-        sb.AppendLine($"            var result = new {typeName}");
-        sb.AppendLine("            {");
-
-        // Generate property/field assignments in object initializer
-        var memberAssignments = new List<string>();
-        foreach (var member in _context.Model.Members)
-        {
-            // Pass null if state isn't needed, or use the provided stateVarName (or "state" as default)
-            var stateVar = useState ? (stateVarName ?? "state") : "null";
-            var assignment = MemberCloneGenerator.GetMemberAssignment(_context, member, "source", stateVar);
-            if (!string.IsNullOrEmpty(assignment))
-            {
-                memberAssignments.Add($"                {assignment}");
-            }
-        }
-
-        if (memberAssignments.Count > 0)
-        {
-            sb.AppendLine(string.Join(",\n", memberAssignments));
-        }
-
-        sb.AppendLine("            };");
-        if (useState)
-        {
-            var stateVarForAdd = stateVarName ?? "state";
-            sb.AppendLine($"            {stateVarForAdd}?.AddKnownRef(source, result);");
-        }
-
-        sb.AppendLine();
-        sb.AppendLine("            return result;");
+        // Use null-conditional operator for CloneCodeGenerator since state might be null
+        ClassCloneBodyGenerator.WriteClassCloneBody(_context, typeName, useState, stateVarName, useNullConditional: true);
     }
 
-    private void WriteFastCloneStateClass()
-    {
-        // Only generate state class if it's actually needed
-        if (!_context.NeedsStateClass)
-            return;
-
-        var sb = _context.Source;
-        sb.AppendLine();
-        sb.AppendLine("        /// <summary>");
-        sb.AppendLine("        /// State for tracking circular references during cloning.");
-        sb.AppendLine("        /// </summary>");
-        sb.AppendLine("        private class FcGeneratedCloneState");
-        sb.AppendLine("        {");
-        sb.AppendLine("            private readonly Dictionary<object, object> _knownRefs = new Dictionary<object, object>();");
-        sb.AppendLine();
-        sb.AppendLine("            public void AddKnownRef(object original, object clone)");
-        sb.AppendLine("            {");
-        sb.AppendLine("                if (original != null)");
-        sb.AppendLine("                {");
-        sb.AppendLine("                    _knownRefs[original] = clone;");
-        sb.AppendLine("                }");
-        sb.AppendLine("            }");
-        sb.AppendLine();
-        sb.AppendLine("            public object? GetKnownRef(object original)");
-        sb.AppendLine("            {");
-        sb.AppendLine("                if (original == null) return null;");
-        sb.AppendLine("                return _knownRefs.TryGetValue(original, out var clone) ? clone : null;");
-        sb.AppendLine("            }");
-        sb.AppendLine("        }");
-    }
 
     private void WriteClonerClass()
     {

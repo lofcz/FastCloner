@@ -388,6 +388,25 @@ internal static class TypeAnalyzer
     }
 
     /// <summary>
+    /// Checks if a type has a public parameterless constructor.
+    /// Structs are considered to have a parameterless constructor (default constructor).
+    /// </summary>
+    public static bool HasParameterlessConstructor(INamedTypeSymbol symbol)
+    {
+        // Structs always have a default parameterless constructor (even if not explicitly defined)
+        if (symbol.IsValueType)
+        {
+            return true;
+        }
+
+        // For classes, check if there's a public parameterless constructor
+        return symbol.Constructors.Any(c => 
+            !c.IsStatic && 
+            c.Parameters.Length == 0 && 
+            c.DeclaredAccessibility == Accessibility.Public);
+    }
+
+    /// <summary>
     /// Identifies the kind of collection (List, Set, Queue, etc.) for optimized code generation.
     /// </summary>
     public static CollectionKind GetCollectionKind(ITypeSymbol type)

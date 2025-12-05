@@ -236,6 +236,9 @@ internal static class TypeModelFactory
         var circRefLog = new List<string>();
         var canHaveCircularRefs = CircularReferenceAnalyzer.Analyze(symbol, compilation, circRefLog);
         
+        // Check if type has a parameterless constructor
+        var hasParameterlessConstructor = TypeAnalyzer.HasParameterlessConstructor(symbol);
+        
         model = new TypeModel(
             TypeAnalyzer.GetNamespace(symbol),
             symbol.Name,
@@ -250,7 +253,9 @@ internal static class TypeModelFactory
             new EquatableArray<string>(typeConstraints.ToArray()),
             new EquatableArray<TypeModel>(relatedTypes.Values.ToArray()),
             new EquatableArray<MemberModel>(nestedTypes.Values.ToArray()),
-            nullabilityEnabled);
+            nullabilityEnabled,
+            hasParameterlessConstructor,
+            new EquatableArray<string>(circRefLog.ToArray()));
 
         return true;
     }
