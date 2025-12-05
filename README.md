@@ -17,7 +17,7 @@ The fastest deep cloning library, supporting anything from <code>.NET 4.6</code>
 ## ✨ Features
 
 - **The Fastest** - [Benchmarked](https://github.com/lofcz/FastCloner?tab=readme-ov-file#performance) to beat all other libraries with third-party independent benchmarks verifying the performance. **300x** speed-up vs `Newtonsoft.Json` and **160x** vs `System.Text.Json`
-- **The Most Correct** - Cloning objects is hard: `<T>`, `abstract`, immutables, read-only, pointers, circular dependencies, deeply nested graphs.. we have over [500 tests](https://github.com/lofcz/FastCloner/tree/next/FastCloner.Tests) verifying correct behavior in these cases and we are transparent about the [limitations](https://github.com/lofcz/FastCloner?tab=readme-ov-file#limitations)
+- **The Most Correct** - Cloning objects is hard: `<T>`, `abstract`, immutables, read-only, pointers, circular dependencies, deeply nested graphs.. we have over [600 tests](https://github.com/lofcz/FastCloner/tree/next/FastCloner.Tests) verifying correct behavior in these cases and we are transparent about the [limitations](https://github.com/lofcz/FastCloner?tab=readme-ov-file#limitations)
 - **Novel Algorithm** - FastCloner recognizes that certain cloning code cannot be generated in certain scenarios and uses highly optimized reflection-based approach instead for these types - this only happens for the members that need this, not entire objects
 - **Embeddable** - FastCloner has no dependencies outside the standard library. Source generator and reflection parts can be installed independently
 - **Gentle & Caring** - FastCloner detects standard attributes like `[NonSerialized]` making it easy to try without polluting codebase with custom attributes. Type usage graph for generics is built automatically producing performant cloning code without manual annotations
@@ -101,6 +101,110 @@ Cache can be invalidated to reduce the memory footprint, if needed:
 FastCloner.FastCloner.ClearCache();
 ```
 
+### Generic Classes and Abstract Types
+
+The source generator automatically discovers which concrete types your generic classes and abstract hierarchies are used with:
+
+**Generic types** - The generator scans your codebase for usages like `MyClass<int>` or `MyClass<Customer>` and generates specialized cloning code:
+
+```cs
+[FastClonerClonable]
+public class Container<T>
+{
+    public T Value { get; set; }
+}
+
+// Source generator finds this usage and generates cloning code for Container<int>
+var container = new Container<int> { Value = 42 };
+var clone = container.FastDeepClone();
+```
+
+**Abstract classes** - The generator automatically finds all concrete derived types in your codebase:
+
+```cs
+[FastClonerClonable]
+public abstract class Animal
+{
+    public string Name { get; set; }
+}
+
+public class Dog : Animal
+{
+    public string Breed { get; set; }
+}
+
+public class Cat : Animal
+{
+    public bool IsIndoor { get; set; }
+}
+
+// Cloning via the abstract type works - the generator discovered Dog and Cat
+Animal pet = new Dog { Name = "Buddy", Breed = "Labrador" };
+Animal clone = pet.FastDeepClone(); // Returns a cloned Dog
+```
+
+### Explicitly Including Types with `[FastClonerInclude]`
+
+When a type is only used dynamically (not visible at compile time), use `[FastClonerInclude]` to ensure the generator creates cloning code for it:
+
+```cs
+[FastClonerClonable]
+[FastClonerInclude(typeof(Customer), typeof(Order))] // Include types used dynamically
+public class Wrapper<T>
+{
+    public T Value { get; set; }
+}
+```
+
+For abstract classes, you can also use `[FastClonerInclude]` to add derived types that aren't in your codebase (e.g., from external assemblies):
+
+```cs
+[FastClonerClonable]
+[FastClonerInclude(typeof(ExternalPlugin))] // Add external derived types
+public abstract class Plugin
+{
+    public string Name { get; set; }
+}
+```
+
+### Cloning Context with `FastClonerContext`
+
+For advanced scenarios, create a custom cloning context to explicitly register types you want to clone. This is useful when you need a centralized cloning entry point or want to clone types from external assemblies:
+
+```cs
+public class Customer
+{
+    public string Name { get; set; }
+    public Address Address { get; set; }
+}
+
+public class Address
+{
+    public string City { get; set; }
+}
+
+// Create a context and register types to clone
+[FastClonerRegister(typeof(Customer), typeof(Address))]
+public partial class MyCloningContext : FastClonerContext { }
+```
+
+Using the context:
+```cs
+MyCloningContext ctx = new MyCloningContext();
+
+// Clone with compile-time type safety
+Customer clone = ctx.Clone(original);
+
+// Check if a type is handled by this context
+bool handled = ctx.IsHandled(typeof(Customer)); // true
+
+// Try to clone (returns false for unregistered types)
+if (ctx.TryClone(obj, out var cloned))
+{
+    // Successfully cloned
+}
+```
+
 ## Limitations
 
 - Cloning unmanaged resources, such as `IntPtr`s may result in side-effects, as there is no metadata for the length of buffers such pointers often point to.
@@ -137,7 +241,7 @@ You can run the benchmark [locally](https://github.com/lofcz/FastCloner/blob/nex
 
 ## Contributing
 
-If you are looking to add new functionality, please open an issue first to verify your intent is aligned with the scope of the project. The library is covered by over [500 tests](https://github.com/lofcz/FastCloner/tree/next/src/FastCloner.Tests), please run them against your work before proposing changes. When reporting issues, providing a minimal reproduction we can plug in as a new test greatly reduces turnaround time.
+If you are looking to add new functionality, please open an issue first to verify your intent is aligned with the scope of the project. The library is covered by over [600 tests](https://github.com/lofcz/FastCloner/tree/next/src/FastCloner.Tests), please run them against your work before proposing changes. When reporting issues, providing a minimal reproduction we can plug in as a new test greatly reduces turnaround time.
 
 ## License
 
