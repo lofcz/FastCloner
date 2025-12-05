@@ -32,6 +32,18 @@ internal static class MemberCollector
                 {
                     if (property.GetMethod != null && property.SetMethod != null && !property.IsIndexer)
                     {
+                        // Skip properties with private/internal setters from extension class context
+                        // These can't be set from the generated extension method
+                        // Note: We still include init-only properties as they work in object initializers
+                        // but they require special handling during code generation
+                        if (property.SetMethod.DeclaredAccessibility != Accessibility.Public &&
+                            property.SetMethod.DeclaredAccessibility != Accessibility.Internal &&
+                            property.SetMethod.DeclaredAccessibility != Accessibility.ProtectedOrInternal)
+                        {
+                            // Skip: private or protected setters can't be accessed from extension class
+                            continue;
+                        }
+                        
                         if (!HasIgnoreAttribute(property, compilation))
                         {
                             members.Add(new MemberAnalysis(MemberModel.Create(property, nullabilityEnabled, compilation), property.Type));

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 
 namespace FastCloner.SourceGenerator;
 
@@ -30,6 +31,10 @@ internal static class CollectionHelperGenerator
             {
                 case MemberTypeKind.Array:
                     WriteArrayCloneMethod(context, member);
+                    break;
+
+                case MemberTypeKind.MultiDimArray:
+                    WriteMultiDimArrayCloneMethod(context, member);
                     break;
 
                 case MemberTypeKind.Collection:
@@ -698,8 +703,11 @@ internal static class CollectionHelperGenerator
             sb.AppendLine();
         }
 
-        // Arrays use Length, not Count
-        sb.AppendLine($"            var result = new {member.ElementTypeName}[source.Length];");
+        // Create array - handle jagged arrays properly
+        // For jagged arrays like int[][], the element type is int[] 
+        // We need to create: new int[source.Length][]  (not new int[][source.Length])
+        var arrayCreationExpr = GetArrayCreationExpression(member.ElementTypeName, "source.Length");
+        sb.AppendLine($"            var result = {arrayCreationExpr};");
 
         if (needsState)
         {
@@ -752,6 +760,151 @@ internal static class CollectionHelperGenerator
         sb.AppendLine("            return result;");
         sb.AppendLine("        }");
         sb.AppendLine();
+    }
+
+    private static void WriteMultiDimArrayCloneMethod(CloneGeneratorContext context, MemberModel member)
+    {
+        if (member.ElementTypeName == null) return;
+
+        var typeName = member.TypeFullName;
+        var methodName = context.GetMethodName(typeName);
+        var isSafe = member.ElementIsSafe;
+        var hasClonableAttr = member.ElementHasClonableAttr;
+        var needsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(context, member);
+        var rank = member.ArrayRank;
+        var sb = context.Source;
+
+        if (needsState)
+        {
+            context.NeedsStateClass = true;
+        }
+
+        // Arrays are always reference types
+        WriteHelperMethodSignature(context, typeName, methodName, needsState, false);
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (source == null) return null;");
+
+        if (needsState)
+        {
+            sb.AppendLine("            if (state != null)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                var known = state.GetKnownRef(source);");
+            sb.AppendLine($"                if (known != null) return ({typeName})known;");
+            sb.AppendLine("            }");
+            sb.AppendLine();
+        }
+
+        // Generate dimension length variables: len0, len1, len2, ...
+        for (int d = 0; d < rank; d++)
+        {
+            sb.AppendLine($"            int len{d} = source.GetLength({d});");
+        }
+        sb.AppendLine();
+
+        // Create the result array with the same dimensions
+        // e.g., new T[len0, len1, len2]
+        var dimList = string.Join(", ", Enumerable.Range(0, rank).Select(d => $"len{d}"));
+        sb.AppendLine($"            var result = new {member.ElementTypeName}[{dimList}];");
+
+        if (needsState)
+        {
+            sb.AppendLine("            state?.AddKnownRef(source, result);");
+        }
+        sb.AppendLine();
+
+        // Optimization: if element type is safe, use Array.Copy
+        if (isSafe)
+        {
+            sb.AppendLine("            // Element type is safe, use fast Array.Copy");
+            sb.AppendLine("            global::System.Array.Copy(source, result, source.Length);");
+        }
+        else
+        {
+            // Generate nested loops for each dimension
+            // for (int i0 = 0; i0 < len0; i0++)
+            //     for (int i1 = 0; i1 < len1; i1++)
+            //         ...
+            //             result[i0, i1, ...] = Clone(source[i0, i1, ...]);
+
+            for (int d = 0; d < rank; d++)
+            {
+                var indent = new string(' ', 12 + d * 4);
+                sb.AppendLine($"{indent}for (int i{d} = 0; i{d} < len{d}; i{d}++)");
+            }
+
+            var innerIndent = new string(' ', 12 + rank * 4);
+            var indexList = string.Join(", ", Enumerable.Range(0, rank).Select(d => $"i{d}"));
+
+            // Determine how to clone each element
+            string itemExpr;
+            if (hasClonableAttr)
+            {
+                itemExpr = $"source[{indexList}]?.FastDeepClone()";
+            }
+            else if (context.TryGetMemberModel(member.ElementTypeName!, out var nestedModel))
+            {
+                var helperName = context.GetOrCreateHelperMethodName(nestedModel);
+                var elementNeedsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(context, nestedModel);
+                var actualStateVar = needsState ? "state" : "null";
+                itemExpr = GetHelperMethodCall(context, helperName, $"source[{indexList}]", elementNeedsState, actualStateVar);
+            }
+            else if (context.TryGetImplicitTypeModel(member.ElementTypeName!, out var implicitModel))
+            {
+                var helperName = context.GetOrCreateHelperMethodName(implicitModel.FullyQualifiedName);
+                var elementNeedsState = implicitModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
+                var actualStateVar = needsState ? "state" : "null";
+                itemExpr = GetHelperMethodCall(context, helperName, $"source[{indexList}]", elementNeedsState, actualStateVar);
+            }
+            else if (context.IsFastClonerAvailable)
+            {
+                // Use runtime FastCloner for elements that require it
+                itemExpr = $"({member.ElementTypeName})FastCloner.DeepClone(source[{indexList}])";
+            }
+            else
+            {
+                // Fallback to shallow copy
+                itemExpr = $"source[{indexList}]";
+            }
+
+            sb.AppendLine($"{innerIndent}result[{indexList}] = {itemExpr};");
+        }
+
+        sb.AppendLine();
+        sb.AppendLine("            return result;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+    }
+
+    /// <summary>
+    /// Creates the correct array instantiation expression for both regular and jagged arrays.
+    /// For regular arrays like int[], creates: new int[size]
+    /// For jagged arrays like int[][], creates: new int[size][] (not new int[][size] which is invalid)
+    /// </summary>
+    private static string GetArrayCreationExpression(string elementTypeName, string sizeExpression)
+    {
+        // Check if the element type is itself an array (jagged array scenario)
+        // e.g., for int[][], elementTypeName is "int[]"
+        var bracketIndex = elementTypeName.IndexOf('[');
+        
+        if (bracketIndex >= 0)
+        {
+            // Jagged array: element type contains brackets
+            // Split into base type and trailing brackets
+            // int[] → baseType="int", trailingBrackets="[]"
+            // int[][] → baseType="int", trailingBrackets="[][]"
+            var baseType = elementTypeName.Substring(0, bracketIndex);
+            var trailingBrackets = elementTypeName.Substring(bracketIndex);
+            
+            // Create: new baseType[size]trailingBrackets
+            // e.g., new int[source.Length][] for int[][] array
+            return $"new {baseType}[{sizeExpression}]{trailingBrackets}";
+        }
+        else
+        {
+            // Regular array: element type has no brackets
+            // Create: new elementTypeName[size]
+            return $"new {elementTypeName}[{sizeExpression}]";
+        }
     }
 
     private static void WriteHelperMethodSignature(CloneGeneratorContext context, string typeName, string methodName, bool needsState, bool isValueType)

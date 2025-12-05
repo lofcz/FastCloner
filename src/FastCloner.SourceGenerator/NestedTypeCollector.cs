@@ -76,7 +76,10 @@ internal static class NestedTypeCollector
                     requiresFastCloner,
                     collKind,
                     concreteType,
-                    type.IsValueType
+                    type.IsValueType,
+                    false, // IsInitOnly - not applicable for helper methods
+                    false, // HasPrivateSetter - not applicable for helper methods
+                    0      // ArrayRank - not applicable for dictionaries
                  );
                  
                  if (!nestedTypes.ContainsKey(model.TypeFullName))
@@ -103,6 +106,17 @@ internal static class NestedTypeCollector
                      concreteType = TypeAnalyzer.GetConcreteTypeForCollection(type, collectionKind, elemType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
                  }
 
+                 // Determine the array rank if it's an array type
+                 int arrayRank = 0;
+                 if (type is IArrayTypeSymbol arrayType)
+                 {
+                     arrayRank = arrayType.Rank;
+                     if (arrayRank > 1)
+                     {
+                         kind = MemberTypeKind.MultiDimArray;
+                     }
+                 }
+
                  var model = new MemberModel(
                     "NestedHelper",
                     type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
@@ -115,7 +129,10 @@ internal static class NestedTypeCollector
                     requiresFastCloner,
                     collectionKind,
                     concreteType,
-                    type.IsValueType
+                    type.IsValueType,
+                    false, // IsInitOnly - not applicable for helper methods
+                    false, // HasPrivateSetter - not applicable for helper methods
+                    arrayRank
                  );
 
                  if (!nestedTypes.ContainsKey(model.TypeFullName))

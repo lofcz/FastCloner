@@ -20,9 +20,8 @@ internal static class MemberCloneGenerator
         {
             case MemberTypeKind.Safe:
                 // Direct assignment for safe types (primitives, strings, etc.)
-                return member.IsProperty
-                    ? $"{memberName} = {sourceVar}.{memberName}"
-                    : string.Empty;
+                // Both properties and fields can use object initializer syntax
+                return $"{memberName} = {sourceVar}.{memberName}";
 
             case MemberTypeKind.Clonable:
             {
@@ -40,9 +39,8 @@ internal static class MemberCloneGenerator
                     actualStateVar = "new FcGeneratedCloneState()";
                 }
                 
-                return member.IsProperty
-                    ? $"{memberName} = {extensionClassName}.InternalFastDeepClone({sourceVar}.{memberName}, {actualStateVar})"
-                    : string.Empty;
+                // Both properties and fields can use object initializer syntax
+                return $"{memberName} = {extensionClassName}.InternalFastDeepClone({sourceVar}.{memberName}, {actualStateVar})";
             }
 
             case MemberTypeKind.Implicit:
@@ -60,9 +58,8 @@ internal static class MemberCloneGenerator
                 bool shouldPassState = memberNeedsState || (isRegisteredType && stateVar != "null");
                 var actualStateVar = shouldPassState ? stateVar : "null";
 
-                return member.IsProperty
-                    ? $"{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", shouldPassState, actualStateVar)}"
-                    : string.Empty;
+                // Both properties and fields can use object initializer syntax
+                return $"{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", shouldPassState, actualStateVar)}";
             }
 
             case MemberTypeKind.Collection:
@@ -71,9 +68,8 @@ internal static class MemberCloneGenerator
                 var memberNeedsState = MemberNeedsCircularRefTracking(context, member);
                 var actualStateVar = memberNeedsState ? stateVar : "null";
 
-                return member.IsProperty
-                    ? $"{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", memberNeedsState, actualStateVar)}"
-                    : string.Empty;
+                // Both properties and fields can use object initializer syntax
+                return $"{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", memberNeedsState, actualStateVar)}";
             }
 
             case MemberTypeKind.Dictionary:
@@ -82,9 +78,8 @@ internal static class MemberCloneGenerator
                 var memberNeedsState = MemberNeedsCircularRefTracking(context, member);
                 var actualStateVar = memberNeedsState ? stateVar : "null";
 
-                return member.IsProperty
-                    ? $"{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", memberNeedsState, actualStateVar)}"
-                    : string.Empty;
+                // Both properties and fields can use object initializer syntax
+                return $"{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", memberNeedsState, actualStateVar)}";
             }
 
             case MemberTypeKind.Array:
@@ -93,9 +88,19 @@ internal static class MemberCloneGenerator
                 var memberNeedsState = MemberNeedsCircularRefTracking(context, member);
                 var actualStateVar = memberNeedsState ? stateVar : "null";
 
-                return member.IsProperty
-                    ? $"{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", memberNeedsState, actualStateVar)}"
-                    : string.Empty;
+                // Both properties and fields can use object initializer syntax
+                return $"{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", memberNeedsState, actualStateVar)}";
+            }
+
+            case MemberTypeKind.MultiDimArray:
+            {
+                // Multi-dimensional arrays are now fully supported by the source generator
+                var helperMethodName = context.GetOrCreateHelperMethodName(member);
+                var memberNeedsState = MemberNeedsCircularRefTracking(context, member);
+                var actualStateVar = memberNeedsState ? stateVar : "null";
+
+                // Both properties and fields can use object initializer syntax
+                return $"{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", memberNeedsState, actualStateVar)}";
             }
 
             case MemberTypeKind.Object:
@@ -105,9 +110,8 @@ internal static class MemberCloneGenerator
                 // This handles both FastCloner availability and safe type fallbacks
                 context.NeedsClonerClass = true;
 
-                return member.IsProperty
-                    ? $"{memberName} = Cloner<{member.TypeFullName}>.Clone({sourceVar}.{memberName}, {stateVar})"
-                    : string.Empty;
+                // Both properties and fields can use object initializer syntax
+                return $"{memberName} = Cloner<{member.TypeFullName}>.Clone({sourceVar}.{memberName}, {stateVar})";
         }
     }
 
@@ -118,6 +122,11 @@ internal static class MemberCloneGenerator
 
         // Skip read-only fields (can't assign in struct cloning)
         if (!member.IsProperty && member.IsReadOnly)
+            return;
+        
+        // Skip init-only properties when using statement-based assignment
+        // Init-only properties can only be assigned in object initializers, not individual statements
+        if (member.IsProperty && member.IsInitOnly)
             return;
 
         switch (member.TypeKind)
@@ -168,7 +177,9 @@ internal static class MemberCloneGenerator
             case MemberTypeKind.Collection:
             case MemberTypeKind.Dictionary:
             case MemberTypeKind.Array:
+            case MemberTypeKind.MultiDimArray:
             {
+                // All collection types (including multi-dimensional arrays) use helper methods
                 var helperMethodName = context.GetOrCreateHelperMethodName(member);
                 var memberNeedsState = MemberNeedsCircularRefTracking(context, member);
                 var actualStateVar = memberNeedsState ? stateVar : "null";
@@ -179,7 +190,7 @@ internal static class MemberCloneGenerator
             case MemberTypeKind.Object:
             case MemberTypeKind.Other:
             default:
-                // Use Cloner<T> helper
+                // Use Cloner<T> helper for generic/object/unknown types
                 context.NeedsClonerClass = true;
                 sb.AppendLine($"            {resultVar}.{memberName} = Cloner<{member.TypeFullName}>.Clone({sourceVar}.{memberName}, {stateVar});");
                 break;
@@ -205,7 +216,7 @@ internal static class MemberCloneGenerator
             return true;
 
         // For collections/arrays, check element metadata
-        if (member.TypeKind == MemberTypeKind.Collection || member.TypeKind == MemberTypeKind.Array)
+        if (member.TypeKind == MemberTypeKind.Collection || member.TypeKind == MemberTypeKind.Array || member.TypeKind == MemberTypeKind.MultiDimArray)
         {
             // If element is safe, no tracking needed
             if (member.ElementIsSafe)

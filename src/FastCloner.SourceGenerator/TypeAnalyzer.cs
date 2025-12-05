@@ -17,6 +17,50 @@ internal static class TypeAnalyzer
         return IsSafeTypeInternal(type, compilation, new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default));
     }
 
+    /// <summary>
+    /// Determines if a type should NOT be deep cloned (shallow copy only).
+    /// These are types like delegates, Lazy, Task, WeakReference where deep cloning
+    /// would be semantically incorrect.
+    /// </summary>
+    public static bool IsDoNotCloneType(ITypeSymbol type)
+    {
+        if (type == null) return false;
+        
+        var fullName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+            .Replace("global::", "");
+        
+        // Check non-generic types
+        if (SafeTypeCatalog.DoNotCloneTypes.Contains(fullName))
+            return true;
+        
+        // Check if it's a delegate type
+        if (type.TypeKind == TypeKind.Delegate)
+            return true;
+        
+        // Check generic type definitions
+        if (type is INamedTypeSymbol namedType && namedType.IsGenericType)
+        {
+            var metadataName = GetFullMetadataName(namedType.OriginalDefinition);
+            if (SafeTypeCatalog.DoNotCloneGenericTypes.Contains(metadataName))
+                return true;
+        }
+        
+        return false;
+    }
+
+    /// <summary>
+    /// Determines if a type is a ref struct (ref-like type) that cannot be boxed.
+    /// These types cannot be used with state tracking dictionary (which boxes values).
+    /// Examples: Span&lt;T&gt;, ReadOnlySpan&lt;T&gt;, custom ref structs.
+    /// </summary>
+    public static bool IsRefStructType(ITypeSymbol type)
+    {
+        if (type == null) return false;
+        
+        // Check the IsRefLikeType property which covers all ref struct types
+        return type.IsRefLikeType;
+    }
+
     private static bool IsSafeTypeInternal(ITypeSymbol type, Compilation compilation, HashSet<ITypeSymbol> visited)
     {
         if (type == null) return false;
@@ -161,6 +205,14 @@ internal static class TypeAnalyzer
     /// </summary>
     public static ITypeSymbol? GetCollectionElementType(ITypeSymbol type, Compilation compilation)
     {
+        // IMPORTANT: Check arrays first! Multi-dimensional arrays don't implement IEnumerable<T>
+        // They only implement non-generic IEnumerable, ICollection, IList
+        // So we must extract the element type directly from IArrayTypeSymbol
+        if (type is IArrayTypeSymbol arrayType)
+        {
+            return arrayType.ElementType;
+        }
+
         // Check if type itself is IEnumerable<T>
         if (type.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T)
         {

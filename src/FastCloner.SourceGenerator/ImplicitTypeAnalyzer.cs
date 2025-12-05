@@ -96,7 +96,10 @@ internal static class ImplicitTypeAnalyzer
                             RequiresFastCloner: false,
                             CollectionKind: CollectionKind.None,
                             ConcreteTypeFullName: null,
-                            IsValueType: componentType.IsValueType
+                            IsValueType: componentType.IsValueType,
+                            IsInitOnly: false,
+                            HasPrivateSetter: false,
+                            ArrayRank: 0
                         );
                         return true;
                     }

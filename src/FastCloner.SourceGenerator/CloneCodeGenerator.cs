@@ -538,13 +538,32 @@ internal sealed class CloneCodeGenerator
         sb.AppendLine("        /// Helper class for cloning generic types.");
         sb.AppendLine("        /// </summary>");
         
+        // Determine the type parameter name and string
+        // If parent type has type parameters, we use the first one as the Cloner's parameter
+        // (since they're in scope within the extension class)
+        // If parent has no type parameters, we need to define our own 'T'
         var typeParams = GetTypeParametersString();
         var constraints = GetTypeConstraintsString();
         
-        sb.AppendLine($"        private static class Cloner{typeParams}{constraints}");
-        sb.AppendLine("        {");
-
-        sb.AppendLine("            public static T Clone(T source, object? state)");
+        // For non-generic types, Cloner needs its own T parameter
+        // For generic types, reuse the parent's type parameters
+        var typeParamsArray = _context.Model.TypeParameters.GetArray();
+        if (typeParamsArray == null || typeParamsArray.Length == 0)
+        {
+            sb.AppendLine($"        private static class Cloner<T>");
+            sb.AppendLine("        {");
+            sb.AppendLine("            public static T Clone(T source, object? state)");
+        }
+        else
+        {
+            // Use parent's type parameters 
+            sb.AppendLine($"        private static class Cloner{typeParams}{constraints}");
+            sb.AppendLine("        {");
+            // Use the first type parameter as the clone target type
+            var firstTypeParam = typeParamsArray[0];
+            sb.AppendLine($"            public static {firstTypeParam} Clone({firstTypeParam} source, object? state)");
+        }
+        
         sb.AppendLine("            {");
         sb.AppendLine("                if (source == null) return default;");
         
@@ -568,15 +587,20 @@ internal sealed class CloneCodeGenerator
                 
             var argType = usage.ArgumentTypeMetadataName;
             
+            // Use the appropriate type parameter for cast operations
+            var castTypeParam = (typeParamsArray == null || typeParamsArray.Length == 0)
+                ? "T" 
+                : typeParamsArray[0];
+            
             if (usage.IsSafe)
             {
-                sb.AppendLine($"                if (typeof(T) == typeof({argType})) return (T)(object)source;");
+                sb.AppendLine($"                if (typeof({castTypeParam}) == typeof({argType})) return ({castTypeParam})(object)source;");
             }
             else if (usage.IsClonable && !string.IsNullOrEmpty(usage.ExtensionClassFQN))
             {
                 // Generate dispatch to concrete FastDeepClone
-                sb.AppendLine($"                if (typeof(T) == typeof({argType}))");
-                sb.AppendLine($"                    return (T)(object)({usage.ExtensionClassFQN}.FastDeepClone(({argType})(object)source)!);");
+                sb.AppendLine($"                if (typeof({castTypeParam}) == typeof({argType}))");
+                sb.AppendLine($"                    return ({castTypeParam})(object)({usage.ExtensionClassFQN}.FastDeepClone(({argType})(object)source)!);");
             }
             else if (usage.CollectionModel != null)
             {
@@ -591,8 +615,8 @@ internal sealed class CloneCodeGenerator
                     ? $"(({argType})(object)source, state as FcGeneratedCloneState)" 
                     : $"(({argType})(object)source)";
 
-                sb.AppendLine($"                if (typeof(T) == typeof({argType}))");
-                sb.AppendLine($"                    return (T)(object){helperName}{typeParams}{callArgs};");
+                sb.AppendLine($"                if (typeof({castTypeParam}) == typeof({argType}))");
+                sb.AppendLine($"                    return ({castTypeParam})(object){helperName}{typeParams}{callArgs};");
             }
             else
             {
@@ -606,16 +630,21 @@ internal sealed class CloneCodeGenerator
                         ? $"(({argType})(object)source, state as FcGeneratedCloneState)" 
                         : $"(({argType})(object)source)";
 
-                     sb.AppendLine($"                if (typeof(T) == typeof({argType}))");
-                     sb.AppendLine($"                    return (T)(object){helperName}{typeParams}{callArgs};");
+                     sb.AppendLine($"                if (typeof({castTypeParam}) == typeof({argType}))");
+                     sb.AppendLine($"                    return ({castTypeParam})(object){helperName}{typeParams}{callArgs};");
                 }
             }
         }
         
+        // Use the appropriate type parameter for the fallback cast
+        var fallbackCastTypeParam = (typeParamsArray == null || typeParamsArray.Length == 0)
+            ? "T" 
+            : typeParamsArray[0];
+        
         if (_context.IsFastClonerAvailable)
         {
             sb.AppendLine("                // If FastCloner is available, delegate to it for deep cloning");
-            sb.AppendLine("                return (T)FastCloner.DeepClone(source);");
+            sb.AppendLine($"                return ({fallbackCastTypeParam})FastCloner.DeepClone(source);");
         }
         else
         {
