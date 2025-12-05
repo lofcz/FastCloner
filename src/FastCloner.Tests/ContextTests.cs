@@ -31,7 +31,7 @@ public class ContextTests
         MyRegisteredType original = new MyRegisteredType { Name = "Instance", Value = 789 };
         MyCloningContext ctx = new MyCloningContext();
         MyRegisteredType clone = ctx.Clone(original); // Instance method on context returning typed object
-
+        
         Assert.That(clone, Is.Not.SameAs(original));
         Assert.That(clone.Name, Is.EqualTo("Instance"));
     }
@@ -77,36 +77,36 @@ public class ContextTests
     [Test]
     public void Context_Should_Handle_Complex_Circular_Dependencies()
     {
-        var ctx = new CircularContext();
+        CircularContext ctx = new CircularContext();
         
         // 1. Direct Cycle A <-> B
-        var a = new NodeA();
-        var b = new NodeB();
+        NodeA a = new NodeA();
+        NodeB b = new NodeB();
         a.B = b;
         b.A = a;
         
-        var cloneA = (NodeA)ctx.Clone(a);
+        NodeA cloneA = ctx.Clone(a);
         Assert.That(cloneA, Is.Not.SameAs(a));
         Assert.That(cloneA.B, Is.Not.SameAs(b));
         Assert.That(cloneA.B!.A, Is.SameAs(cloneA)); // Cycle preserved
         
         // 2. Self Cycle C -> C
-        var c = new NodeC();
+        NodeC c = new NodeC();
         c.Self = c;
         
-        var cloneC = (NodeC)ctx.Clone(c);
+        NodeC cloneC = ctx.Clone(c);
         Assert.That(cloneC, Is.Not.SameAs(c));
         Assert.That(cloneC.Self, Is.SameAs(cloneC)); // Cycle preserved
         
         // 3. Lollipop Graph D -> E <-> F
-        var d = new NodeD();
-        var e = new NodeE();
-        var f = new NodeF();
+        NodeD d = new NodeD();
+        NodeE e = new NodeE();
+        NodeF f = new NodeF();
         d.E = e;
         e.F = f;
         f.E = e;
         
-        var cloneD = (NodeD)ctx.Clone(d);
+        NodeD cloneD = ctx.Clone(d);
         Assert.That(cloneD, Is.Not.SameAs(d));
         Assert.That(cloneD.E, Is.Not.SameAs(e));
         Assert.That(cloneD.E!.F, Is.Not.SameAs(f));
@@ -120,13 +120,13 @@ public class ContextTests
         // Note: Read-only properties set in constructor (Name, Value) won't be cloned since
         // FormatterServices.GetUninitializedObject() doesn't call the constructor.
         // Only writable properties set after construction will be cloned.
-        var ctx = new NoParameterlessCtorContext();
-        var original = ClassWithoutParameterlessCtor.Create("TestName", 42);
+        NoParameterlessCtorContext ctx = new NoParameterlessCtorContext();
+        ClassWithoutParameterlessCtor original = ClassWithoutParameterlessCtor.Create("TestName", 42);
         original.Description = "Test Description";
         original.AdditionalData = "Extra Data";
         
         // Act - Should use FormatterServices.GetUninitializedObject internally
-        var clone = (ClassWithoutParameterlessCtor)ctx.Clone(original);
+        ClassWithoutParameterlessCtor clone = (ClassWithoutParameterlessCtor)ctx.Clone(original);
         
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -141,12 +141,12 @@ public class ContextTests
     public void Context_Should_Clone_Class_Without_Parameterless_Constructor_With_Circular_References()
     {
         // Arrange - Test that circular reference tracking works with FormatterServices
-        var ctx = new NoParameterlessCtorCircularContext();
-        var original = new ClassWithCircularRef("Initial");
+        NoParameterlessCtorCircularContext ctx = new NoParameterlessCtorCircularContext();
+        ClassWithCircularRef original = new ClassWithCircularRef("Initial");
         original.Self = original; // Create circular reference
         
         // Act
-        var clone = (ClassWithCircularRef)ctx.Clone(original);
+        ClassWithCircularRef clone = (ClassWithCircularRef)ctx.Clone(original);
         
         // Assert
         Assert.That(clone, Is.Not.Null);

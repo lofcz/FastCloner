@@ -13,6 +13,8 @@ internal sealed record TypeModel(
     string FullyQualifiedName,
     bool IsStruct,
     bool IsSealed,
+    bool IsAbstract,
+    bool IsRecord,
     bool HasClonableBaseClass,
     bool CanHaveCircularReferences,
     bool IsFastClonerAvailable,
@@ -21,6 +23,7 @@ internal sealed record TypeModel(
     EquatableArray<string> TypeConstraints,
     EquatableArray<TypeModel> RelatedTypes, // Implicitly clonable types that we generate helpers for
     EquatableArray<MemberModel> NestedTypes, // Nested collection types that need helpers
+    EquatableArray<TypeModel> DerivedTypes, // Concrete derived types for abstract class dispatch
     bool NullabilityEnabled,
     bool HasParameterlessConstructor = true, // Whether the type has a public parameterless constructor (defaults to true for safety)
     EquatableArray<string> CircularAnalysisLog = default) : IEquatable<TypeModel>;

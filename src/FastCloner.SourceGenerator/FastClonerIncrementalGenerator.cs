@@ -20,7 +20,7 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
         var pipeline = context.SyntaxProvider.ForAttributeWithMetadataName<Result<TypeModel>>(
             fullyQualifiedMetadataName: "FastCloner.SourceGenerator.Shared.FastClonerClonableAttribute",
             predicate: static (node, cancellationToken) => 
-                node is ClassDeclarationSyntax || node is StructDeclarationSyntax,
+                node is ClassDeclarationSyntax || node is StructDeclarationSyntax || node is RecordDeclarationSyntax,
             transform: static (ctx, cancellationToken) =>
             {
                 var symbol = ctx.SemanticModel.GetDeclaredSymbol(ctx.TargetNode);

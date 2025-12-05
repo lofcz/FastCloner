@@ -17,21 +17,6 @@ internal static class TypeModelFactory
         model = null;
         error = null;
 
-        if (symbol.IsAbstract)
-        {
-            error = Diagnostic.Create(
-                new DiagnosticDescriptor(
-                    "FCG002",
-                    "Abstract types cannot be cloned",
-                    "Type '{0}' is abstract and cannot be marked with [FastClonerClonable]",
-                    "FastCloner",
-                    DiagnosticSeverity.Error,
-                    isEnabledByDefault: true),
-                symbol.Locations.FirstOrDefault() ?? Location.None,
-                symbol.ToDisplayString());
-            return false;
-        }
-
         // Check if FastCloner library is available
         var isFastClonerAvailable = compilation.GetTypeByMetadataName("FastCloner.FastCloner") != null;
         
@@ -239,12 +224,41 @@ internal static class TypeModelFactory
         // Check if type has a parameterless constructor
         var hasParameterlessConstructor = TypeAnalyzer.HasParameterlessConstructor(symbol);
         
+        // Collect derived types for abstract classes
+        var derivedTypes = EquatableArray<TypeModel>.Empty;
+        if (symbol.IsAbstract)
+        {
+            var derivedTypesList = DerivedTypeCollector.Collect(symbol, compilation, nullabilityEnabled);
+            derivedTypes = new EquatableArray<TypeModel>(derivedTypesList.ToArray());
+            
+            // For abstract classes, we need runtime fallback if no derived types are found
+            // and FastCloner runtime is not available
+            if (derivedTypesList.Count == 0 && !isFastClonerAvailable)
+            {
+                error = Diagnostic.Create(
+                    new DiagnosticDescriptor(
+                        "FCG002",
+                        "Abstract type has no discoverable derived types",
+                        "Abstract type '{0}' has no derived types that can be discovered. " +
+                        "Either add concrete derived types in this assembly, use [FastClonerInclude] to register external types, " +
+                        "or install the FastCloner NuGet package for runtime fallback.",
+                        "FastCloner",
+                        DiagnosticSeverity.Warning,
+                        isEnabledByDefault: true),
+                    symbol.Locations.FirstOrDefault() ?? Location.None,
+                    symbol.ToDisplayString());
+                // Still generate - the warning is informational
+            }
+        }
+        
         model = new TypeModel(
             TypeAnalyzer.GetNamespace(symbol),
             symbol.Name,
             symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             flags.IsStruct,
             flags.IsSealed,
+            symbol.IsAbstract,
+            symbol.IsRecord,
             flags.HasClonableBaseClass,
             canHaveCircularRefs,
             isFastClonerAvailable,
@@ -253,6 +267,7 @@ internal static class TypeModelFactory
             new EquatableArray<string>(typeConstraints.ToArray()),
             new EquatableArray<TypeModel>(relatedTypes.Values.ToArray()),
             new EquatableArray<MemberModel>(nestedTypes.Values.ToArray()),
+            derivedTypes,
             nullabilityEnabled,
             hasParameterlessConstructor,
             new EquatableArray<string>(circRefLog.ToArray()));

@@ -16,6 +16,7 @@ internal sealed class CloneGeneratorContext
     private readonly Queue<string> _pendingHelperMethods = new();
     private readonly Dictionary<string, MemberModel> _typeNameToMemberModel = new();
     private readonly Dictionary<string, TypeModel> _implicitTypeModels = new();
+    private readonly Dictionary<string, TypeModel> _derivedTypeHelpers = new();
 
     public bool NeedsStateClass { get; set; }
     public bool NeedsClonerClass { get; set; }
@@ -167,4 +168,32 @@ internal sealed class CloneGeneratorContext
             .Replace('?', '_')
             .Replace(':', '_');
     }
+
+    /// <summary>
+    /// Registers a derived type helper for generation.
+    /// </summary>
+    public void RegisterDerivedTypeHelper(TypeModel derivedType, string methodName)
+    {
+        if (!_derivedTypeHelpers.ContainsKey(derivedType.FullyQualifiedName))
+        {
+            _derivedTypeHelpers[derivedType.FullyQualifiedName] = derivedType;
+            _typeNameToMethodName[derivedType.FullyQualifiedName] = methodName;
+        }
+    }
+
+    /// <summary>
+    /// Gets all derived type helpers that need to be generated.
+    /// </summary>
+    public IEnumerable<(TypeModel Model, string MethodName)> GetDerivedTypeHelpers()
+    {
+        foreach (var kvp in _derivedTypeHelpers)
+        {
+            yield return (kvp.Value, _typeNameToMethodName[kvp.Key]);
+        }
+    }
+
+    /// <summary>
+    /// Gets whether there are any derived type helpers to generate.
+    /// </summary>
+    public bool HasDerivedTypeHelpers => _derivedTypeHelpers.Count > 0;
 }

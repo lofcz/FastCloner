@@ -49,7 +49,10 @@ internal sealed class CloneCodeGenerator
         sb.AppendLine("using FastCloner.SourceGenerator.Shared;");
 
         // Add FormatterServices if type doesn't have parameterless constructor
-        if (ClassCloneBodyGenerator.NeedsFormatterServices(_context.Model))
+        // Also check derived types for abstract classes
+        var needsFormatterServices = ClassCloneBodyGenerator.NeedsFormatterServices(_context.Model) ||
+                                     ClassCloneBodyGenerator.NeedsFormatterServices(_context.Model.DerivedTypes);
+        if (needsFormatterServices)
         {
             sb.AppendLine("using System.Runtime.Serialization;");
         }
@@ -94,6 +97,9 @@ internal sealed class CloneCodeGenerator
         // Always generate InternalFastDeepClone for Clonable types, even if they don't detect circular references
         WritePrivateFastDeepCloneMethod(typeName, fullTypeName);
 
+        // Generate helper methods for derived types (for abstract classes)
+        WriteDerivedTypeHelpers();
+
         // Generate Cloner<T> helper class (private nested class)
         // Must be generated before helpers to register its dependencies
         WriteClonerClass();
@@ -115,15 +121,33 @@ internal sealed class CloneCodeGenerator
         var typeParams = GetTypeParametersString();
         var constraints = GetTypeConstraintsString();
 
-        sb.AppendLine($"        public static {typeName}? FastDeepClone{typeParams}(this {typeName}? source){constraints}");
+        // For structs (value types), use non-nullable signatures since structs can't be null
+        var isStruct = _context.Model.IsStruct;
+        var nullableSuffix = isStruct ? "" : "?";
+
+        sb.AppendLine($"        public static {typeName}{nullableSuffix} FastDeepClone{typeParams}(this {typeName}{nullableSuffix} source){constraints}");
         sb.AppendLine("        {");
 
+        // For abstract classes, always use the internal method with state (for potential circular refs)
+        if (_context.Model.IsAbstract)
+        {
+            sb.AppendLine("            return InternalFastDeepClone(source, null);");
+        }
         // Optimization: When no circular references are possible, inline the clone logic directly
         // instead of calling through InternalFastDeepClone (saves a method call)
-        if (!_context.CanHaveCircularReferences)
+        else if (!_context.CanHaveCircularReferences)
         {
-            sb.AppendLine("            if (source == null) return null;");
-            WriteCloneBody(typeName, fullTypeName, false);
+            // For structs (value types), no null check needed - just clone directly
+            if (isStruct)
+            {
+                // For structs, source is already non-nullable, use it directly
+                WriteStructCloneBodyDirect(typeName);
+            }
+            else
+            {
+                sb.AppendLine("            if (source == null) return null;");
+                WriteCloneBody(typeName, fullTypeName, false);
+            }
         }
         else
         {
@@ -146,12 +170,26 @@ internal sealed class CloneCodeGenerator
         var typeParams = GetTypeParametersString();
         var constraints = GetTypeConstraintsString();
 
-        sb.AppendLine($"        internal static {typeName}? InternalFastDeepClone{typeParams}(this {typeName}? source, object? state){constraints}");
-        sb.AppendLine("        {");
-        sb.AppendLine("            if (source == null) return null;");
+        // For structs (value types), use non-nullable signatures since structs can't be null
+        var isStruct = _context.Model.IsStruct;
+        var nullableSuffix = isStruct ? "" : "?";
 
+        sb.AppendLine($"        internal static {typeName}{nullableSuffix} InternalFastDeepClone{typeParams}(this {typeName}{nullableSuffix} source, object? state){constraints}");
+        sb.AppendLine("        {");
+        
+        // For structs (value types), no null check needed
+        if (!isStruct)
+        {
+            sb.AppendLine("            if (source == null) return null;");
+        }
+
+        // For abstract classes, generate a type dispatcher
+        if (_context.Model.IsAbstract)
+        {
+            WriteAbstractTypeDispatcher(typeName);
+        }
         // Only use state if circular references are possible
-        if (_context.CanHaveCircularReferences)
+        else if (_context.CanHaveCircularReferences)
         {
             _context.NeedsStateClass = true;
             // Cast state to local type or create new one - allows sharing state across different extension classes
@@ -176,6 +214,213 @@ internal sealed class CloneCodeGenerator
         sb.AppendLine();
     }
 
+    private void WriteAbstractTypeDispatcher(string typeName)
+    {
+        var sb = _context.Source;
+        var derivedTypes = _context.Model.DerivedTypes;
+
+        sb.AppendLine();
+        sb.AppendLine("            // Dispatch to concrete type cloner based on runtime type");
+        sb.AppendLine("            var runtimeType = source.GetType();");
+        sb.AppendLine();
+
+        foreach (var derivedType in derivedTypes)
+        {
+            var derivedTypeName = derivedType.FullyQualifiedName;
+            
+            // Check if the derived type has its own [FastClonerClonable] attribute
+            // If so, use its generated extension method; otherwise use our helper
+            if (derivedType.Members.Count == 0)
+            {
+                // Minimal model - has its own [FastClonerClonable], use its extension
+                var extensionClassName = $"{derivedType.Namespace}.{derivedType.Name}FastDeepCloneExtensions";
+                if (string.IsNullOrEmpty(derivedType.Namespace))
+                {
+                    extensionClassName = $"{derivedType.Name}FastDeepCloneExtensions";
+                }
+                
+                sb.AppendLine($"            if (runtimeType == typeof({derivedTypeName}))");
+                sb.AppendLine($"                return ({typeName}){extensionClassName}.InternalFastDeepClone(({derivedTypeName})source, state);");
+            }
+            else
+            {
+                // Full model - auto-generated, use our helper method
+                var helperName = $"Clone{GetSafeTypeName(derivedType.Name)}";
+                _context.RegisterDerivedTypeHelper(derivedType, helperName);
+                
+                sb.AppendLine($"            if (runtimeType == typeof({derivedTypeName}))");
+                sb.AppendLine($"                return ({typeName}){helperName}(({derivedTypeName})source, state);");
+            }
+            sb.AppendLine();
+        }
+
+        // Fallback for unknown derived types
+        if (_context.IsFastClonerAvailable)
+        {
+            sb.AppendLine("            // Fallback for unknown derived types - use runtime cloner");
+            sb.AppendLine($"            return ({typeName})FastCloner.DeepClone(source);");
+        }
+        else
+        {
+            sb.AppendLine("            // No runtime cloner available - throw for unknown derived types");
+            sb.AppendLine($"            throw new InvalidOperationException($\"Cannot clone unknown derived type {{runtimeType.FullName}} of {_context.Model.Name}. \" +");
+            sb.AppendLine("                \"Either add the derived type to this assembly, use [FastClonerInclude] to register it, \" +");
+            sb.AppendLine("                \"or install the FastCloner NuGet package for runtime fallback.\");");
+        }
+    }
+
+    private static string GetSafeTypeName(string typeName)
+    {
+        return typeName
+            .Replace('<', '_')
+            .Replace('>', '_')
+            .Replace(',', '_')
+            .Replace(' ', '_')
+            .Replace('.', '_')
+            .Replace('[', '_')
+            .Replace(']', '_')
+            .Replace('?', '_');
+    }
+
+    private void WriteDerivedTypeHelpers()
+    {
+        if (!_context.HasDerivedTypeHelpers)
+            return;
+
+        var sb = _context.Source;
+
+        foreach (var (derivedModel, methodName) in _context.GetDerivedTypeHelpers())
+        {
+            sb.AppendLine();
+            sb.AppendLine($"        /// <summary>");
+            sb.AppendLine($"        /// Clones a {derivedModel.Name} instance (auto-generated for abstract base class).");
+            sb.AppendLine($"        /// </summary>");
+            sb.AppendLine($"        private static {derivedModel.FullyQualifiedName} {methodName}({derivedModel.FullyQualifiedName} source, object? state)");
+            sb.AppendLine("        {");
+
+            // Create a temporary context for this derived type
+            var derivedContext = new DerivedTypeCloneContext(_context, derivedModel);
+            
+            if (derivedModel.CanHaveCircularReferences)
+            {
+                _context.NeedsStateClass = true;
+                sb.AppendLine("            var localState = (state as FcGeneratedCloneState) ?? new FcGeneratedCloneState();");
+                sb.AppendLine("            var known = localState.GetKnownRef(source);");
+                sb.AppendLine($"            if (known != null) return ({derivedModel.FullyQualifiedName})known;");
+                sb.AppendLine();
+                
+                WriteDerivedTypeCloneBody(derivedModel, true, "localState");
+            }
+            else
+            {
+                WriteDerivedTypeCloneBody(derivedModel, false, "state");
+            }
+
+            sb.AppendLine("        }");
+        }
+    }
+
+    private void WriteDerivedTypeCloneBody(TypeModel derivedModel, bool useState, string stateVarName)
+    {
+        var sb = _context.Source;
+        var typeName = derivedModel.FullyQualifiedName;
+
+        if (derivedModel.IsStruct)
+        {
+            sb.AppendLine($"            var result = source;");
+            sb.AppendLine();
+
+            foreach (var member in derivedModel.Members)
+            {
+                MemberCloneGenerator.WriteMemberCloning(_context, member, "result", "source", stateVarName);
+            }
+
+            sb.AppendLine("            return result;");
+        }
+        else
+        {
+            if (derivedModel.HasParameterlessConstructor)
+            {
+                if (useState)
+                {
+                    sb.AppendLine($"            var result = new {typeName}();");
+                    sb.AppendLine($"            {stateVarName}?.AddKnownRef(source, result);");
+                    sb.AppendLine();
+
+                    foreach (var member in derivedModel.Members)
+                    {
+                        MemberCloneGenerator.WriteMemberCloning(_context, member, "result", "source", stateVarName);
+                    }
+
+                    sb.AppendLine();
+                    sb.AppendLine("            return result;");
+                }
+                else
+                {
+                    sb.AppendLine($"            var result = new {typeName}");
+                    sb.AppendLine("            {");
+
+                    var memberAssignments = new List<string>();
+                    foreach (var member in derivedModel.Members)
+                    {
+                        var assignment = MemberCloneGenerator.GetMemberAssignment(_context, member, "source", "null");
+                        if (!string.IsNullOrEmpty(assignment))
+                        {
+                            memberAssignments.Add($"                {assignment}");
+                        }
+                    }
+
+                    if (memberAssignments.Count > 0)
+                    {
+                        sb.AppendLine(string.Join(",\n", memberAssignments));
+                    }
+
+                    sb.AppendLine("            };");
+                    sb.AppendLine();
+                    sb.AppendLine("            return result;");
+                }
+            }
+            else
+            {
+                sb.AppendLine($"            var result = ({typeName})FormatterServices.GetUninitializedObject(typeof({typeName}));");
+                
+                if (useState)
+                {
+                    sb.AppendLine($"            {stateVarName}?.AddKnownRef(source, result);");
+                }
+                
+                sb.AppendLine();
+
+                foreach (var member in derivedModel.Members)
+                {
+                    MemberCloneGenerator.WriteMemberCloning(_context, member, "result", "source", stateVarName);
+                }
+
+                sb.AppendLine();
+                sb.AppendLine("            return result;");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Helper class for generating clone code for derived types within the abstract class context.
+    /// </summary>
+    private class DerivedTypeCloneContext
+    {
+        private readonly CloneGeneratorContext _parentContext;
+        private readonly TypeModel _derivedModel;
+
+        public DerivedTypeCloneContext(CloneGeneratorContext parentContext, TypeModel derivedModel)
+        {
+            _parentContext = parentContext;
+            _derivedModel = derivedModel;
+        }
+
+        public TypeModel Model => _derivedModel;
+        public StringBuilder Source => _parentContext.Source;
+        public bool IsFastClonerAvailable => _parentContext.IsFastClonerAvailable;
+    }
+
     private string GetTypeParametersString()
     {
         if (_context.Model.TypeParameters.Count == 0)
@@ -194,12 +439,14 @@ internal sealed class CloneCodeGenerator
 
     private void WriteCloneBody(string typeName, string fullTypeName, bool useState, string? stateVarName = null)
     {
-        if (_context.Model.IsStruct)
+        // Record structs should use 'with' expression like record classes
+        if (_context.Model.IsStruct && !_context.Model.IsRecord)
         {
             WriteStructCloneBody(typeName, stateVarName ?? "state");
         }
         else
         {
+            // Classes and record structs both use this path
             WriteClassCloneBody(typeName, fullTypeName, useState, stateVarName);
         }
     }
@@ -207,6 +454,7 @@ internal sealed class CloneCodeGenerator
     private void WriteStructCloneBody(string typeName, string stateVarName = "state")
     {
         var sb = _context.Source;
+        // For structs, 'source' is non-nullable (no extraction needed)
         sb.AppendLine($"            var result = source;");
         sb.AppendLine();
 
@@ -218,10 +466,64 @@ internal sealed class CloneCodeGenerator
         sb.AppendLine("            return result;");
     }
 
+    /// <summary>
+    /// Writes struct clone body using 'source' directly (for non-nullable struct signatures).
+    /// </summary>
+    private void WriteStructCloneBodyDirect(string typeName)
+    {
+        var sb = _context.Source;
+        
+        // For record structs, use 'with' expression
+        if (_context.Model.IsRecord)
+        {
+            // Collect members that need deep cloning
+            var deepCloneAssignments = new System.Collections.Generic.List<string>();
+            foreach (var member in _context.Model.Members)
+            {
+                if (member.TypeKind == MemberTypeKind.Safe)
+                    continue;
+                if (member.IsReadOnly)
+                    continue;
+                
+                var assignment = MemberCloneGenerator.GetMemberAssignment(_context, member, "source", "null");
+                if (!string.IsNullOrEmpty(assignment))
+                {
+                    deepCloneAssignments.Add($"                {assignment}");
+                }
+            }
+            
+            if (deepCloneAssignments.Count == 0)
+            {
+                sb.AppendLine($"            return source with {{ }};");
+            }
+            else
+            {
+                sb.AppendLine($"            return source with");
+                sb.AppendLine("            {");
+                sb.AppendLine(string.Join(",\n", deepCloneAssignments));
+                sb.AppendLine("            };");
+            }
+        }
+        else
+        {
+            // Regular structs: copy and modify
+            sb.AppendLine($"            var result = source;");
+            sb.AppendLine();
+
+            foreach (var member in _context.Model.Members)
+            {
+                MemberCloneGenerator.WriteMemberCloning(_context, member, "result", "source", "null");
+            }
+
+            sb.AppendLine("            return result;");
+        }
+    }
+
     private void WriteClassCloneBody(string typeName, string fullTypeName, bool useState, string? stateVarName = null)
     {
         // Use null-conditional operator for CloneCodeGenerator since state might be null
-        ClassCloneBodyGenerator.WriteClassCloneBody(_context, typeName, useState, stateVarName, useNullConditional: true);
+        // For structs, source is non-nullable (no extraction needed)
+        ClassCloneBodyGenerator.WriteClassCloneBody(_context, typeName, useState, stateVarName, useNullConditional: true, sourceVarName: "source");
     }
 
 

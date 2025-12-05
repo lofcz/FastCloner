@@ -190,6 +190,8 @@ internal static class ImplicitTypeAnalyzer
                 namedType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                 flags.IsStruct,
                 flags.IsSealed,
+                namedType.IsAbstract,
+                namedType.IsRecord,
                 flags.HasClonableBaseClass,
                 canHaveCircularRefs,
                 false, // FastCloner availability doesn't matter for implicit model (it uses generated helpers)
@@ -198,6 +200,7 @@ internal static class ImplicitTypeAnalyzer
                 new EquatableArray<string>(TypeAnalyzer.GetTypeConstraints(namedType).ToArray()),
                 new EquatableArray<TypeModel>(relatedTypesMap.Values.ToArray()),
                 new EquatableArray<MemberModel>(implicitNestedMembers.Values.ToArray()),
+                EquatableArray<TypeModel>.Empty, // Implicit types don't track derived types
                 nullabilityEnabled,
                 hasParameterlessConstructor);
                 
