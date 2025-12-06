@@ -1,5 +1,14 @@
 This project uses the following open source software:
 
-DeepCloner - MIT License
+FastCloner
+Based on DeepCloner with additional patches from Adrian Mos's fork.
+
+Original DeepCloner - MIT License
 Copyright (c) 2016 force
 https://github.com/force-net/DeepCloner
+
+DeepCloner fork - MIT License
+Copyright (c) 2024 Adrian Mos
+https://github.com/adimosh/DeepCloner
+
+FastCloner started as a fork of DeepCloner in 2024. A test suite of approximately 200 tests was inherited from these projects.
