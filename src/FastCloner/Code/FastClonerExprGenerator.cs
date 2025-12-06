@@ -564,7 +564,10 @@ internal static class FastClonerExprGenerator
         "System.Net.",
         "System.Reflection.",
         "System.IO.",
-        "System.Runtime."
+        "System.Runtime.",
+        "System.Threading.",
+        "System.Text.Json.",
+        "System.Diagnostics."
     ]);
     
     private static readonly Dictionary<string, Func<Type, object?>> specialNamespaces = new Dictionary<string, Func<Type, object?>> 
