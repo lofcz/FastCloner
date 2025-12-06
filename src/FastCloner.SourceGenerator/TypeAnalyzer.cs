@@ -627,7 +627,8 @@ internal static class TypeAnalyzer
 
     private static string GetFullMetadataName(ITypeSymbol symbol)
     {
-        if (symbol == null || IsRootNamespace(symbol)) return string.Empty;
+        if (symbol is null) return string.Empty;
+        if (IsRootNamespace(symbol)) return string.Empty;
         
         var ns = symbol.ContainingNamespace;
         var nsName = ns?.IsGlobalNamespace == false ? ns.ToDisplayString() : string.Empty;

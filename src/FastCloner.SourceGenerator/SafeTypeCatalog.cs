@@ -146,6 +146,7 @@ internal static class SafeTypeCatalog
         "System.Linq.Expressions.LambdaExpression",
     };
 
+    // currently never used
     /// <summary>
     /// Generic ref struct types that cannot be cloned (can't be boxed for state tracking).
     /// These must be detected by IsRefLikeType as well, but we list known ones for documentation.

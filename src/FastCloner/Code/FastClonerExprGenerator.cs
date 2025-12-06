@@ -43,6 +43,107 @@ internal static class FastClonerExprGenerator
         return members.Any(MemberIsIgnored);
     }
 
+    private static bool TypeHasReadonlyFields(Type type)
+    {
+        return FastClonerCache.GetOrAddAllMembers(type, GetAllMembers)
+            .OfType<FieldInfo>()
+            .Any(f => f.IsInitOnly);
+    }
+
+    private static void AddStructReadonlyFieldsCloneExpressions(
+        List<Expression> expressionList,
+        ParameterExpression fromLocal,
+        ParameterExpression boxedToLocal,
+        ParameterExpression state,
+        Type type)
+    {
+        IEnumerable<MemberInfo> members = FastClonerCache.GetOrAddAllMembers(type, GetAllMembers);
+        Dictionary<string, Type> ignoredEventDetails = FastClonerCache.GetOrAddIgnoredEventInfo(type, t =>
+        {
+            Dictionary<string, Type> details = new Dictionary<string, Type>();
+            EventInfo[] events = t.GetEvents(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+
+            foreach (EventInfo evtInfo in events)
+            {
+                if (MemberIsIgnored(evtInfo))
+                {
+                    details[evtInfo.Name] = evtInfo.EventHandlerType;
+                }
+            }
+
+            return details;
+        });
+
+        foreach (MemberInfo member in members)
+        {
+            if (member is not FieldInfo fieldInfo || !fieldInfo.IsInitOnly)
+            {
+                continue;
+            }
+
+            Type memberType = fieldInfo.FieldType;
+            bool shouldBeIgnored = false;
+
+            if (MemberIsIgnored(member))
+            {
+                shouldBeIgnored = true;
+            }
+            else if (ignoredEventDetails.TryGetValue(fieldInfo.Name, out Type? evtType))
+            {
+                if (evtType == memberType)
+                {
+                    shouldBeIgnored = true;
+                }
+            }
+            else if (FastClonerCache.IsTypeIgnored(memberType))
+            {
+                shouldBeIgnored = true;
+            }
+
+            if (shouldBeIgnored)
+            {
+                expressionList.Add(Expression.Call(
+                    Expression.Constant(fieldInfo),
+                    fieldSetMethod,
+                    boxedToLocal,
+                    Expression.Convert(Expression.Default(memberType), typeof(object))
+                ));
+                continue;
+            }
+
+            if (FastClonerSafeTypes.CanReturnSameObject(memberType))
+            {
+                continue;
+            }
+
+            Expression originalMemberValue = Expression.MakeMemberAccess(fromLocal, member);
+            Expression clonedValueExpression;
+
+            if (memberType.IsValueType())
+            {
+                MethodInfo structClone = typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(memberType);
+                clonedValueExpression = Expression.Call(structClone, originalMemberValue, state);
+            }
+            else
+            {
+                MethodInfo classDeep = typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
+                MethodInfo classShallowTrack = typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassShallowAndTrack))!;
+                PropertyInfo useWorkListProp = FastCloneState.UseWorkListProp;
+                Expression deepCall = Expression.Call(classDeep, originalMemberValue, state);
+                Expression shallowCall = Expression.Call(classShallowTrack, originalMemberValue, state);
+                Expression selected = Expression.Condition(Expression.Property(state, useWorkListProp), shallowCall, deepCall);
+                clonedValueExpression = Expression.Convert(selected, memberType);
+            }
+
+            expressionList.Add(Expression.Call(
+                Expression.Constant(fieldInfo),
+                fieldSetMethod,
+                boxedToLocal,
+                Expression.Convert(clonedValueExpression, typeof(object))
+            ));
+        }
+    }
+
     internal static void ForceSetField(FieldInfo field, object obj, object value)
     {
         field.SetValue(obj, value);
@@ -110,6 +211,33 @@ internal static class FastClonerExprGenerator
         return Expression.Label(str);
     }
 
+    private static bool ShouldDeepCloneStructReadonlyFields(Type type)
+    {
+        if (type.Namespace == null)
+        {
+            return true;
+        }
+
+        // Some namespaces use structs as opaque handles to internal static state or singletons.
+        // Deep cloning these handles breaks their identity (e.g. they no longer match the static singletons),
+        // causing equality checks and lookups to fail.
+        // For these specific namespaces, we assume structs with readonly fields are intended to be "Safe Handles"
+        // and should have their readonly references preserved (shallow copied), not deep cloned.
+        // We append "." to ensuring we match full namespace segments (e.g. "System.Net" matches "System.Net." but not "System.Network.")
+        if (readonlyStructSafeHandleNamespaces.ContainsAnyPattern(type.Namespace + "."))
+        {
+            return false;
+        }
+
+        // Check for the user-defined safe handle attribute
+        if (FastClonerCache.GetOrAddIsTypeSafeHandle(type, t => t.GetCustomAttribute<FastClonerSafeHandleAttribute>() != null))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
     internal static object? GenerateProcessMethod(Type realType, bool asObject) => GenerateProcessMethod(realType, asObject && realType.IsValueType(), new ExpressionPosition(0, 0));
     public static bool IsSetType(Type type) => type.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ISet<>));
     public static bool IsDictionaryType(Type type) => typeof(IDictionary).IsAssignableFrom(type) || type.GetInterfaces().Any(i => i.IsGenericType && (i.GetGenericTypeDefinition() == typeof(IDictionary<,>) || i.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)));
@@ -166,7 +294,8 @@ internal static class FastClonerExprGenerator
         ParameterExpression fromLocal,
         ParameterExpression toLocal,
         ParameterExpression state,
-        Type type)
+        Type type,
+        bool skipReadonly = false)
     {
         ExpressionPosition currentPosition = new ExpressionPosition(0, 0);
         IEnumerable<MemberInfo> members = FastClonerCache.GetOrAddAllMembers(type, GetAllMembers);
@@ -316,6 +445,7 @@ internal static class FastClonerExprGenerator
                         bool isReadonly = readonlyFields.GetOrAdd(fieldInfo, f => f.IsInitOnly);
                         if (isReadonly)
                         {
+                            if (skipReadonly) break;
                             expressionList.Add(Expression.Call(
                                 Expression.Constant(fieldInfo),
                                 fieldSetMethod,
@@ -355,21 +485,50 @@ internal static class FastClonerExprGenerator
             expressionList.Add(Expression.Assign(toLocal, Expression.Convert(Expression.Call(from, methodInfo), type)));
             expressionList.Add(Expression.Assign(fromLocal, Expression.Convert(from, type)));
             expressionList.Add(Expression.Call(state, StaticMethodInfos.DeepCloneStateMethods.AddKnownRef, from, toLocal));
+            
+            AddMemberCloneExpressions(expressionList, fromLocal, toLocal, state, type, skipReadonly: false);
+            expressionList.Add(Expression.Convert(toLocal, typeof(object)));
+            List<ParameterExpression> blockParams = [fromLocal, toLocal];
+            return Expression.Lambda<Func<object, FastCloneState, object>>(
+                Expression.Block(blockParams, expressionList),
+                from,
+                state
+            ).Compile();
         }
         else
         {
             expressionList.Add(Expression.Assign(toLocal, Expression.Unbox(from, type)));
             expressionList.Add(Expression.Assign(fromLocal, toLocal));
-        }
+            
+            if (TypeHasReadonlyFields(type) && ShouldDeepCloneStructReadonlyFields(type))
+            {
+                AddMemberCloneExpressions(expressionList, fromLocal, toLocal, state, type, skipReadonly: true);
 
-        AddMemberCloneExpressions(expressionList, fromLocal, toLocal, state, type);
-        expressionList.Add(Expression.Convert(toLocal, typeof(object)));
-        List<ParameterExpression> blockParams = [fromLocal, toLocal];
-        return Expression.Lambda<Func<object, FastCloneState, object>>(
-            Expression.Block(blockParams, expressionList),
-            from,
-            state
-        ).Compile();
+                ParameterExpression boxedToLocal = Expression.Variable(typeof(object));
+                expressionList.Add(Expression.Assign(boxedToLocal, Expression.Convert(toLocal, typeof(object))));
+                AddStructReadonlyFieldsCloneExpressions(expressionList, fromLocal, boxedToLocal, state, type);
+                expressionList.Add(Expression.Assign(toLocal, Expression.Unbox(boxedToLocal, type)));
+
+                expressionList.Add(Expression.Convert(toLocal, typeof(object)));
+                List<ParameterExpression> blockParams = [fromLocal, toLocal, boxedToLocal];
+                return Expression.Lambda<Func<object, FastCloneState, object>>(
+                    Expression.Block(blockParams, expressionList),
+                    from,
+                    state
+                ).Compile();
+            }
+            else
+            {
+                AddMemberCloneExpressions(expressionList, fromLocal, toLocal, state, type, skipReadonly: false);
+                expressionList.Add(Expression.Convert(toLocal, typeof(object)));
+                List<ParameterExpression> blockParams = [fromLocal, toLocal];
+                return Expression.Lambda<Func<object, FastCloneState, object>>(
+                    Expression.Block(blockParams, expressionList),
+                    from,
+                    state
+                ).Compile();
+            }
+        }
     }
 
     private delegate object ProcessMethodDelegate(Type type, bool unboxStruct, ExpressionPosition position);
@@ -399,6 +558,13 @@ internal static class FastClonerExprGenerator
         "Castle.Proxies.",
         "System.Data.Entity.DynamicProxies.",
         "NHibernate.Proxy."
+    ]);
+    
+    private static readonly AhoCorasick readonlyStructSafeHandleNamespaces = new AhoCorasick([
+        "System.Net.",
+        "System.Reflection.",
+        "System.IO.",
+        "System.Runtime."
     ]);
     
     private static readonly Dictionary<string, Func<Type, object?>> specialNamespaces = new Dictionary<string, Func<Type, object?>> 
@@ -574,7 +740,32 @@ internal static class FastClonerExprGenerator
             }
         }
 
-        AddMemberCloneExpressions(expressionList, fromLocal, toLocal, state, type);
+        if (type.IsValueType && TypeHasReadonlyFields(type) && ShouldDeepCloneStructReadonlyFields(type))
+        {
+            AddMemberCloneExpressions(expressionList, fromLocal, toLocal, state, type, skipReadonly: true);
+            
+            ParameterExpression boxedToLocal = Expression.Variable(typeof(object));
+            expressionList.Add(Expression.Assign(boxedToLocal, Expression.Convert(toLocal, typeof(object))));
+            AddStructReadonlyFieldsCloneExpressions(expressionList, fromLocal, boxedToLocal, state, type);
+            expressionList.Add(Expression.Assign(toLocal, Expression.Unbox(boxedToLocal, type)));
+
+            expressionList.Add(Expression.Convert(toLocal, methodType));
+
+            Type makeGenericType = typeof(Func<,,>).MakeGenericType(methodType, typeof(FastCloneState), methodType);
+            List<ParameterExpression> blkParams = [];
+            
+            if (from != fromLocal)
+            {
+                blkParams.Add(fromLocal);
+            }
+            
+            blkParams.Add(toLocal);
+            blkParams.Add(boxedToLocal);
+
+            return Expression.Lambda(makeGenericType, Expression.Block(blkParams, expressionList), from, state).Compile();
+        }
+
+        AddMemberCloneExpressions(expressionList, fromLocal, toLocal, state, type, skipReadonly: false);
         expressionList.Add(Expression.Convert(toLocal, methodType));
 
         Type funcType = typeof(Func<,,>).MakeGenericType(methodType, typeof(FastCloneState), methodType);

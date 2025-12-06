@@ -78,8 +78,10 @@ internal static class NestedTypeCollector
                     concreteType,
                     type.IsValueType,
                     false, // IsInitOnly - not applicable for helper methods
+                    false, // IsRequired - not applicable for helper methods
                     false, // HasPrivateSetter - not applicable for helper methods
-                    0      // ArrayRank - not applicable for dictionaries
+                    0,      // ArrayRank - not applicable for dictionaries
+                    false   // IsNullable
                  );
                  
                  if (!nestedTypes.ContainsKey(model.TypeFullName))
@@ -131,8 +133,10 @@ internal static class NestedTypeCollector
                     concreteType,
                     type.IsValueType,
                     false, // IsInitOnly - not applicable for helper methods
+                    false, // IsRequired - not applicable for helper methods
                     false, // HasPrivateSetter - not applicable for helper methods
-                    arrayRank
+                    arrayRank,
+                    false   // IsNullable
                  );
 
                  if (!nestedTypes.ContainsKey(model.TypeFullName))

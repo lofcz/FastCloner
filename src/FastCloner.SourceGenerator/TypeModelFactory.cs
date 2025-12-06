@@ -24,6 +24,10 @@ internal static class TypeModelFactory
         var hasSimulateNoRuntime = symbol.GetAttributes()
             .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerSimulateNoRuntimeAttribute");
         
+        // Check if type has FastClonerTrustNullability attribute
+        var trustNullability = symbol.GetAttributes()
+            .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerTrustNullabilityAttribute");
+        
         if (hasSimulateNoRuntime)
         {
             isFastClonerAvailable = false;
@@ -221,8 +225,11 @@ internal static class TypeModelFactory
         var circRefLog = new List<string>();
         var canHaveCircularRefs = CircularReferenceAnalyzer.Analyze(symbol, compilation, circRefLog);
         
-        // Check if type has a parameterless constructor
+            // Check if type has a parameterless constructor
         var hasParameterlessConstructor = TypeAnalyzer.HasParameterlessConstructor(symbol);
+        
+        // Check if type is ref struct
+        var isRefLikeType = TypeAnalyzer.IsRefStructType(symbol);
         
         // Collect derived types for abstract classes
         var derivedTypes = EquatableArray<TypeModel>.Empty;
@@ -269,6 +276,8 @@ internal static class TypeModelFactory
             new EquatableArray<MemberModel>(nestedTypes.Values.ToArray()),
             derivedTypes,
             nullabilityEnabled,
+            trustNullability,
+            isRefLikeType,
             hasParameterlessConstructor,
             new EquatableArray<string>(circRefLog.ToArray()));
 

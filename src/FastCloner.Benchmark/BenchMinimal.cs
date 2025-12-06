@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using NClone;
 using Newtonsoft.Json;
 using ProtoBuf;
+using Riok.Mapperly.Abstractions;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Text.Json;
 
@@ -15,10 +16,11 @@ namespace FastCloner.Benchmark;
 [RankColumn]
 [Orderer(BenchmarkDotNet.Order.SummaryOrderPolicy.FastestToSlowest)]
 [MemoryDiagnoser]
-public class BenchMinimal
+public partial class BenchMinimal
 {
     private TestObject testData;
     private IMapper mapper;
+    private TestObjectMapper mapperlyMapper;
     
     [GlobalSetup]
     public void Setup()
@@ -39,6 +41,8 @@ public class BenchMinimal
             cfg.CreateMap<NestedObject, NestedObject>();
         }, new NullLoggerFactory());
         mapper = config.CreateMapper();
+        
+        mapperlyMapper = new TestObjectMapper();
     }
     
     [Benchmark(Baseline = true)]
@@ -133,9 +137,9 @@ public class BenchMinimal
     }
 
     [Benchmark]
-    public object? AnyCloneBenchmark()
+    public object? AnyClone()
     {
-        return AnyClone.CloneExtensions.Clone(testData);
+        return global::AnyClone.CloneExtensions.Clone(testData);
     }
 
     [Benchmark]
@@ -144,9 +148,16 @@ public class BenchMinimal
         return Clone.ObjectGraph(testData);
     }
 
+    [Benchmark]
+    public object? Mapperly()
+    {
+        return mapperlyMapper.TestObjectToTestObject(testData);
+    }
+
 
     [Serializable]
     [FastClonerClonable]
+    [FastClonerTrustNullability]
     [MessagePackObject]
     [ProtoContract]
     public class TestObject
@@ -173,5 +184,11 @@ public class BenchMinimal
         [Key(1)]
         [ProtoMember(2)]
         public string Description { get; set; }
+    }
+
+    [Mapper(UseDeepCloning = true)]
+    public partial class TestObjectMapper
+    {
+        public partial TestObject TestObjectToTestObject(TestObject testObject);
     }
 }

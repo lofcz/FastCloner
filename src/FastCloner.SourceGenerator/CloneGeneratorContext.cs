@@ -17,6 +17,7 @@ internal sealed class CloneGeneratorContext
     private readonly Dictionary<string, MemberModel> _typeNameToMemberModel = new();
     private readonly Dictionary<string, TypeModel> _implicitTypeModels = new();
     private readonly Dictionary<string, TypeModel> _derivedTypeHelpers = new();
+    private readonly Dictionary<string, int> _helperUsageCounts = new();
 
     public bool NeedsStateClass { get; set; }
     public bool NeedsClonerClass { get; set; }
@@ -196,4 +197,30 @@ internal sealed class CloneGeneratorContext
     /// Gets whether there are any derived type helpers to generate.
     /// </summary>
     public bool HasDerivedTypeHelpers => _derivedTypeHelpers.Count > 0;
+
+    public void IncrementHelperUsage(string typeFullName)
+    {
+        if (_helperUsageCounts.TryGetValue(typeFullName, out var count))
+        {
+            _helperUsageCounts[typeFullName] = count + 1;
+        }
+        else
+        {
+            _helperUsageCounts[typeFullName] = 1;
+        }
+    }
+
+    public int GetHelperUsageCount(string typeFullName)
+    {
+        return _helperUsageCounts.TryGetValue(typeFullName, out var count) ? count : 0;
+    }
+
+    public bool ShouldInline(string typeFullName)
+    {
+        // Only inline if used exactly once
+        return GetHelperUsageCount(typeFullName) == 1;
+    }
+
+    private int _variableCounter = 0;
+    public int GetNextVariableId() => System.Threading.Interlocked.Increment(ref _variableCounter);
 }

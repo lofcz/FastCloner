@@ -100,7 +100,7 @@ internal static class CollectionHelperGenerator
             foreach (var member in implicitModel.Members)
             {
                 // Recursive call to GetMemberAssignment will trigger generation of dependencies
-                var assign = MemberCloneGenerator.GetMemberAssignment(context, member, "source", needsState ? "state" : "null");
+                var assign = MemberCloneGenerator.GetMemberAssignment(context, member, "source", needsState ? "state" : "null", "                ");
                 if (!string.IsNullOrEmpty(assign))
                 {
                     assignments.Add($"                {assign}");
@@ -406,6 +406,16 @@ internal static class CollectionHelperGenerator
 
         if (context.TryGetImplicitTypeModel(member.ElementTypeName!, out var implicitModel))
         {
+            if (context.ShouldInline(implicitModel.FullyQualifiedName))
+            {
+                var elementNeedsStateInline = implicitModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
+                var actualStateVarInline = parentNeedsState ? "state" : "null";
+                // For collection items, we assume they are nullable (safe default) unless we know otherwise.
+                // Since we don't have per-item nullability info easily here without updating MemberModel more deeply,
+                // we default to isMemberNullable=true to be safe (keep null checks).
+                return MemberCloneGenerator.GetImplicitCloneExpression(context, implicitModel, itemVar, actualStateVarInline, "                ", true);
+            }
+
             // Use helper for implicit type
             var helperName = context.GetOrCreateHelperMethodName(implicitModel.FullyQualifiedName);
             var elementNeedsState = implicitModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
@@ -631,10 +641,20 @@ internal static class CollectionHelperGenerator
             }
             else if (context.TryGetImplicitTypeModel(member.KeyTypeName!, out var implicitKeyModel))
             {
-                var helperName = context.GetOrCreateHelperMethodName(implicitKeyModel.FullyQualifiedName);
-                var keyNeedsState = implicitKeyModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
-                var actualStateVar = needsState ? "state" : "null";
-                keyExpr = GetHelperMethodCall(context, helperName, "kvp.Key", keyNeedsState, actualStateVar);
+                if (context.ShouldInline(implicitKeyModel.FullyQualifiedName))
+                {
+                    var keyNeedsState = implicitKeyModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
+                    var actualStateVar = needsState ? "state" : "null";
+                    // Dictionary keys are generally not null, but safe default is true
+                    keyExpr = MemberCloneGenerator.GetImplicitCloneExpression(context, implicitKeyModel, "kvp.Key", actualStateVar, "                ", true);
+                }
+                else
+                {
+                    var helperName = context.GetOrCreateHelperMethodName(implicitKeyModel.FullyQualifiedName);
+                    var keyNeedsState = implicitKeyModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
+                    var actualStateVar = needsState ? "state" : "null";
+                    keyExpr = GetHelperMethodCall(context, helperName, "kvp.Key", keyNeedsState, actualStateVar);
+                }
             }
             else if (context.IsFastClonerAvailable)
             {
@@ -658,10 +678,20 @@ internal static class CollectionHelperGenerator
             }
             else if (context.TryGetImplicitTypeModel(member.ValueTypeName!, out var implicitValModel))
             {
-                var helperName = context.GetOrCreateHelperMethodName(implicitValModel.FullyQualifiedName);
-                var valNeedsState = implicitValModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
-                var actualStateVar = needsState ? "state" : "null";
-                valExpr = GetHelperMethodCall(context, helperName, "kvp.Value", valNeedsState, actualStateVar);
+                if (context.ShouldInline(implicitValModel.FullyQualifiedName))
+                {
+                    var valNeedsState = implicitValModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
+                    var actualStateVar = needsState ? "state" : "null";
+                    // Dictionary values might be null
+                    valExpr = MemberCloneGenerator.GetImplicitCloneExpression(context, implicitValModel, "kvp.Value", actualStateVar, "                ", true);
+                }
+                else
+                {
+                    var helperName = context.GetOrCreateHelperMethodName(implicitValModel.FullyQualifiedName);
+                    var valNeedsState = implicitValModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
+                    var actualStateVar = needsState ? "state" : "null";
+                    valExpr = GetHelperMethodCall(context, helperName, "kvp.Value", valNeedsState, actualStateVar);
+                }
             }
             else if (context.IsFastClonerAvailable)
             {
@@ -738,10 +768,20 @@ internal static class CollectionHelperGenerator
         }
         else if (context.TryGetImplicitTypeModel(member.ElementTypeName!, out var implicitModel))
         {
-            var helperName = context.GetOrCreateHelperMethodName(implicitModel.FullyQualifiedName);
-            var elementNeedsState = implicitModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
-            var actualStateVar = needsState ? "state" : "null";
-            itemExpr = GetHelperMethodCall(context, helperName, "source[i]", elementNeedsState, actualStateVar);
+            if (context.ShouldInline(implicitModel.FullyQualifiedName))
+            {
+                var elementNeedsState = implicitModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
+                var actualStateVar = needsState ? "state" : "null";
+                // Array elements might be null
+                itemExpr = MemberCloneGenerator.GetImplicitCloneExpression(context, implicitModel, "source[i]", actualStateVar, "                ", true);
+            }
+            else
+            {
+                var helperName = context.GetOrCreateHelperMethodName(implicitModel.FullyQualifiedName);
+                var elementNeedsState = implicitModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
+                var actualStateVar = needsState ? "state" : "null";
+                itemExpr = GetHelperMethodCall(context, helperName, "source[i]", elementNeedsState, actualStateVar);
+            }
         }
         else if (context.IsFastClonerAvailable)
         {
@@ -850,10 +890,20 @@ internal static class CollectionHelperGenerator
             }
             else if (context.TryGetImplicitTypeModel(member.ElementTypeName!, out var implicitModel))
             {
-                var helperName = context.GetOrCreateHelperMethodName(implicitModel.FullyQualifiedName);
-                var elementNeedsState = implicitModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
-                var actualStateVar = needsState ? "state" : "null";
-                itemExpr = GetHelperMethodCall(context, helperName, $"source[{indexList}]", elementNeedsState, actualStateVar);
+                if (context.ShouldInline(implicitModel.FullyQualifiedName))
+                {
+                    var elementNeedsState = implicitModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
+                    var actualStateVar = needsState ? "state" : "null";
+                    // Multi-dim array elements might be null
+                    itemExpr = MemberCloneGenerator.GetImplicitCloneExpression(context, implicitModel, $"source[{indexList}]", actualStateVar, "                ", true);
+                }
+                else
+                {
+                    var helperName = context.GetOrCreateHelperMethodName(implicitModel.FullyQualifiedName);
+                    var elementNeedsState = implicitModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
+                    var actualStateVar = needsState ? "state" : "null";
+                    itemExpr = GetHelperMethodCall(context, helperName, $"source[{indexList}]", elementNeedsState, actualStateVar);
+                }
             }
             else if (context.IsFastClonerAvailable)
             {

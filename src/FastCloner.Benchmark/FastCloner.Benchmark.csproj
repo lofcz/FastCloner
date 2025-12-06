@@ -10,7 +10,7 @@
 
     <ItemGroup>
       <PackageReference Include="AnyClone" Version="1.1.6" />
-      <PackageReference Include="AutoMapper" Version="15.1.0" />
+      <PackageReference Include="AutoMapper" Version="16.0.0" />
       <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
       <PackageReference Include="DeepCloner" Version="0.10.4" />
       <PackageReference Include="DeepCopier" Version="1.0.4" />
@@ -23,6 +23,7 @@
       <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
       <PackageReference Include="ObjectCloner" Version="2.2.2" />
       <PackageReference Include="protobuf-net" Version="3.2.56" />
+      <PackageReference Include="Riok.Mapperly" Version="3.7.0" />
       <PackageReference Include="System.Runtime.Serialization.Formatters" Version="10.0.0" />
     </ItemGroup>
 

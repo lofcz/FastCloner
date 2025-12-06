@@ -19,6 +19,7 @@ The fastest deep cloning library, supporting anything from <code>.NET 4.6</code>
 - **The Fastest** - [Benchmarked](https://github.com/lofcz/FastCloner?tab=readme-ov-file#performance) to beat all other libraries with third-party independent benchmarks verifying the performance. **300x** speed-up vs `Newtonsoft.Json` and **160x** vs `System.Text.Json`
 - **The Most Correct** - Cloning objects is hard: `<T>`, `abstract`, immutables, read-only, pointers, circular dependencies, deeply nested graphs.. we have over [600 tests](https://github.com/lofcz/FastCloner/tree/next/FastCloner.Tests) verifying correct behavior in these cases and we are transparent about the [limitations](https://github.com/lofcz/FastCloner?tab=readme-ov-file#limitations)
 - **Novel Algorithm** - FastCloner recognizes that certain cloning code cannot be generated in certain scenarios and uses highly optimized reflection-based approach instead for these types - this only happens for the members that need this, not entire objects
+- **Zero-Overhead Abstractions** - The generator uses call site analysis to eliminate indirection via inlining of generated methods. This ensures the generated code behaves like a single optimized block, just as if you hand-wrote it for maximum performance.
 - **Embeddable** - FastCloner has no dependencies outside the standard library. Source generator and reflection parts can be installed independently
 - **Gentle & Caring** - FastCloner detects standard attributes like `[NonSerialized]` making it easy to try without polluting codebase with custom attributes. Type usage graph for generics is built automatically producing performant cloning code without manual annotations
 - **Easy Integration** - `FastDeepClone()` for AOT cloning, `DeepClone()` for reflection cloning. That's it!
@@ -143,7 +144,7 @@ Animal pet = new Dog { Name = "Buddy", Breed = "Labrador" };
 Animal clone = pet.FastDeepClone(); // Returns a cloned Dog
 ```
 
-### Explicitly Including Types with `[FastClonerInclude]`
+### Explicitly Including Types
 
 When a type is only used dynamically (not visible at compile time), use `[FastClonerInclude]` to ensure the generator creates cloning code for it:
 
@@ -167,7 +168,7 @@ public abstract class Plugin
 }
 ```
 
-### Cloning Context with `FastClonerContext`
+### Custom Cloning Context
 
 For advanced scenarios, create a custom cloning context to explicitly register types you want to clone. This is useful when you need a centralized cloning entry point or want to clone types from external assemblies:
 
@@ -205,6 +206,37 @@ if (ctx.TryClone(obj, out var cloned))
 }
 ```
 
+### Nullability Trust
+
+The generator can be instructed to fully trust nullability annotations. When `[FastClonerTrustNullability]` attribute is applied, FastCloner will skip null checks for non-nullable reference types (e.g., `string` vs `string?`), assuming the contract is valid.
+
+```csharp
+[FastClonerClonable]
+[FastClonerTrustNullability] // Skip null checks for non-nullable members
+public class HighPerformanceDto
+{
+    public string Id { get; set; } // No null check generated
+    public string? Details { get; set; } // Null check still generated
+}
+```
+
+This eliminates branching and improves performance slightly. If a non-nullable property is actually null at runtime, this may result in a `NullReferenceException` in the generated code.
+
+### Safe Handles
+
+When you have a struct that acts as a handle to internal state or a singleton (where identity matters), use `[FastClonerSafeHandle]`. This tells FastCloner to shallow-copy the readonly fields instead of deep-cloning them, preserving the original internal references.
+
+```csharp
+[FastClonerSafeHandle]
+public struct MyHandle
+{
+    private readonly object _internalState; // Preserved (shared), not deep cloned
+    public int Value; // Cloned normally
+}
+```
+
+This is the default behavior for system types like `System.Net.Http.Headers.HeaderDescriptor` to prevent breaking internal framework logic. Use this attribute if your custom structs behave similarly.
+
 ## Limitations
 
 - Cloning unmanaged resources, such as `IntPtr`s may result in side-effects, as there is no metadata for the length of buffers such pointers often point to.
@@ -238,6 +270,15 @@ Intel Core i7-8700 CPU 3.20GHz (Max: 3.19GHz) (Coffee Lake), 1 CPU, 12 logical a
 ```
 
 You can run the benchmark [locally](https://github.com/lofcz/FastCloner/blob/next/FastCloner.Benchmark/BenchMinimal.cs) to verify the results. There are also [third-party benchmarks](https://github.com/AnderssonPeter/Dolly?tab=readme-ov-file#benchmarks) in some of the competing libraries confirming these results.
+
+### Build Times & IDE Performance
+
+FastCloner's source generator is carefully engineered for zero impact on IDE responsiveness and swift build times.
+
+- **Tiered Caching**: We use `ForAttributeWithMetadataName` for highly efficient filtering and strictly separate syntax analysis from code generation.
+- **Smart Models**: Roslyn symbols are immediately projected into lightweight, cache-friendly `TypeModel` records. The generator never holds onto compilation symbols, allowing the incremental pipeline to perfectly cache previous results.
+- **No Compilation Trashing**: We avoid expensive `CompilationProvider` combinations that break generator caching. Code generation only re-runs when your data models actually change, not on every keystroke or unrelated edit.
+- **Allocation Free**: `EquatableArray` collections ensure that change detection is instant and creates no garbage collection pressure.
 
 ## Contributing
 

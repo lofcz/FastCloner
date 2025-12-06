@@ -98,8 +98,10 @@ internal static class ImplicitTypeAnalyzer
                             ConcreteTypeFullName: null,
                             IsValueType: componentType.IsValueType,
                             IsInitOnly: false,
+                            IsRequired: false,
                             HasPrivateSetter: false,
-                            ArrayRank: 0
+                            ArrayRank: 0,
+                            IsNullable: false
                         );
                         return true;
                     }
@@ -187,6 +189,10 @@ internal static class ImplicitTypeAnalyzer
             // Check if type has a parameterless constructor (IsImplicitCandidate already validates this, but check explicitly)
             var hasParameterlessConstructor = TypeAnalyzer.HasParameterlessConstructor(namedType);
             
+            // Check trust nullability
+            var trustNullability = namedType.GetAttributes()
+                .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerTrustNullabilityAttribute");
+
             implicitModel = new TypeModel(
                 TypeAnalyzer.GetNamespace(namedType),
                 namedType.Name,
@@ -205,6 +211,7 @@ internal static class ImplicitTypeAnalyzer
                 new EquatableArray<MemberModel>(implicitNestedMembers.Values.ToArray()),
                 EquatableArray<TypeModel>.Empty, // Implicit types don't track derived types
                 nullabilityEnabled,
+                trustNullability,
                 hasParameterlessConstructor);
                 
             cache[type] = implicitModel;

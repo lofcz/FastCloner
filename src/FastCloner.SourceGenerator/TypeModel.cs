@@ -25,5 +25,7 @@ internal sealed record TypeModel(
     EquatableArray<MemberModel> NestedTypes, // Nested collection types that need helpers
     EquatableArray<TypeModel> DerivedTypes, // Concrete derived types for abstract class dispatch
     bool NullabilityEnabled,
+    bool TrustNullability, // Whether to trust nullability annotations and skip null checks
+    bool IsRefLikeType = false, // Whether the type is a ref struct (cannot be boxed/used as generic)
     bool HasParameterlessConstructor = true, // Whether the type has a public parameterless constructor (defaults to true for safety)
     EquatableArray<string> CircularAnalysisLog = default) : IEquatable<TypeModel>;

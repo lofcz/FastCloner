@@ -742,5 +742,110 @@ public class SourceGeneratorEdgeCaseTests
     }
 
     #endregion
-}
 
+    #region Issue 8: Required Members (Runtime Fallback)
+
+    [FastClonerClonable]
+    public partial class ClassWithRequiredMembers
+    {
+        public required string RequiredName { get; set; }
+        public required int RequiredId { get; set; }
+        public string? OptionalDescription { get; set; }
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void Class_With_Required_Members_Should_Be_Cloned()
+    {
+        // Arrange
+        var original = new ClassWithRequiredMembers 
+        { 
+            RequiredName = "Required", 
+            RequiredId = 123,
+            OptionalDescription = "Optional" 
+        };
+
+        // Act
+        var clone = original.FastDeepClone();
+
+        // Assert
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone, Is.Not.SameAs(original));
+        Assert.That(clone!.RequiredName, Is.EqualTo("Required"));
+        Assert.That(clone.RequiredId, Is.EqualTo(123));
+        Assert.That(clone.OptionalDescription, Is.EqualTo("Optional"));
+    }
+
+    #endregion
+
+    #region Issue 9: Init-Only Properties with Circular References (Runtime Fallback)
+
+    [FastClonerClonable]
+    public partial class ClassWithInitAndCycle
+    {
+        public string? Name { get; init; }
+        public ClassWithInitAndCycle? Self { get; set; }
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void Class_With_Init_Properties_And_Cycles_Should_Be_Deep_Cloned()
+    {
+        // Arrange
+        var original = new ClassWithInitAndCycle
+        {
+            Name = "CyclicInit"
+        };
+        original.Self = original;
+
+        // Act
+        var clone = original.FastDeepClone();
+
+        // Assert
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone, Is.Not.SameAs(original));
+        Assert.That(clone!.Name, Is.EqualTo("CyclicInit")); // This would be null without the fix
+        Assert.That(clone.Self, Is.SameAs(clone));
+    }
+
+    #endregion
+
+    #region Issue 10: Structs with Readonly Reference Fields (Runtime Fallback)
+
+    [FastClonerClonable]
+    public partial struct StructWithReadonlyRefs
+    {
+        public readonly List<int> ReadonlyList;
+        public int NormalField;
+
+        public StructWithReadonlyRefs(List<int> list, int val)
+        {
+            ReadonlyList = list;
+            NormalField = val;
+        }
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void Struct_With_Readonly_Reference_Fields_Should_Be_Deep_Cloned()
+    {
+        // Arrange
+        var list = new List<int> { 1, 2, 3 };
+        var original = new StructWithReadonlyRefs(list, 42);
+
+        // Act
+        var clone = original.FastDeepClone();
+
+        // Assert
+        Assert.That(clone.NormalField, Is.EqualTo(42));
+        Assert.That(clone.ReadonlyList, Is.Not.Null);
+        Assert.That(clone.ReadonlyList, Is.Not.SameAs(original.ReadonlyList)); // This would fail (be SameAs) without the fix
+        Assert.That(clone.ReadonlyList, Is.EquivalentTo(new[] { 1, 2, 3 }));
+        
+        // Verify independence
+        list.Add(4);
+        Assert.That(clone.ReadonlyList.Count, Is.EqualTo(3));
+    }
+
+    #endregion
+}

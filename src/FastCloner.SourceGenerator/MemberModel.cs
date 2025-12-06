@@ -76,8 +76,10 @@ internal readonly record struct MemberModel(
     string? ConcreteTypeFullName,    // Concrete type to instantiate (if interface/abstract)
     bool IsValueType,                // Whether the member type is a value type (struct)
     bool IsInitOnly,                 // Whether the property has init accessor (requires object initializer)
+    bool IsRequired,                 // Whether the member is required (must be in object initializer)
     bool HasPrivateSetter,           // Whether the setter is private/protected (may not be accessible from extension class)
-    int ArrayRank                    // For multi-dimensional arrays: the rank (2 for T[,], 3 for T[,,], etc.)
+    int ArrayRank,                   // For multi-dimensional arrays: the rank (2 for T[,], 3 for T[,,], etc.)
+    bool IsNullable                  // Whether the member is explicitly nullable (annotated with ?)
 ) : IEquatable<MemberModel>
 {
     public static MemberModel Create(IPropertySymbol property, bool nullabilityEnabled, Compilation compilation)
@@ -91,6 +93,9 @@ internal readonly record struct MemberModel(
         // Check if the setter is not publicly accessible
         var hasPrivateSetter = property.SetMethod != null && 
                                property.SetMethod.DeclaredAccessibility != Accessibility.Public;
+        
+        // Check nullability
+        var isNullable = property.NullableAnnotation == NullableAnnotation.Annotated;
         
         return new MemberModel(
             property.Name,
@@ -113,14 +118,19 @@ internal readonly record struct MemberModel(
             concreteType,
             property.Type.IsValueType,
             isInitOnly,
+            property.IsRequired,
             hasPrivateSetter,
-            arrayRank);
+            arrayRank,
+            isNullable);
     }
 
     public static MemberModel Create(IFieldSymbol field, bool nullabilityEnabled, Compilation compilation)
     {
         var (typeKind, elementName, keyName, valueName, elementSafe, elementClonable, keySafe, keyClonable, valSafe, valClonable, requiresFastCloner, collectionKind, concreteType, arrayRank) 
             = AnalyzeType(field.Type, compilation);
+        
+        // Check nullability
+        var isNullable = field.NullableAnnotation == NullableAnnotation.Annotated;
         
         return new MemberModel(
             field.Name,
@@ -143,8 +153,10 @@ internal readonly record struct MemberModel(
             concreteType,
             field.Type.IsValueType,
             false,  // Fields don't have init-only semantics
+            field.IsRequired,
             false,  // Fields accessibility is checked elsewhere (we only collect accessible fields)
-            arrayRank);
+            arrayRank,
+            isNullable);
     }
     
     private static (MemberTypeKind kind, string? elem, string? key, string? val, bool elemSafe, bool elemClon, bool keySafe, bool keyClon, bool valSafe, bool valClon, bool requiresFastCloner, CollectionKind collKind, string? concreteType, int arrayRank) 

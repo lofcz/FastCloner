@@ -16,3 +16,13 @@ public class FastClonerClonableAttribute : Attribute
     {
     }
 }
+
+/// <summary>
+/// Instructs FastCloner to trust the nullability annotations of reference types.
+/// If a reference type member is not annotated as nullable (e.g. string instead of string?),
+/// FastCloner will NOT generate a null check for it, assuming it will never be null.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Struct)]
+public class FastClonerTrustNullabilityAttribute : Attribute
+{
+}

@@ -134,6 +134,9 @@ internal static class DerivedTypeCollector
     {
         var flags = TypeAnalyzer.GetStructureFlags(type);
         var hasParameterlessConstructor = TypeAnalyzer.HasParameterlessConstructor(type);
+        
+        var trustNullability = type.GetAttributes()
+            .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerTrustNullabilityAttribute");
 
         return new TypeModel(
             TypeAnalyzer.GetNamespace(type),
@@ -153,6 +156,8 @@ internal static class DerivedTypeCollector
             NestedTypes: EquatableArray<MemberModel>.Empty,
             DerivedTypes: EquatableArray<TypeModel>.Empty,
             nullabilityEnabled,
+            trustNullability,
+            IsRefLikeType: false, // Derived types from abstract base cannot be ref structs
             hasParameterlessConstructor);
     }
 
@@ -319,6 +324,9 @@ internal static class DerivedTypeCollector
         var canHaveCircularRefs = CircularReferenceAnalyzer.Analyze(derivedType, compilation, circRefLog);
         var hasParameterlessConstructor = TypeAnalyzer.HasParameterlessConstructor(derivedType);
         
+        var trustNullability = derivedType.GetAttributes()
+            .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerTrustNullabilityAttribute");
+        
         return new TypeModel(
             TypeAnalyzer.GetNamespace(derivedType),
             derivedType.Name,
@@ -337,6 +345,8 @@ internal static class DerivedTypeCollector
             new EquatableArray<MemberModel>(nestedTypes.Values.ToArray()),
             EquatableArray<TypeModel>.Empty, // Derived types don't have their own derived types in this context
             nullabilityEnabled,
+            trustNullability,
+            IsRefLikeType: false, // Derived types from abstract base cannot be ref structs
             hasParameterlessConstructor,
             new EquatableArray<string>(circRefLog.ToArray()));
     }

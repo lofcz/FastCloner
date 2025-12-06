@@ -22,6 +22,7 @@ internal sealed class CloneCodeGenerator
 
     public string Generate()
     {
+        PreAnalyzeHelperUsages();
         WriteFileHeader();
         WriteUsings();
         WriteNamespace();
@@ -29,6 +30,66 @@ internal sealed class CloneCodeGenerator
         WriteFileFooter();
 
         return _context.Source.ToString();
+    }
+
+    private void PreAnalyzeHelperUsages()
+    {
+        // Analyze root members
+        AnalyzeMembers(_context.Model.Members);
+
+        // Analyze related implicit types
+        // RelatedTypes includes all discovered implicit types that might be needed
+        if (_context.Model.RelatedTypes != null)
+        {
+            foreach (var related in _context.Model.RelatedTypes)
+            {
+                AnalyzeMembers(related.Members);
+            }
+        }
+    }
+
+    private void AnalyzeMembers(IEnumerable<MemberModel> members)
+    {
+        foreach (var member in members)
+        {
+            if (member.TypeKind == MemberTypeKind.Implicit)
+            {
+                _context.IncrementHelperUsage(member.TypeFullName);
+            }
+            else if (member.TypeKind == MemberTypeKind.Collection || 
+                     member.TypeKind == MemberTypeKind.Array || 
+                     member.TypeKind == MemberTypeKind.MultiDimArray)
+            {
+                if (member.ElementTypeName != null)
+                {
+                    if (_context.TryGetImplicitTypeModel(member.ElementTypeName, out _) ||
+                        _context.TryGetMemberModel(member.ElementTypeName, out _))
+                    {
+                        _context.IncrementHelperUsage(member.ElementTypeName);
+                    }
+                }
+            }
+            else if (member.TypeKind == MemberTypeKind.Dictionary)
+            {
+                if (member.KeyTypeName != null)
+                {
+                    if (_context.TryGetImplicitTypeModel(member.KeyTypeName, out _) ||
+                        _context.TryGetMemberModel(member.KeyTypeName, out _))
+                    {
+                        _context.IncrementHelperUsage(member.KeyTypeName);
+                    }
+                }
+                
+                if (member.ValueTypeName != null)
+                {
+                    if (_context.TryGetImplicitTypeModel(member.ValueTypeName, out _) ||
+                        _context.TryGetMemberModel(member.ValueTypeName, out _))
+                    {
+                        _context.IncrementHelperUsage(member.ValueTypeName);
+                    }
+                }
+            }
+        }
     }
 
     private void WriteFileHeader()
@@ -122,11 +183,32 @@ internal sealed class CloneCodeGenerator
         var constraints = GetTypeConstraintsString();
 
         // For structs (value types), use non-nullable signatures since structs can't be null
+        // If TrustNullability is enabled, we assume the input is not null if the type is not nullable
         var isStruct = _context.Model.IsStruct;
-        var nullableSuffix = isStruct ? "" : "?";
+        var trustNullability = _context.Model.TrustNullability;
+        var returnTypeSuffix = isStruct ? "" : "?";
+        var paramTypeSuffix = (isStruct || trustNullability) ? "" : "?";
 
-        sb.AppendLine($"        public static {typeName}{nullableSuffix} FastDeepClone{typeParams}(this {typeName}{nullableSuffix} source){constraints}");
+        sb.AppendLine($"        public static {typeName}{returnTypeSuffix} FastDeepClone{typeParams}(this {typeName}{paramTypeSuffix} source){constraints}");
         sb.AppendLine("        {");
+
+        // Check for complex scenarios that require runtime fallback
+        // 1. Init-only members with cycle tracking (cannot be set via statements)
+        // 2. Structs with readonly reference fields (cannot be set via statements, require runtime tricks)
+        bool hasInitOnlyWithCycles = _context.CanHaveCircularReferences && _context.Model.Members.Any(m => m.IsInitOnly);
+        bool structWithReadonlyRefs = _context.Model.IsStruct && _context.Model.Members.Any(m => !m.IsValueType && m.IsReadOnly);
+
+        // Cannot use runtime fallback for ref structs (cannot be generic arguments)
+        if (!_context.Model.IsRefLikeType && _context.IsFastClonerAvailable && (hasInitOnlyWithCycles || structWithReadonlyRefs))
+        {
+             sb.AppendLine("            // Fallback to runtime cloning due to complex language features:");
+             if (hasInitOnlyWithCycles) sb.AppendLine("            // - Init-only members with circular reference tracking");
+             if (structWithReadonlyRefs) sb.AppendLine("            // - Struct with readonly reference fields");
+             sb.AppendLine("            return FastCloner.DeepClone(source);");
+             sb.AppendLine("        }");
+             sb.AppendLine();
+             return;
+        }
 
         // For abstract classes, always use the internal method with state (for potential circular refs)
         if (_context.Model.IsAbstract)
@@ -145,7 +227,11 @@ internal sealed class CloneCodeGenerator
             }
             else
             {
-                sb.AppendLine("            if (source == null) return null;");
+                // Only generate null check if not trusting nullability
+                if (!trustNullability)
+                {
+                    sb.AppendLine("            if (source == null) return null;");
+                }
                 WriteCloneBody(typeName, fullTypeName, false);
             }
         }
@@ -172,13 +258,31 @@ internal sealed class CloneCodeGenerator
 
         // For structs (value types), use non-nullable signatures since structs can't be null
         var isStruct = _context.Model.IsStruct;
-        var nullableSuffix = isStruct ? "" : "?";
+        var trustNullability = _context.Model.TrustNullability;
+        var returnTypeSuffix = isStruct ? "" : "?";
+        var paramTypeSuffix = (isStruct || trustNullability) ? "" : "?";
 
-        sb.AppendLine($"        internal static {typeName}{nullableSuffix} InternalFastDeepClone{typeParams}(this {typeName}{nullableSuffix} source, object? state){constraints}");
+        sb.AppendLine($"        internal static {typeName}{returnTypeSuffix} InternalFastDeepClone{typeParams}(this {typeName}{paramTypeSuffix} source, object? state){constraints}");
         sb.AppendLine("        {");
+
+        // Check for complex scenarios that require runtime fallback
+        // Same logic as Public method - if we can't generate valid code, delegate to runtime
+        bool hasInitOnlyWithCycles = _context.CanHaveCircularReferences && _context.Model.Members.Any(m => m.IsInitOnly);
+        bool structWithReadonlyRefs = _context.Model.IsStruct && _context.Model.Members.Any(m => !m.IsValueType && m.IsReadOnly);
+
+        // Cannot use runtime fallback for ref structs (cannot be generic arguments)
+        if (!_context.Model.IsRefLikeType && _context.IsFastClonerAvailable && (hasInitOnlyWithCycles || structWithReadonlyRefs))
+        {
+             sb.AppendLine("            // Fallback to runtime cloning due to complex language features.");
+             sb.AppendLine("            // Note: State is ignored here as the runtime handles its own circular reference tracking.");
+             sb.AppendLine("            return FastCloner.DeepClone(source);");
+             sb.AppendLine("        }");
+             sb.AppendLine();
+             return;
+        }
         
         // For structs (value types), no null check needed
-        if (!isStruct)
+        if (!isStruct && !trustNullability)
         {
             sb.AppendLine("            if (source == null) return null;");
         }
@@ -343,7 +447,28 @@ internal sealed class CloneCodeGenerator
             {
                 if (useState)
                 {
-                    sb.AppendLine($"            var result = new {typeName}();");
+                    // Check for required members
+                    var requiredMembers = new System.Collections.Generic.List<string>();
+                    foreach (var member in derivedModel.Members)
+                    {
+                        if (member.IsRequired)
+                        {
+                            requiredMembers.Add($"                {member.Name} = default!");
+                        }
+                    }
+
+                    if (requiredMembers.Count > 0)
+                    {
+                        sb.AppendLine($"            var result = new {typeName}");
+                        sb.AppendLine("            {");
+                        sb.AppendLine(string.Join(",\n", requiredMembers));
+                        sb.AppendLine("            };");
+                    }
+                    else
+                    {
+                        sb.AppendLine($"            var result = new {typeName}();");
+                    }
+
                     sb.AppendLine($"            {stateVarName}?.AddKnownRef(source, result);");
                     sb.AppendLine();
 
@@ -363,7 +488,7 @@ internal sealed class CloneCodeGenerator
                     var memberAssignments = new List<string>();
                     foreach (var member in derivedModel.Members)
                     {
-                        var assignment = MemberCloneGenerator.GetMemberAssignment(_context, member, "source", "null");
+                        var assignment = MemberCloneGenerator.GetMemberAssignment(_context, member, "source", "null", "                ");
                         if (!string.IsNullOrEmpty(assignment))
                         {
                             memberAssignments.Add($"                {assignment}");
@@ -485,7 +610,7 @@ internal sealed class CloneCodeGenerator
                 if (member.IsReadOnly)
                     continue;
                 
-                var assignment = MemberCloneGenerator.GetMemberAssignment(_context, member, "source", "null");
+                var assignment = MemberCloneGenerator.GetMemberAssignment(_context, member, "source", "null", "                ");
                 if (!string.IsNullOrEmpty(assignment))
                 {
                     deepCloneAssignments.Add($"                {assignment}");

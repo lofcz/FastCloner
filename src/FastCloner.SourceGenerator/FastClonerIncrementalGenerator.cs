@@ -90,6 +90,43 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
                 {
                     try
                     {
+                        // Check for silent failure cases where FastCloner runtime is missing
+                        // We only warn here because generating broken code is sometimes better than nothing (e.g. partial clone),
+                        // but ideally the user should install FastCloner or fix the type.
+                        if (!model.IsFastClonerAvailable)
+                        {
+                            bool hasInitOnlyWithCycles = model.CanHaveCircularReferences && model.Members.Any(m => m.IsInitOnly);
+                            bool structWithReadonlyRefs = model.IsStruct && model.Members.Any(m => !m.IsValueType && m.IsReadOnly);
+                            
+                            if (hasInitOnlyWithCycles)
+                            {
+                                ctx.ReportDiagnostic(Diagnostic.Create(
+                                    new DiagnosticDescriptor(
+                                        "FCG005",
+                                        "Init-only properties skipped",
+                                        "Type '{0}' has init-only properties and requires circular reference tracking, but FastCloner runtime is not available. Init-only properties will not be cloned.",
+                                        "FastCloner",
+                                        DiagnosticSeverity.Warning,
+                                        isEnabledByDefault: true),
+                                    Location.None,
+                                    model.Name));
+                            }
+                            
+                            if (structWithReadonlyRefs)
+                            {
+                                ctx.ReportDiagnostic(Diagnostic.Create(
+                                    new DiagnosticDescriptor(
+                                        "FCG006",
+                                        "Readonly reference fields in struct skipped",
+                                        "Struct '{0}' has readonly reference fields, but FastCloner runtime is not available. These fields will be shallow-copied.",
+                                        "FastCloner",
+                                        DiagnosticSeverity.Warning,
+                                        isEnabledByDefault: true),
+                                    Location.None,
+                                    model.Name));
+                            }
+                        }
+
                         var generator = new CloneCodeGenerator(model, usages);
                         var generatedSource = generator.Generate();
                         

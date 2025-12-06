@@ -66,7 +66,7 @@ internal static class ClassCloneBodyGenerator
             // When tracking circular references, we must register the instance BEFORE cloning members
             // to avoid infinite recursion (StackOverflowException) in case of cycles.
             // This requires us to instantiate first, then register, then assign members.
-            WriteInstanceCreation(sb, typeName, hasParameterlessConstructor, isRecord, sourceVarName);
+            WriteInstanceCreation(ctx, sb, typeName, hasParameterlessConstructor, isRecord, sourceVarName);
             
             var stateVarForAdd = stateVarName ?? "state";
             var nullConditional = useNullConditional ? "?" : "";
@@ -83,33 +83,55 @@ internal static class ClassCloneBodyGenerator
         }
         else
         {
-            // For non-circular types, we can use object initializer syntax if constructor exists
+            // For non-circular types, we can use mixed statement/initializer syntax
             if (hasParameterlessConstructor)
             {
-                sb.AppendLine($"            var result = new {typeName}");
-                sb.AppendLine("            {");
-
-                var memberAssignments = new List<string>();
+                // Create instance start
+                sb.Append($"            var result = new {typeName}");
+                
+                // Collect init-only and required properties for object initializer
+                var initOnlyMembers = new List<string>();
                 foreach (var member in ctx.Model.Members)
                 {
-                    var assignment = MemberCloneGenerator.GetMemberAssignment(ctx, member, sourceVarName, "null");
-                    if (!string.IsNullOrEmpty(assignment))
+                    if ((member.IsProperty && member.IsInitOnly) || member.IsRequired)
                     {
-                        memberAssignments.Add($"                {assignment}");
+                        var assignment = MemberCloneGenerator.GetMemberAssignment(ctx, member, sourceVarName, "null", "                ");
+                        if (!string.IsNullOrEmpty(assignment))
+                        {
+                            initOnlyMembers.Add($"                {assignment}");
+                        }
                     }
                 }
 
-                if (memberAssignments.Count > 0)
+                if (initOnlyMembers.Count > 0)
                 {
-                    sb.AppendLine(string.Join(",\n", memberAssignments));
+                    sb.AppendLine();
+                    sb.AppendLine("            {");
+                    sb.AppendLine(string.Join(",\n", initOnlyMembers));
+                    sb.AppendLine("            };");
+                }
+                else
+                {
+                    sb.AppendLine("();");
                 }
 
-                sb.AppendLine("            };");
+                // Use statements for everything else (better for JIT and null handling)
+                foreach (var member in ctx.Model.Members)
+                {
+                    // Skip if already handled in initializer (init-only or required)
+                    if ((member.IsProperty && member.IsInitOnly) || member.IsRequired)
+                        continue;
+
+                    if (!member.IsProperty || !member.IsInitOnly)
+                    {
+                        MemberCloneGenerator.WriteMemberCloning(ctx, member, "result", sourceVarName, "null");
+                    }
+                }
             }
             else
             {
                 // Use FormatterServices.GetUninitializedObject to create instance without calling constructor
-                WriteInstanceCreation(sb, typeName, hasParameterlessConstructor, isRecord, sourceVarName);
+                WriteInstanceCreation(ctx, sb, typeName, hasParameterlessConstructor, isRecord, sourceVarName);
                 
                 // Then assign members individually (no state needed for non-circular types)
                 foreach (var member in ctx.Model.Members)
@@ -128,7 +150,7 @@ internal static class ClassCloneBodyGenerator
     /// For records, uses the 'with' expression for shallow copy.
     /// </summary>
     /// <param name="sourceVarName">The name of the source variable (usually "source" for classes, "src" for structs after null check)</param>
-    private static void WriteInstanceCreation(StringBuilder sb, string typeName, bool hasParameterlessConstructor, bool isRecord, string sourceVarName = "source")
+    private static void WriteInstanceCreation(CloneGeneratorContext ctx, StringBuilder sb, string typeName, bool hasParameterlessConstructor, bool isRecord, string sourceVarName = "source")
     {
         if (isRecord)
         {
@@ -137,7 +159,29 @@ internal static class ClassCloneBodyGenerator
         }
         else if (hasParameterlessConstructor)
         {
-            sb.AppendLine($"            var result = new {typeName}();");
+            // Check for required members
+            var requiredMembers = new List<string>();
+            foreach (var member in ctx.Model.Members)
+            {
+                if (member.IsRequired)
+                {
+                    // Assign default! to satisfy compiler contract
+                    // We will assign real values later
+                    requiredMembers.Add($"                {member.Name} = default!");
+                }
+            }
+
+            if (requiredMembers.Count > 0)
+            {
+                sb.AppendLine($"            var result = new {typeName}");
+                sb.AppendLine("            {");
+                sb.AppendLine(string.Join(",\n", requiredMembers));
+                sb.AppendLine("            };");
+            }
+            else
+            {
+                sb.AppendLine($"            var result = new {typeName}();");
+            }
         }
         else
         {
@@ -167,7 +211,7 @@ internal static class ClassCloneBodyGenerator
             if (member.IsReadOnly)
                 continue;
             
-            var assignment = MemberCloneGenerator.GetMemberAssignment(ctx, member, sourceVarName, "null");
+            var assignment = MemberCloneGenerator.GetMemberAssignment(ctx, member, sourceVarName, "null", "                ");
             if (!string.IsNullOrEmpty(assignment))
             {
                 deepCloneAssignments.Add($"                {assignment}");
