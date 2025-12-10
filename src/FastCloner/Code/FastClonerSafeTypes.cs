@@ -93,6 +93,7 @@ internal static class FastClonerSafeTypes
         _ when fullName.StartsWith("System.Collections.Generic.EnumEqualityComparer`") => true,
         _ when fullName.StartsWith("System.Collections.Generic.NullableEqualityComparer`") => true,
         "System.Collections.Generic.ByteEqualityComparer" => true,
+        "System.Collections.Generic.StringEqualityComparer" => true,
         _ => false
     };
     
@@ -130,6 +131,18 @@ internal static class FastClonerSafeTypes
         }
     }
     
+    private static readonly HashSet<string> safeTypeExact = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "System.Threading.Tasks.Task",
+        "Microsoft.EntityFrameworkCore.Internal.ConcurrencyDetector"
+    };
+
+    private static readonly AhoCorasick safeTypePrefixes = new AhoCorasick([
+        TypePrefixes.SystemRuntimeType,
+        TypePrefixes.MicrosoftExtensions,
+        "System.Threading.Tasks.Task`"
+    ]);
+
     private static bool IsSafeSystemType(Type type)
     {
         if (type.IsEnum() || type.IsPointer)
@@ -138,22 +151,21 @@ internal static class FastClonerSafeTypes
         if (type.IsCOMObject)
             return true;
 
-        if (type.FullName is null)
+        string? fullName = type.FullName;
+
+        if (fullName is null)
+            return true;
+
+        if (safeTypeExact.Contains(fullName))
+            return true;
+
+        if (safeTypePrefixes.ContainsAnyPattern(fullName))
             return true;
 
         if (IsReflectionType(type))
             return true;
 
         if (type.IsSubclassOf(typeof(System.Runtime.ConstrainedExecution.CriticalFinalizerObject)))
-            return true;
-
-        if (type.FullName.StartsWith(TypePrefixes.SystemRuntimeType))
-            return true;
-
-        if (type.FullName.StartsWith(TypePrefixes.MicrosoftExtensions))
-            return true;
-
-        if (type.FullName is "Microsoft.EntityFrameworkCore.Internal.ConcurrencyDetector")
             return true;
 
         return false;
@@ -172,7 +184,9 @@ internal static class FastClonerSafeTypes
             return false;
         }
         
-        if (type.FullName is null || IsSafeSystemType(type) || type.FullName.Contains("EqualityComparer") && IsSpecialEqualityComparer(type.FullName))
+        string? fullName = type.FullName;
+
+        if (fullName is null || IsSafeSystemType(type) || fullName.Contains("EqualityComparer") && IsSpecialEqualityComparer(fullName))
         {
             knownTypes.TryAdd(type, true);
             return true;

@@ -3265,4 +3265,25 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         public int Id { get; } = 1;
         public string Name { get; } = "Test";
     }
+    
+    [Test]
+    public void ValueTask_Should_Be_Safe()
+    {
+        var original = new ValueTask<int>(42);
+        var clone = original.DeepClone();
+        
+        Assert.That(clone.Result, Is.EqualTo(42));
+    }
+
+    [Test]
+    public void ValueTask_From_Task_Should_Be_Safe()
+    {
+        var tcs = new TaskCompletionSource<int>();
+        tcs.SetResult(42);
+        var original = new ValueTask<int>(tcs.Task);
+        
+        var clone = original.DeepClone();
+        
+        Assert.That(clone.Result, Is.EqualTo(42));
+    }
 }
