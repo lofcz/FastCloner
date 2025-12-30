@@ -37,7 +37,7 @@ internal static class FastClonerExprGenerator
         });
     }
 
-    private static bool MemberIsShallow(MemberInfo memberInfo)
+    internal static bool MemberIsShallow(MemberInfo memberInfo)
     {
         return FastClonerCache.GetOrAddMemberShallowStatus(memberInfo, mi =>
         {
@@ -51,7 +51,8 @@ internal static class FastClonerExprGenerator
             if (mi is FieldInfo field && field.Name.StartsWith("<") && field.Name.EndsWith(">k__BackingField"))
             {
                 string propertyName = field.Name.Substring(1, field.Name.Length - ">k__BackingField".Length - 1);
-                PropertyInfo? property = field.DeclaringType?.GetProperty(propertyName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                // Use DeclaredOnly to avoid AmbiguousMatchException when property is hidden in derived class
+                PropertyInfo? property = field.DeclaringType?.GetProperty(propertyName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
                 if (property != null)
                 {
                     FastClonerShallowAttribute? propShallow = property.GetCustomAttribute<FastClonerShallowAttribute>();

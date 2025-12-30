@@ -60,7 +60,27 @@ internal static class ClonerToExprGenerator
 
         foreach (FieldInfo fieldInfo in fi)
         {
-            if (isDeepClone && !FastClonerSafeTypes.CanReturnSameObject(fieldInfo.FieldType))
+            // Check if member should be shallow cloned (copy reference directly)
+            if (FastClonerExprGenerator.MemberIsShallow(fieldInfo))
+            {
+                Expression sourceValue = Expression.Field(fromLocal, fieldInfo);
+                if (fieldInfo.IsInitOnly)
+                {
+                    ConstantExpression setter = Expression.Constant(FieldAccessorGenerator.GetFieldSetter(fieldInfo));
+                    expressionList.Add(
+                        Expression.Invoke(
+                            setter,
+                            Expression.Convert(toLocal, typeof(object)),
+                            Expression.Convert(sourceValue, typeof(object))
+                        )
+                    );
+                }
+                else
+                {
+                    expressionList.Add(Expression.Assign(Expression.Field(toLocal, fieldInfo), sourceValue));
+                }
+            }
+            else if (isDeepClone && !FastClonerSafeTypes.CanReturnSameObject(fieldInfo.FieldType))
             {
                 MethodInfo methodInfo = fieldInfo.FieldType.IsValueType()
                     ? StaticMethodInfos.DeepClonerGeneratorMethods.CloneStructInternal.MakeGenericMethod(fieldInfo.FieldType)
