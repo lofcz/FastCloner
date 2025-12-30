@@ -19,7 +19,7 @@ internal static class NestedTypeCollector
         
         if (TypeAnalyzer.IsDictionaryType(type))
         {
-            var dictTypes = TypeAnalyzer.GetDictionaryTypes(type, compilation);
+            (ITypeSymbol KeyType, ITypeSymbol ValueType)? dictTypes = TypeAnalyzer.GetDictionaryTypes(type, compilation);
             if (dictTypes.HasValue)
             {
                 // Check Key
@@ -30,7 +30,7 @@ internal static class NestedTypeCollector
         }
         else if (TypeAnalyzer.IsCollectionType(type)) // Includes Array
         {
-            var elemType = TypeAnalyzer.GetCollectionElementType(type, compilation);
+            ITypeSymbol? elemType = TypeAnalyzer.GetCollectionElementType(type, compilation);
             if (elemType != null)
             {
                 Collect(elemType, compilation, nullabilityEnabled, nestedTypes);
@@ -48,22 +48,22 @@ internal static class NestedTypeCollector
              // We need to manually construct MemberModel.
              
              // Analyze manually
-             var dictTypes = TypeAnalyzer.GetDictionaryTypes(type, compilation);
+             (ITypeSymbol KeyType, ITypeSymbol ValueType)? dictTypes = TypeAnalyzer.GetDictionaryTypes(type, compilation);
              if (dictTypes.HasValue)
              {
-                 var keySafe = TypeAnalyzer.IsSafeType(dictTypes.Value.KeyType, compilation);
-                 var keyClon = TypeAnalyzer.HasClonableAttribute(dictTypes.Value.KeyType);
-                 var valSafe = TypeAnalyzer.IsSafeType(dictTypes.Value.ValueType, compilation);
-                 var valClon = TypeAnalyzer.HasClonableAttribute(dictTypes.Value.ValueType);
+                 bool keySafe = TypeAnalyzer.IsSafeType(dictTypes.Value.KeyType, compilation);
+                 bool keyClon = TypeAnalyzer.HasClonableAttribute(dictTypes.Value.KeyType);
+                 bool valSafe = TypeAnalyzer.IsSafeType(dictTypes.Value.ValueType, compilation);
+                 bool valClon = TypeAnalyzer.HasClonableAttribute(dictTypes.Value.ValueType);
 
-                 var requiresFastCloner = (!keySafe && !keyClon) || (!valSafe && !valClon);
+                 bool requiresFastCloner = (!keySafe && !keyClon) || (!valSafe && !valClon);
 
-                 var collKind = TypeAnalyzer.GetCollectionKind(type);
-                 var keyTypeName = dictTypes.Value.KeyType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                 var valTypeName = dictTypes.Value.ValueType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                 var concreteType = TypeAnalyzer.GetConcreteTypeForCollection(type, collKind, $"{keyTypeName}, {valTypeName}");
+                 CollectionKind collKind = TypeAnalyzer.GetCollectionKind(type);
+                 string keyTypeName = dictTypes.Value.KeyType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                 string valTypeName = dictTypes.Value.ValueType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                 string concreteType = TypeAnalyzer.GetConcreteTypeForCollection(type, collKind, $"{keyTypeName}, {valTypeName}");
 
-                 var model = new MemberModel(
+                 MemberModel model = new MemberModel(
                     "NestedHelper", // Dummy name
                     type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                     false, true, false,
@@ -79,9 +79,11 @@ internal static class NestedTypeCollector
                     type.IsValueType,
                     false, // IsInitOnly - not applicable for helper methods
                     false, // IsRequired - not applicable for helper methods
-                    false, // HasPrivateSetter - not applicable for helper methods
-                    0,      // ArrayRank - not applicable for dictionaries
-                    false   // IsNullable
+                    0,     // ArrayRank - not applicable for dictionaries
+                    false, // IsNullable
+                    true,  // HasGetter - helper methods always have access
+                    true,  // HasSetter - helper methods always have access
+                    true   // SetterIsAccessible - helper methods always have access
                  );
                  
                  if (!nestedTypes.ContainsKey(model.TypeFullName))
@@ -90,16 +92,16 @@ internal static class NestedTypeCollector
         }
         else if (TypeAnalyzer.IsCollectionType(type))
         {
-            var elemType = TypeAnalyzer.GetCollectionElementType(type, compilation);
+            ITypeSymbol? elemType = TypeAnalyzer.GetCollectionElementType(type, compilation);
             if (elemType != null)
             {
-                 var elemSafe = TypeAnalyzer.IsSafeType(elemType, compilation);
-                 var elemClon = TypeAnalyzer.HasClonableAttribute(elemType);
-                 var requiresFastCloner = !elemSafe && !elemClon;
+                 bool elemSafe = TypeAnalyzer.IsSafeType(elemType, compilation);
+                 bool elemClon = TypeAnalyzer.HasClonableAttribute(elemType);
+                 bool requiresFastCloner = !elemSafe && !elemClon;
 
-                 var kind = type is IArrayTypeSymbol ? MemberTypeKind.Array : MemberTypeKind.Collection;
+                 MemberTypeKind kind = type is IArrayTypeSymbol ? MemberTypeKind.Array : MemberTypeKind.Collection;
                  
-                 var collectionKind = CollectionKind.None;
+                 CollectionKind collectionKind = CollectionKind.None;
                  string? concreteType = null;
 
                  if (kind == MemberTypeKind.Collection)
@@ -119,7 +121,7 @@ internal static class NestedTypeCollector
                      }
                  }
 
-                 var model = new MemberModel(
+                 MemberModel model = new MemberModel(
                     "NestedHelper",
                     type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                     false, true, false,
@@ -134,9 +136,11 @@ internal static class NestedTypeCollector
                     type.IsValueType,
                     false, // IsInitOnly - not applicable for helper methods
                     false, // IsRequired - not applicable for helper methods
-                    false, // HasPrivateSetter - not applicable for helper methods
                     arrayRank,
-                    false   // IsNullable
+                    false, // IsNullable
+                    true,  // HasGetter - helper methods always have access
+                    true,  // HasSetter - helper methods always have access
+                    true   // SetterIsAccessible - helper methods always have access
                  );
 
                  if (!nestedTypes.ContainsKey(model.TypeFullName))

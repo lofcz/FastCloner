@@ -15,7 +15,7 @@ internal static class ClassCloneBodyGenerator
     /// </summary>
     public static bool NeedsFormatterServices(TypeModel model)
     {
-        return !model.HasParameterlessConstructor && !model.IsStruct && !model.IsRecord;
+        return model is { HasParameterlessConstructor: false, IsStruct: false, IsRecord: false };
     }
 
     /// <summary>
@@ -23,7 +23,7 @@ internal static class ClassCloneBodyGenerator
     /// </summary>
     public static bool NeedsFormatterServices(IEnumerable<TypeModel> types)
     {
-        foreach (var type in types)
+        foreach (TypeModel? type in types)
         {
             if (NeedsFormatterServices(type))
             {
@@ -50,9 +50,9 @@ internal static class ClassCloneBodyGenerator
         bool useNullConditional = false,
         string sourceVarName = "source")
     {
-        var sb = ctx.Source;
-        var hasParameterlessConstructor = ctx.Model.HasParameterlessConstructor;
-        var isRecord = ctx.Model.IsRecord;
+        StringBuilder sb = ctx.Source;
+        bool hasParameterlessConstructor = ctx.Model.HasParameterlessConstructor;
+        bool isRecord = ctx.Model.IsRecord;
         
         // For records without circular references, use the idiomatic 'with' expression
         if (isRecord && !useState)
@@ -68,12 +68,12 @@ internal static class ClassCloneBodyGenerator
             // This requires us to instantiate first, then register, then assign members.
             WriteInstanceCreation(ctx, sb, typeName, hasParameterlessConstructor, isRecord, sourceVarName);
             
-            var stateVarForAdd = stateVarName ?? "state";
-            var nullConditional = useNullConditional ? "?" : "";
+            string stateVarForAdd = stateVarName ?? "state";
+            string nullConditional = useNullConditional ? "?" : "";
             sb.AppendLine($"            {stateVarForAdd}{nullConditional}.AddKnownRef({sourceVarName}, result);");
             sb.AppendLine();
 
-            foreach (var member in ctx.Model.Members)
+            foreach (MemberModel member in ctx.Model.Members)
             {
                 MemberCloneGenerator.WriteMemberCloning(ctx, member, "result", sourceVarName, stateVarForAdd);
             }
@@ -90,12 +90,12 @@ internal static class ClassCloneBodyGenerator
                 sb.Append($"            var result = new {typeName}");
                 
                 // Collect init-only and required properties for object initializer
-                var initOnlyMembers = new List<string>();
-                foreach (var member in ctx.Model.Members)
+                List<string> initOnlyMembers = [];
+                foreach (MemberModel member in ctx.Model.Members)
                 {
-                    if ((member.IsProperty && member.IsInitOnly) || member.IsRequired)
+                    if (member is { IsProperty: true, IsInitOnly: true } || member.IsRequired)
                     {
-                        var assignment = MemberCloneGenerator.GetMemberAssignment(ctx, member, sourceVarName, "null", "                ");
+                        string assignment = MemberCloneGenerator.GetMemberAssignment(ctx, member, sourceVarName, "null", "                ");
                         if (!string.IsNullOrEmpty(assignment))
                         {
                             initOnlyMembers.Add($"                {assignment}");
@@ -116,10 +116,10 @@ internal static class ClassCloneBodyGenerator
                 }
 
                 // Use statements for everything else (better for JIT and null handling)
-                foreach (var member in ctx.Model.Members)
+                foreach (MemberModel member in ctx.Model.Members)
                 {
                     // Skip if already handled in initializer (init-only or required)
-                    if ((member.IsProperty && member.IsInitOnly) || member.IsRequired)
+                    if (member is { IsProperty: true, IsInitOnly: true } || member.IsRequired)
                         continue;
 
                     if (!member.IsProperty || !member.IsInitOnly)
@@ -134,7 +134,7 @@ internal static class ClassCloneBodyGenerator
                 WriteInstanceCreation(ctx, sb, typeName, hasParameterlessConstructor, isRecord, sourceVarName);
                 
                 // Then assign members individually (no state needed for non-circular types)
-                foreach (var member in ctx.Model.Members)
+                foreach (MemberModel member in ctx.Model.Members)
                 {
                     MemberCloneGenerator.WriteMemberCloning(ctx, member, "result", sourceVarName, "null");
                 }
@@ -160,8 +160,8 @@ internal static class ClassCloneBodyGenerator
         else if (hasParameterlessConstructor)
         {
             // Check for required members
-            var requiredMembers = new List<string>();
-            foreach (var member in ctx.Model.Members)
+            List<string> requiredMembers = [];
+            foreach (MemberModel member in ctx.Model.Members)
             {
                 if (member.IsRequired)
                 {
@@ -193,32 +193,72 @@ internal static class ClassCloneBodyGenerator
     /// <summary>
     /// Writes the clone body for records using the 'with' expression.
     /// Only includes members that need deep cloning in the 'with' expression.
+    /// Getter-only collections are handled separately via population.
     /// </summary>
     /// <param name="sourceVarName">The name of the source variable (usually "source" for classes, "src" for structs after null check)</param>
     private static void WriteRecordCloneBody(CloneGeneratorContext ctx, string typeName, string sourceVarName = "source")
     {
-        var sb = ctx.Source;
+        StringBuilder sb = ctx.Source;
         
-        // Collect members that need deep cloning (not safe types)
-        var deepCloneAssignments = new List<string>();
-        foreach (var member in ctx.Model.Members)
+        // Collect members that need deep cloning (not safe types) and can be assigned
+        List<string> deepCloneAssignments = [];
+        // Collect getter-only collections that need population
+        List<MemberModel> getterOnlyCollections = [];
+        
+        foreach (MemberModel member in ctx.Model.Members)
         {
+            // Check for getter-only collection properties
+            if (member is { IsProperty: true, HasGetter: true, HasSetter: false, IsInitOnly: false })
+            {
+                // These need to be handled via population, not 'with' expression
+                if (member.TypeKind == MemberTypeKind.Collection || member.TypeKind == MemberTypeKind.Dictionary)
+                {
+                    getterOnlyCollections.Add(member);
+                }
+                continue;
+            }
+            
             // Skip safe types - they're already shallow copied by 'with'
             if (member.TypeKind == MemberTypeKind.Safe)
                 continue;
             
-            // Skip read-only members
+            // Skip read-only members (that aren't getter-only collections, which we handled above)
             if (member.IsReadOnly)
                 continue;
             
-            var assignment = MemberCloneGenerator.GetMemberAssignment(ctx, member, sourceVarName, "null", "                ");
+            string assignment = MemberCloneGenerator.GetMemberAssignment(ctx, member, sourceVarName, "null", "                ");
             if (!string.IsNullOrEmpty(assignment))
             {
                 deepCloneAssignments.Add($"                {assignment}");
             }
         }
         
-        if (deepCloneAssignments.Count == 0)
+        // If we have getter-only collections, we need to use statement-based approach
+        if (getterOnlyCollections.Count > 0)
+        {
+            // Create result using 'with' expression
+            if (deepCloneAssignments.Count == 0)
+            {
+                sb.AppendLine($"            var result = {sourceVarName} with {{ }};");
+            }
+            else
+            {
+                sb.AppendLine($"            var result = {sourceVarName} with");
+                sb.AppendLine("            {");
+                sb.AppendLine(string.Join(",\n", deepCloneAssignments));
+                sb.AppendLine("            };");
+            }
+            
+            // Populate getter-only collections
+            foreach (MemberModel member in getterOnlyCollections)
+            {
+                MemberCloneGenerator.WriteMemberCloning(ctx, member, "result", sourceVarName, "null");
+            }
+            
+            sb.AppendLine();
+            sb.AppendLine("            return result;");
+        }
+        else if (deepCloneAssignments.Count == 0)
         {
             // All members are safe - simple shallow copy
             sb.AppendLine($"            return {sourceVarName} with {{ }};");

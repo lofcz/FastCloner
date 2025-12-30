@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using FastCloner.SourceGenerator.Shared;
 
 namespace FastCloner.Tests;
@@ -845,6 +846,182 @@ public class SourceGeneratorEdgeCaseTests
         // Verify independence
         list.Add(4);
         Assert.That(clone.ReadonlyList.Count, Is.EqualTo(3));
+    }
+
+    #endregion
+
+    #region Issue 11: ObservableCollection Properties Without Setters (GitHub Issue #19)
+
+    // Test class for ObservableCollection with getter only - currently NOT supported
+    // This represents the bug reported in GitHub Issue #19
+    [FastClonerClonable]
+    public partial class ClassWithObservableCollectionGetterOnly
+    {
+        public ObservableCollection<string> Items { get; } = new();
+        public string? Name { get; set; }
+    }
+
+    // Test class for ObservableCollection with getter and setter - should work
+    [FastClonerClonable]
+    public partial class ClassWithObservableCollectionGetterSetter
+    {
+        public ObservableCollection<string>? Items { get; set; }
+        public string? Name { get; set; }
+    }
+
+    // Test class for ObservableCollection with init - workaround from the issue
+    [FastClonerClonable]
+    public partial class ClassWithObservableCollectionInit
+    {
+        public ObservableCollection<string> Items { get; init; } = new();
+        public string? Name { get; set; }
+    }
+
+    // Test class with nested object in ObservableCollection
+    public class ObservableItem
+    {
+        public string? Value { get; set; }
+        public int Id { get; set; }
+    }
+
+    [FastClonerClonable]
+    public class ClassWithObservableCollectionOfObjects
+    {
+        public ObservableCollection<ObservableItem> Items { get; } = new();
+        public string? Description { get; set; }
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void ObservableCollection_WithGetterOnly_Should_Be_Cloned()
+    {
+        // Arrange - This test documents the expected behavior for Issue #19
+        // Currently this scenario is NOT supported by the source generator
+        var original = new ClassWithObservableCollectionGetterOnly
+        {
+            Name = "Test"
+        };
+        original.Items.Add("Item1");
+        original.Items.Add("Item2");
+        original.Items.Add("Item3");
+
+        // Act
+        var clone = original.FastDeepClone();
+
+        // Assert
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone!.Name, Is.EqualTo("Test"));
+        Assert.That(clone.Items, Is.Not.Null);
+        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
+        Assert.That(clone.Items.Count, Is.EqualTo(3));
+        Assert.That(clone.Items[0], Is.EqualTo("Item1"));
+        Assert.That(clone.Items[1], Is.EqualTo("Item2"));
+        Assert.That(clone.Items[2], Is.EqualTo("Item3"));
+
+        // Verify independence
+        original.Items.Add("NewItem");
+        original.Items[0] = "Modified";
+        Assert.That(clone.Items.Count, Is.EqualTo(3));
+        Assert.That(clone.Items[0], Is.EqualTo("Item1"));
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void ObservableCollection_WithGetterSetter_Should_Be_Cloned()
+    {
+        // Arrange - This scenario is already supported
+        var original = new ClassWithObservableCollectionGetterSetter
+        {
+            Name = "Test",
+            Items = new ObservableCollection<string> { "Item1", "Item2", "Item3" }
+        };
+
+        // Act
+        var clone = original.FastDeepClone();
+
+        // Assert
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone!.Name, Is.EqualTo("Test"));
+        Assert.That(clone.Items, Is.Not.Null);
+        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
+        Assert.That(clone.Items!.Count, Is.EqualTo(3));
+        Assert.That(clone.Items[0], Is.EqualTo("Item1"));
+        Assert.That(clone.Items[1], Is.EqualTo("Item2"));
+        Assert.That(clone.Items[2], Is.EqualTo("Item3"));
+
+        // Verify independence
+        original.Items!.Add("NewItem");
+        original.Items[0] = "Modified";
+        Assert.That(clone.Items.Count, Is.EqualTo(3));
+        Assert.That(clone.Items[0], Is.EqualTo("Item1"));
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void ObservableCollection_WithInit_Should_Be_Cloned()
+    {
+        // Arrange - This is the workaround mentioned in Issue #19
+        var original = new ClassWithObservableCollectionInit
+        {
+            Name = "Test",
+            Items = new ObservableCollection<string> { "Item1", "Item2", "Item3" }
+        };
+
+        // Act
+        var clone = original.FastDeepClone();
+
+        // Assert
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone!.Name, Is.EqualTo("Test"));
+        Assert.That(clone.Items, Is.Not.Null);
+        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
+        Assert.That(clone.Items.Count, Is.EqualTo(3));
+        Assert.That(clone.Items[0], Is.EqualTo("Item1"));
+        Assert.That(clone.Items[1], Is.EqualTo("Item2"));
+        Assert.That(clone.Items[2], Is.EqualTo("Item3"));
+
+        // Verify independence
+        original.Items.Add("NewItem");
+        original.Items[0] = "Modified";
+        Assert.That(clone.Items.Count, Is.EqualTo(3));
+        Assert.That(clone.Items[0], Is.EqualTo("Item1"));
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void ObservableCollection_WithObjects_GetterOnly_Should_Be_Deep_Cloned()
+    {
+        // Arrange - Test with nested objects to verify deep cloning
+        var original = new ClassWithObservableCollectionOfObjects
+        {
+            Description = "Container"
+        };
+        original.Items.Add(new ObservableItem { Value = "First", Id = 1 });
+        original.Items.Add(new ObservableItem { Value = "Second", Id = 2 });
+
+        // Act
+        var clone = original.FastDeepClone();
+
+        // Assert
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone!.Description, Is.EqualTo("Container"));
+        Assert.That(clone.Items, Is.Not.Null);
+        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
+        Assert.That(clone.Items.Count, Is.EqualTo(2));
+        
+        // Verify objects are also deep cloned (different references)
+        Assert.That(clone.Items[0], Is.Not.SameAs(original.Items[0]));
+        Assert.That(clone.Items[1], Is.Not.SameAs(original.Items[1]));
+        Assert.That(clone.Items[0].Value, Is.EqualTo("First"));
+        Assert.That(clone.Items[0].Id, Is.EqualTo(1));
+        Assert.That(clone.Items[1].Value, Is.EqualTo("Second"));
+        Assert.That(clone.Items[1].Id, Is.EqualTo(2));
+
+        // Verify independence
+        original.Items[0].Value = "Modified";
+        original.Items.Add(new ObservableItem { Value = "Third", Id = 3 });
+        Assert.That(clone.Items[0].Value, Is.EqualTo("First"));
+        Assert.That(clone.Items.Count, Is.EqualTo(2));
     }
 
     #endregion

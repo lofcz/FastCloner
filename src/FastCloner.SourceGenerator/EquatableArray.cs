@@ -3,7 +3,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.ComponentModel;
-using System.Linq;
 using System.Runtime.CompilerServices;
 
 namespace FastCloner.SourceGenerator;
@@ -132,7 +131,7 @@ internal struct HashCode
 
     private static uint GenerateGlobalSeed()
     {
-        var buffer = new byte[sizeof(uint)];
+        byte[] buffer = new byte[sizeof(uint)];
 #pragma warning disable RS1035
         new Random().NextBytes(buffer);
 #pragma warning restore RS1035

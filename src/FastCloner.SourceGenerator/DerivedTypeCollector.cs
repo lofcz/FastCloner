@@ -23,14 +23,14 @@ internal static class DerivedTypeCollector
         Compilation compilation,
         bool nullabilityEnabled)
     {
-        var derivedTypes = new List<TypeModel>();
-        var processedTypes = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+        List<TypeModel> derivedTypes = [];
+        HashSet<ITypeSymbol> processedTypes = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
 
         // 1. Collect types from [FastClonerInclude] attribute on the abstract class
         CollectIncludedTypes(abstractType, compilation, nullabilityEnabled, derivedTypes, processedTypes);
 
         // 2. Auto-discover derived types within the compilation (unless disabled)
-        var hasDisableAutoDiscovery = abstractType.GetAttributes()
+        bool hasDisableAutoDiscovery = abstractType.GetAttributes()
             .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerDisableAutoDiscoveryAttribute");
         
         if (!hasDisableAutoDiscovery)
@@ -48,7 +48,7 @@ internal static class DerivedTypeCollector
         List<TypeModel> derivedTypes,
         HashSet<ITypeSymbol> processedTypes)
     {
-        foreach (var attr in abstractType.GetAttributes())
+        foreach (AttributeData? attr in abstractType.GetAttributes())
         {
             if (attr.AttributeClass?.ToDisplayString() != "FastCloner.SourceGenerator.Shared.FastClonerIncludeAttribute")
                 continue;
@@ -56,11 +56,11 @@ internal static class DerivedTypeCollector
             if (attr.ConstructorArguments.Length == 0)
                 continue;
 
-            var arg = attr.ConstructorArguments[0];
+            TypedConstant arg = attr.ConstructorArguments[0];
             if (arg.Kind != TypedConstantKind.Array)
                 continue;
 
-            foreach (var typeConstant in arg.Values)
+            foreach (TypedConstant typeConstant in arg.Values)
             {
                 if (typeConstant.Value is not INamedTypeSymbol includedType)
                     continue;
@@ -76,7 +76,7 @@ internal static class DerivedTypeCollector
                 if (includedType.IsAbstract)
                     continue;
 
-                var model = CreateTypeModelForDerived(includedType, compilation, nullabilityEnabled);
+                TypeModel? model = CreateTypeModelForDerived(includedType, compilation, nullabilityEnabled);
                 if (model != null)
                 {
                     derivedTypes.Add(model);
@@ -93,13 +93,13 @@ internal static class DerivedTypeCollector
         HashSet<ITypeSymbol> processedTypes)
     {
         // Scan all types in the compilation's assembly
-        var visitor = new DerivedTypeVisitor(abstractType, compilation, nullabilityEnabled, derivedTypes, processedTypes);
+        DerivedTypeVisitor visitor = new DerivedTypeVisitor(abstractType, compilation, nullabilityEnabled, derivedTypes, processedTypes);
         visitor.Visit(compilation.GlobalNamespace);
     }
 
     private static bool IsDerivedFrom(INamedTypeSymbol type, INamedTypeSymbol potentialBase)
     {
-        var current = type.BaseType;
+        INamedTypeSymbol? current = type.BaseType;
         while (current != null)
         {
             if (SymbolEqualityComparer.Default.Equals(current, potentialBase))
@@ -132,10 +132,10 @@ internal static class DerivedTypeCollector
         bool nullabilityEnabled,
         bool hasOwnClonable)
     {
-        var flags = TypeAnalyzer.GetStructureFlags(type);
-        var hasParameterlessConstructor = TypeAnalyzer.HasParameterlessConstructor(type);
+        (bool IsStruct, bool IsSealed, bool HasClonableBaseClass) flags = TypeAnalyzer.GetStructureFlags(type);
+        bool hasParameterlessConstructor = TypeAnalyzer.HasParameterlessConstructor(type);
         
-        var trustNullability = type.GetAttributes()
+        bool trustNullability = type.GetAttributes()
             .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerTrustNullabilityAttribute");
 
         return new TypeModel(
@@ -167,26 +167,26 @@ internal static class DerivedTypeCollector
         bool nullabilityEnabled)
     {
         // Use similar logic to TypeModelFactory but without the abstract check
-        var isFastClonerAvailable = compilation.GetTypeByMetadataName("FastCloner.FastCloner") != null;
+        bool isFastClonerAvailable = compilation.GetTypeByMetadataName("FastCloner.FastCloner") != null;
         
-        var memberAnalyses = MemberCollector.GetMembers(derivedType, compilation, nullabilityEnabled);
+        List<MemberAnalysis> memberAnalyses = MemberCollector.GetMembers(derivedType, compilation, nullabilityEnabled);
         
-        var relatedTypes = new Dictionary<string, TypeModel>();
-        var implicitCache = new Dictionary<ITypeSymbol, TypeModel?>(SymbolEqualityComparer.Default);
-        var processingStack = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+        Dictionary<string, TypeModel> relatedTypes = new Dictionary<string, TypeModel>();
+        Dictionary<ITypeSymbol, TypeModel?> implicitCache = new Dictionary<ITypeSymbol, TypeModel?>(SymbolEqualityComparer.Default);
+        HashSet<ITypeSymbol> processingStack = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
         
-        var finalMembers = new List<MemberModel>();
-        var nestedTypes = new Dictionary<string, MemberModel>();
+        List<MemberModel> finalMembers = [];
+        Dictionary<string, MemberModel> nestedTypes = new Dictionary<string, MemberModel>();
         
-        foreach (var analysis in memberAnalyses)
+        foreach (MemberAnalysis analysis in memberAnalyses)
         {
-            var memberModel = analysis.Model;
-            var memberType = analysis.Type;
+            MemberModel memberModel = analysis.Model;
+            ITypeSymbol memberType = analysis.Type;
             
             // If member is 'Other' or 'Implicit' candidate, try to analyze if it's implicitly clonable
             if (memberModel.TypeKind == MemberTypeKind.Other || memberModel.TypeKind == MemberTypeKind.Implicit)
             {
-                if (ImplicitTypeAnalyzer.TryAnalyze(memberType, compilation, nullabilityEnabled, implicitCache, processingStack, out var implicitModel))
+                if (ImplicitTypeAnalyzer.TryAnalyze(memberType, compilation, nullabilityEnabled, implicitCache, processingStack, out TypeModel? implicitModel))
                 {
                     memberModel = memberModel with 
                     { 
@@ -197,12 +197,12 @@ internal static class DerivedTypeCollector
                     if (implicitModel != null && !relatedTypes.ContainsKey(implicitModel.FullyQualifiedName))
                     {
                         relatedTypes[implicitModel.FullyQualifiedName] = implicitModel;
-                        foreach (var rel in implicitModel.RelatedTypes)
+                        foreach (TypeModel? rel in implicitModel.RelatedTypes)
                         {
                             if (!relatedTypes.ContainsKey(rel.FullyQualifiedName))
                                 relatedTypes[rel.FullyQualifiedName] = rel;
                         }
-                        foreach (var nested in implicitModel.NestedTypes)
+                        foreach (MemberModel nested in implicitModel.NestedTypes)
                         {
                             if (!nestedTypes.ContainsKey(nested.TypeFullName))
                                 nestedTypes[nested.TypeFullName] = nested;
@@ -226,24 +226,24 @@ internal static class DerivedTypeCollector
                 if (memberModel.TypeKind == MemberTypeKind.Collection || 
                     memberModel.TypeKind == MemberTypeKind.Array)
                 {
-                    var elemType = (memberModel.TypeKind == MemberTypeKind.Array) 
+                    ITypeSymbol? elemType = (memberModel.TypeKind == MemberTypeKind.Array) 
                         ? ((IArrayTypeSymbol)memberType).ElementType 
                         : TypeAnalyzer.GetCollectionElementType(memberType, compilation);
 
-                    if (elemType != null && !memberModel.ElementIsSafe && !memberModel.ElementHasClonableAttr)
+                    if (elemType != null && memberModel is { ElementIsSafe: false, ElementHasClonableAttr: false })
                     {
-                        if (ImplicitTypeAnalyzer.TryAnalyze(elemType, compilation, nullabilityEnabled, implicitCache, processingStack, out var implicitModel))
+                        if (ImplicitTypeAnalyzer.TryAnalyze(elemType, compilation, nullabilityEnabled, implicitCache, processingStack, out TypeModel? implicitModel))
                         {
                             if (implicitModel != null)
                             {
                                 if (!relatedTypes.ContainsKey(implicitModel.FullyQualifiedName))
                                     relatedTypes[implicitModel.FullyQualifiedName] = implicitModel;
                                 
-                                foreach (var rel in implicitModel.RelatedTypes)
+                                foreach (TypeModel? rel in implicitModel.RelatedTypes)
                                     if (!relatedTypes.ContainsKey(rel.FullyQualifiedName))
                                         relatedTypes[rel.FullyQualifiedName] = rel;
 
-                                foreach (var nested in implicitModel.NestedTypes)
+                                foreach (MemberModel nested in implicitModel.NestedTypes)
                                     if (!nestedTypes.ContainsKey(nested.TypeFullName))
                                         nestedTypes[nested.TypeFullName] = nested;
                             }
@@ -252,43 +252,43 @@ internal static class DerivedTypeCollector
                 }
                 else if (memberModel.TypeKind == MemberTypeKind.Dictionary)
                 {
-                    var dictTypes = TypeAnalyzer.GetDictionaryTypes(memberType, compilation);
+                    (ITypeSymbol KeyType, ITypeSymbol ValueType)? dictTypes = TypeAnalyzer.GetDictionaryTypes(memberType, compilation);
                     if (dictTypes.HasValue)
                     {
-                        if (!memberModel.KeyIsSafe && !memberModel.KeyIsClonable)
+                        if (memberModel is { KeyIsSafe: false, KeyIsClonable: false })
                         {
-                            if (ImplicitTypeAnalyzer.TryAnalyze(dictTypes.Value.KeyType, compilation, nullabilityEnabled, implicitCache, processingStack, out var implicitKey))
+                            if (ImplicitTypeAnalyzer.TryAnalyze(dictTypes.Value.KeyType, compilation, nullabilityEnabled, implicitCache, processingStack, out TypeModel? implicitKey))
                             {
                                 if (implicitKey != null)
                                 {
                                     if (!relatedTypes.ContainsKey(implicitKey.FullyQualifiedName))
                                         relatedTypes[implicitKey.FullyQualifiedName] = implicitKey;
                                     
-                                    foreach (var rel in implicitKey.RelatedTypes)
+                                    foreach (TypeModel? rel in implicitKey.RelatedTypes)
                                         if (!relatedTypes.ContainsKey(rel.FullyQualifiedName))
                                             relatedTypes[rel.FullyQualifiedName] = rel;
 
-                                    foreach (var nested in implicitKey.NestedTypes)
+                                    foreach (MemberModel nested in implicitKey.NestedTypes)
                                         if (!nestedTypes.ContainsKey(nested.TypeFullName))
                                             nestedTypes[nested.TypeFullName] = nested;
                                 }
                             }
                         }
 
-                        if (!memberModel.ValueIsSafe && !memberModel.ValueIsClonable)
+                        if (memberModel is { ValueIsSafe: false, ValueIsClonable: false })
                         {
-                            if (ImplicitTypeAnalyzer.TryAnalyze(dictTypes.Value.ValueType, compilation, nullabilityEnabled, implicitCache, processingStack, out var implicitVal))
+                            if (ImplicitTypeAnalyzer.TryAnalyze(dictTypes.Value.ValueType, compilation, nullabilityEnabled, implicitCache, processingStack, out TypeModel? implicitVal))
                             {
                                 if (implicitVal != null)
                                 {
                                     if (!relatedTypes.ContainsKey(implicitVal.FullyQualifiedName))
                                         relatedTypes[implicitVal.FullyQualifiedName] = implicitVal;
                                     
-                                    foreach (var rel in implicitVal.RelatedTypes)
+                                    foreach (TypeModel? rel in implicitVal.RelatedTypes)
                                         if (!relatedTypes.ContainsKey(rel.FullyQualifiedName))
                                             relatedTypes[rel.FullyQualifiedName] = rel;
 
-                                    foreach (var nested in implicitVal.NestedTypes)
+                                    foreach (MemberModel nested in implicitVal.NestedTypes)
                                         if (!nestedTypes.ContainsKey(nested.TypeFullName))
                                             nestedTypes[nested.TypeFullName] = nested;
                                 }
@@ -301,14 +301,14 @@ internal static class DerivedTypeCollector
             finalMembers.Add(memberModel);
         }
         
-        var typeParameters = TypeAnalyzer.GetTypeParameters(derivedType);
-        var typeConstraints = TypeAnalyzer.GetTypeConstraints(derivedType);
-        var flags = TypeAnalyzer.GetStructureFlags(derivedType);
+        List<string> typeParameters = TypeAnalyzer.GetTypeParameters(derivedType);
+        List<string> typeConstraints = TypeAnalyzer.GetTypeConstraints(derivedType);
+        (bool IsStruct, bool IsSealed, bool HasClonableBaseClass) flags = TypeAnalyzer.GetStructureFlags(derivedType);
         
         // Check for members that require FastCloner when it's not available
         if (!isFastClonerAvailable)
         {
-            var unclonableMembers = finalMembers
+            List<string> unclonableMembers = finalMembers
                 .Where(m => m.RequiresFastCloner)
                 .Select(m => m.Name)
                 .ToList();
@@ -320,11 +320,11 @@ internal static class DerivedTypeCollector
             }
         }
 
-        var circRefLog = new List<string>();
-        var canHaveCircularRefs = CircularReferenceAnalyzer.Analyze(derivedType, compilation, circRefLog);
-        var hasParameterlessConstructor = TypeAnalyzer.HasParameterlessConstructor(derivedType);
+        List<string> circRefLog = [];
+        bool canHaveCircularRefs = CircularReferenceAnalyzer.Analyze(derivedType, compilation, circRefLog);
+        bool hasParameterlessConstructor = TypeAnalyzer.HasParameterlessConstructor(derivedType);
         
-        var trustNullability = derivedType.GetAttributes()
+        bool trustNullability = derivedType.GetAttributes()
             .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerTrustNullabilityAttribute");
         
         return new TypeModel(
@@ -378,7 +378,7 @@ internal static class DerivedTypeCollector
 
         public override void VisitNamespace(INamespaceSymbol symbol)
         {
-            foreach (var member in symbol.GetMembers())
+            foreach (INamespaceOrTypeSymbol? member in symbol.GetMembers())
             {
                 member.Accept(this);
             }
@@ -387,12 +387,11 @@ internal static class DerivedTypeCollector
         public override void VisitNamedType(INamedTypeSymbol symbol)
         {
             // Check if this type derives from our base type
-            if (!symbol.IsAbstract && 
-                symbol.TypeKind == TypeKind.Class &&
+            if (symbol is { IsAbstract: false, TypeKind: TypeKind.Class } &&
                 IsDerivedFrom(symbol, _baseType) &&
                 _processedTypes.Add(symbol))
             {
-                var model = CreateTypeModelForDerived(symbol, _compilation, _nullabilityEnabled);
+                TypeModel? model = CreateTypeModelForDerived(symbol, _compilation, _nullabilityEnabled);
                 if (model != null)
                 {
                     _derivedTypes.Add(model);
@@ -400,7 +399,7 @@ internal static class DerivedTypeCollector
             }
 
             // Visit nested types
-            foreach (var nestedType in symbol.GetTypeMembers())
+            foreach (INamedTypeSymbol? nestedType in symbol.GetTypeMembers())
             {
                 nestedType.Accept(this);
             }

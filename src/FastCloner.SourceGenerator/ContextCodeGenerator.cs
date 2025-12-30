@@ -10,7 +10,7 @@ internal sealed class ContextCodeGenerator
     private readonly ContextModel _model;
     private readonly StringBuilder _sb = new StringBuilder();
     private readonly Dictionary<string, string> _sharedMethodNames = new Dictionary<string, string>();
-    private readonly HashSet<string> _sharedNeededHelpers = new HashSet<string>();
+    private readonly HashSet<string> _sharedNeededHelpers = [];
     private Dictionary<string, bool> _needsState = new Dictionary<string, bool>();
 
     public ContextCodeGenerator(ContextModel model)
@@ -53,7 +53,7 @@ internal sealed class ContextCodeGenerator
         _sb.AppendLine("    {");
 
         // Generate methods for each registered type
-        foreach (var typeModel in _model.RegisteredTypes)
+        foreach (TypeModel? typeModel in _model.RegisteredTypes)
         {
             GenerateTypeCloner(typeModel);
         }
@@ -78,29 +78,29 @@ internal sealed class ContextCodeGenerator
     
     private void GenerateTypeCloner(TypeModel model)
     {
-        var ctx = new CloneGeneratorContext(model, _sharedMethodNames, _sharedNeededHelpers);
+        CloneGeneratorContext ctx = new CloneGeneratorContext(model, _sharedMethodNames, _sharedNeededHelpers);
         ctx.NeedsStateClass = true; // Use shared state class logic
         ctx.UseStaticMethods = false; // Use instance methods for context
 
         // Populate overrides from our analysis
-        foreach (var kvp in _needsState)
+        foreach (KeyValuePair<string, bool> kvp in _needsState)
         {
             ctx.SetCircularReferenceOverride(kvp.Key, kvp.Value);
         }
 
         // Pre-register all registered types to map to "Clone" method
-        foreach (var regType in _model.RegisteredTypes)
+        foreach (TypeModel? regType in _model.RegisteredTypes)
         {
              ctx.RegisterExternalMethod(regType.FullyQualifiedName, "Clone");
              ctx.RegisterImplicitType(regType);
         }
 
-        var typeName = model.FullyQualifiedName;
+        string typeName = model.FullyQualifiedName;
 
         if (model.CircularAnalysisLog.Count > 0)
         {
              _sb.AppendLine("        // Circular Analysis Log:");
-             foreach (var line in model.CircularAnalysisLog)
+             foreach (string? line in model.CircularAnalysisLog)
              {
                  _sb.AppendLine($"        // {line}");
              }
@@ -173,11 +173,11 @@ internal sealed class ContextCodeGenerator
 
     private void WriteStructCloneBody(CloneGeneratorContext ctx, string stateVarName)
     {
-        var sb = ctx.Source;
+        StringBuilder sb = ctx.Source;
         sb.AppendLine($"            var result = source;");
         sb.AppendLine();
 
-        foreach (var member in ctx.Model.Members)
+        foreach (MemberModel member in ctx.Model.Members)
         {
             MemberCloneGenerator.WriteMemberCloning(ctx, member, "result", "source", stateVarName);
         }
@@ -194,7 +194,7 @@ internal sealed class ContextCodeGenerator
     {
         _sb.AppendLine("        public override object Clone(object input)");
         _sb.AppendLine("        {");
-        foreach (var type in _model.RegisteredTypes)
+        foreach (TypeModel? type in _model.RegisteredTypes)
         {
             // Call public Clone method which handles state initialization
             _sb.AppendLine($"            if (input is {type.FullyQualifiedName} t{type.Name}) return Clone(t{type.Name})!;");
@@ -218,7 +218,7 @@ internal sealed class ContextCodeGenerator
     {
         _sb.AppendLine("        public override bool IsHandled(Type type)");
         _sb.AppendLine("        {");
-        foreach (var type in _model.RegisteredTypes)
+        foreach (TypeModel? type in _model.RegisteredTypes)
         {
             _sb.AppendLine($"            if (type == typeof({type.FullyQualifiedName})) return true;");
         }
@@ -245,7 +245,7 @@ internal sealed class ContextCodeGenerator
         _sb.AppendLine("                return false;");
         _sb.AppendLine("            }");
         _sb.AppendLine();
-        foreach (var type in _model.RegisteredTypes)
+        foreach (TypeModel? type in _model.RegisteredTypes)
         {
             _sb.AppendLine($"            if (input is {type.FullyQualifiedName} t{type.Name})");
             _sb.AppendLine("            {");
@@ -297,15 +297,15 @@ internal sealed class ContextCodeGenerator
     private void AnalyzeCircularDependencies()
     {
         // 1. Build Graph
-        var adjacency = new Dictionary<string, HashSet<string>>();
-        var registeredTypes = _model.RegisteredTypes.ToDictionary(t => t.FullyQualifiedName, t => t);
+        Dictionary<string, HashSet<string>> adjacency = new Dictionary<string, HashSet<string>>();
+        Dictionary<string, TypeModel> registeredTypes = _model.RegisteredTypes.ToDictionary(t => t.FullyQualifiedName, t => t);
 
-        foreach (var type in _model.RegisteredTypes)
+        foreach (TypeModel? type in _model.RegisteredTypes)
         {
-            var deps = new HashSet<string>();
+            HashSet<string> deps = [];
             adjacency[type.FullyQualifiedName] = deps;
 
-            foreach (var member in type.Members)
+            foreach (MemberModel member in type.Members)
             {
                 AddDependency(deps, member.TypeFullName, registeredTypes);
                 AddDependency(deps, member.ElementTypeName, registeredTypes);
@@ -315,10 +315,10 @@ internal sealed class ContextCodeGenerator
         }
 
         // 2. Find nodes that reach a cycle
-        var status = new Dictionary<string, VisitStatus>();
-        var reachesCycle = new Dictionary<string, bool>();
+        Dictionary<string, VisitStatus> status = new Dictionary<string, VisitStatus>();
+        Dictionary<string, bool> reachesCycle = new Dictionary<string, bool>();
 
-        foreach (var type in _model.RegisteredTypes)
+        foreach (TypeModel? type in _model.RegisteredTypes)
         {
             if (!status.ContainsKey(type.FullyQualifiedName))
             {
@@ -344,9 +344,9 @@ internal sealed class ContextCodeGenerator
         status[u] = VisitStatus.Visiting;
         bool cycleFound = false;
 
-        if (adj.TryGetValue(u, out var neighbors))
+        if (adj.TryGetValue(u, out HashSet<string>? neighbors))
         {
-            foreach (var v in neighbors)
+            foreach (string? v in neighbors)
             {
                 if (!status.ContainsKey(v)) status[v] = VisitStatus.Unvisited;
 

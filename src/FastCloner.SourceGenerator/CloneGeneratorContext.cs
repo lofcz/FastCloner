@@ -35,14 +35,14 @@ internal sealed class CloneGeneratorContext
         IsFastClonerAvailable = model.IsFastClonerAvailable;
         
         _typeNameToMethodName = sharedMethodNames ?? new Dictionary<string, string>();
-        _neededHelperMethods = sharedNeededHelpers ?? new HashSet<string>();
+        _neededHelperMethods = sharedNeededHelpers ?? [];
 
-        foreach (var related in model.RelatedTypes)
+        foreach (TypeModel? related in model.RelatedTypes)
         {
             _implicitTypeModels[related.FullyQualifiedName] = related;
         }
         
-        foreach (var nested in model.NestedTypes)
+        foreach (MemberModel nested in model.NestedTypes)
         {
             if (!_typeNameToMemberModel.ContainsKey(nested.TypeFullName))
             {
@@ -58,7 +58,7 @@ internal sealed class CloneGeneratorContext
 
     public bool NeedsCircularState(string typeName, bool defaultFromModel)
     {
-        if (_circularReferenceOverrides.TryGetValue(typeName, out var overrideValue))
+        if (_circularReferenceOverrides.TryGetValue(typeName, out bool overrideValue))
         {
             return overrideValue;
         }
@@ -105,13 +105,13 @@ internal sealed class CloneGeneratorContext
     /// </summary>
     public string GetOrCreateHelperMethodName(string typeFullName)
     {
-        if (_typeNameToMethodName.TryGetValue(typeFullName, out var existingMethod))
+        if (_typeNameToMethodName.TryGetValue(typeFullName, out string? existingMethod))
         {
             return existingMethod;
         }
 
         // Generate a unique helper method name based on the type
-        var methodName = $"FastClonerSgClone{GetCleanTypeName(typeFullName)}";
+        string methodName = $"FastClonerSgClone{GetCleanTypeName(typeFullName)}";
         _typeNameToMethodName[typeFullName] = methodName;
 
         if (_neededHelperMethods.Add(typeFullName))
@@ -127,15 +127,15 @@ internal sealed class CloneGeneratorContext
     /// </summary>
     public string GetOrCreateHelperMethodName(MemberModel member)
     {
-        var typeKey = member.TypeFullName;
+        string typeKey = member.TypeFullName;
 
-        if (_typeNameToMethodName.TryGetValue(typeKey, out var existingMethod))
+        if (_typeNameToMethodName.TryGetValue(typeKey, out string? existingMethod))
         {
             return existingMethod;
         }
 
         // Generate a unique helper method name based on the type
-        var methodName = $"FastClonerSgClone{GetCleanTypeName(member.TypeFullName)}";
+        string methodName = $"FastClonerSgClone{GetCleanTypeName(member.TypeFullName)}";
         _typeNameToMethodName[typeKey] = methodName;
 
         if (_neededHelperMethods.Add(typeKey))
@@ -187,7 +187,7 @@ internal sealed class CloneGeneratorContext
     /// </summary>
     public IEnumerable<(TypeModel Model, string MethodName)> GetDerivedTypeHelpers()
     {
-        foreach (var kvp in _derivedTypeHelpers)
+        foreach (KeyValuePair<string, TypeModel> kvp in _derivedTypeHelpers)
         {
             yield return (kvp.Value, _typeNameToMethodName[kvp.Key]);
         }
@@ -200,7 +200,7 @@ internal sealed class CloneGeneratorContext
 
     public void IncrementHelperUsage(string typeFullName)
     {
-        if (_helperUsageCounts.TryGetValue(typeFullName, out var count))
+        if (_helperUsageCounts.TryGetValue(typeFullName, out int count))
         {
             _helperUsageCounts[typeFullName] = count + 1;
         }
@@ -212,7 +212,7 @@ internal sealed class CloneGeneratorContext
 
     public int GetHelperUsageCount(string typeFullName)
     {
-        return _helperUsageCounts.TryGetValue(typeFullName, out var count) ? count : 0;
+        return _helperUsageCounts.TryGetValue(typeFullName, out int count) ? count : 0;
     }
 
     public bool ShouldInline(string typeFullName)

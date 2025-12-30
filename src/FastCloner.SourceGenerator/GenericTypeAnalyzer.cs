@@ -15,24 +15,24 @@ internal static class GenericTypeAnalyzer
         if (typeArg.TypeKind == TypeKind.TypeParameter)
             return null;
 
-        var isSafe = TypeAnalyzer.IsSafeType(typeArg, compilation);
-        var isClonable = TypeAnalyzer.HasClonableAttribute(typeArg);
+        bool isSafe = TypeAnalyzer.IsSafeType(typeArg, compilation);
+        bool isClonable = TypeAnalyzer.HasClonableAttribute(typeArg);
         
         // Analyze for collection types (List, Dictionary, Array, etc.)
-        var nestedTypes = new Dictionary<string, MemberModel>();
+        Dictionary<string, MemberModel> nestedTypes = new Dictionary<string, MemberModel>();
         NestedTypeCollector.Collect(typeArg, compilation, nullability, nestedTypes);
         
         MemberModel? collectionModel = null;
-        var typeArgFQN = typeArg.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-        if (nestedTypes.TryGetValue(typeArgFQN, out var model))
+        string typeArgFQN = typeArg.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        if (nestedTypes.TryGetValue(typeArgFQN, out MemberModel model))
         {
             collectionModel = model;
         }
 
         // Analyze for implicit types (POCOs without attribute)
-        var implicitTypes = new Dictionary<string, TypeModel>();
-        var implicitCache = new Dictionary<ITypeSymbol, TypeModel?>(SymbolEqualityComparer.Default);
-        var processingStack = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+        Dictionary<string, TypeModel> implicitTypes = new Dictionary<string, TypeModel>();
+        Dictionary<ITypeSymbol, TypeModel?> implicitCache = new Dictionary<ITypeSymbol, TypeModel?>(SymbolEqualityComparer.Default);
+        HashSet<ITypeSymbol> processingStack = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
 
         void CollectImplicitRecursively(ITypeSymbol t)
         {
@@ -41,13 +41,13 @@ internal static class GenericTypeAnalyzer
                 return;
 
             // Check if this type is a candidate for implicit cloning
-            if (ImplicitTypeAnalyzer.TryAnalyze(t, compilation, nullability, implicitCache, processingStack, out var implicitModel))
+            if (ImplicitTypeAnalyzer.TryAnalyze(t, compilation, nullability, implicitCache, processingStack, out TypeModel? implicitModel))
             {
                 if (implicitModel != null && !implicitTypes.ContainsKey(implicitModel.FullyQualifiedName))
                 {
                     implicitTypes[implicitModel.FullyQualifiedName] = implicitModel;
                     // Dependencies are already collected in 'implicitModel.RelatedTypes', but we need to flatten them into our list
-                    foreach (var rel in implicitModel.RelatedTypes)
+                    foreach (TypeModel? rel in implicitModel.RelatedTypes)
                     {
                         if (!implicitTypes.ContainsKey(rel.FullyQualifiedName))
                             implicitTypes[rel.FullyQualifiedName] = rel;
@@ -56,9 +56,9 @@ internal static class GenericTypeAnalyzer
             }
 
             // Recurse into generics/arrays to find other candidates
-            if (t is INamedTypeSymbol named && named.IsGenericType)
+            if (t is INamedTypeSymbol { IsGenericType: true } named)
             {
-                foreach (var arg in named.TypeArguments)
+                foreach (ITypeSymbol? arg in named.TypeArguments)
                     CollectImplicitRecursively(arg);
             }
             else if (t is IArrayTypeSymbol array)
@@ -75,9 +75,9 @@ internal static class GenericTypeAnalyzer
             string? extensionClassFQN = null;
             if (isClonable && typeArg is INamedTypeSymbol namedArg)
             {
-                var ns = TypeAnalyzer.GetNamespace(namedArg);
-                var name = namedArg.Name;
-                var extName = $"{name}FastDeepCloneExtensions";
+                string ns = TypeAnalyzer.GetNamespace(namedArg);
+                string name = namedArg.Name;
+                string extName = $"{name}FastDeepCloneExtensions";
                 extensionClassFQN = string.IsNullOrEmpty(ns) ? $"global::{extName}" : $"global::{ns}.{extName}";
             }
 

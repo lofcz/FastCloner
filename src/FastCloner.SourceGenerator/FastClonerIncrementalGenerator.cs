@@ -1,4 +1,6 @@
-﻿using System.Linq;
+﻿using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -17,21 +19,21 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
         // 3. Do NOT combine with CompilationProvider - it breaks caching
         // 4. Use EquatableArray for collections, not ImmutableArray
         
-        var pipeline = context.SyntaxProvider.ForAttributeWithMetadataName<Result<TypeModel>>(
+        IncrementalValuesProvider<Result<TypeModel>> pipeline = context.SyntaxProvider.ForAttributeWithMetadataName<Result<TypeModel>>(
             fullyQualifiedMetadataName: "FastCloner.SourceGenerator.Shared.FastClonerClonableAttribute",
             predicate: static (node, cancellationToken) => 
                 node is ClassDeclarationSyntax || node is StructDeclarationSyntax || node is RecordDeclarationSyntax,
             transform: static (ctx, cancellationToken) =>
             {
-                var symbol = ctx.SemanticModel.GetDeclaredSymbol(ctx.TargetNode);
+                ISymbol? symbol = ctx.SemanticModel.GetDeclaredSymbol(ctx.TargetNode);
                 if (symbol is INamedTypeSymbol namedTypeSymbol)
                 {
-                    var nullabilityEnabled = ctx.SemanticModel.GetNullableContext(ctx.TargetNode.SpanStart)
+                    bool nullabilityEnabled = ctx.SemanticModel.GetNullableContext(ctx.TargetNode.SpanStart)
                         .HasFlag(NullableContext.Enabled);
                     
-                    var compilation = ctx.SemanticModel.Compilation;
+                    Compilation compilation = ctx.SemanticModel.Compilation;
                     
-                    return TypeModelFactory.TryCreate(namedTypeSymbol, nullabilityEnabled, compilation, out var model, out var error) ? 
+                    return TypeModelFactory.TryCreate(namedTypeSymbol, nullabilityEnabled, compilation, out TypeModel? model, out Diagnostic? error) ? 
                         Result<TypeModel>.Success(model!) : 
                         Result<TypeModel>.Error(error!);
                 }
@@ -49,33 +51,33 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
             });
 
         // Secondary pipeline: Collect usages of generic types to optimize dispatch
-        var explicitUsages = context.SyntaxProvider.CreateSyntaxProvider(
+        IncrementalValuesProvider<EquatableArray<GenericUsage>> explicitUsages = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: GenericUsageCollector.IsCandidate,
             transform: GenericUsageCollector.Collect)
             .Where(x => x.Count > 0);
 
-        var includedUsages = context.SyntaxProvider.ForAttributeWithMetadataName<EquatableArray<GenericUsage>>(
+        IncrementalValuesProvider<EquatableArray<GenericUsage>> includedUsages = context.SyntaxProvider.ForAttributeWithMetadataName<EquatableArray<GenericUsage>>(
             fullyQualifiedMetadataName: "FastCloner.SourceGenerator.Shared.FastClonerIncludeAttribute",
             predicate: static (node, _) => node is ClassDeclarationSyntax || node is StructDeclarationSyntax,
             transform: IncludeAttributeCollector.Collect)
             .Where(x => x.Count > 0);
 
-        var usagePipeline = explicitUsages.Collect().Combine(includedUsages.Collect())
+        IncrementalValueProvider<EquatableArray<GenericUsage>> usagePipeline = explicitUsages.Collect().Combine(includedUsages.Collect())
             .Select(static (pair, _) =>
             {
-                var (explicitList, includedList) = pair;
-                var list = new System.Collections.Generic.List<GenericUsage>();
+                (ImmutableArray<EquatableArray<GenericUsage>> explicitList, ImmutableArray<EquatableArray<GenericUsage>> includedList) = pair;
+                List<GenericUsage> list = [];
                 
-                foreach (var array in explicitList) 
+                foreach (EquatableArray<GenericUsage> array in explicitList) 
                     list.AddRange(array);
-                foreach (var array in includedList) 
+                foreach (EquatableArray<GenericUsage> array in includedList) 
                     list.AddRange(array);
 
                 return new EquatableArray<GenericUsage>(list.Distinct().ToArray());
             });
 
         // Combine type models with collected usages
-        var combinedPipeline = pipeline.Combine(usagePipeline);
+        IncrementalValuesProvider<(Result<TypeModel> Left, EquatableArray<GenericUsage> Right)> combinedPipeline = pipeline.Combine(usagePipeline);
 
         // OPTIMAL PERFORMANCE: No Compilation combine!
         // All type analysis is pre-computed in TypeModel during the transform step.
@@ -83,7 +85,7 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
         // not on every keypress.
         context.RegisterSourceOutput(combinedPipeline, static (ctx, source) =>
         {
-            var (result, usages) = source;
+            (Result<TypeModel>? result, EquatableArray<GenericUsage> usages) = source;
             
             result.Handle(
                 model =>
@@ -96,7 +98,7 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
                         if (!model.IsFastClonerAvailable)
                         {
                             bool hasInitOnlyWithCycles = model.CanHaveCircularReferences && model.Members.Any(m => m.IsInitOnly);
-                            bool structWithReadonlyRefs = model.IsStruct && model.Members.Any(m => !m.IsValueType && m.IsReadOnly);
+                            bool structWithReadonlyRefs = model.IsStruct && model.Members.Any(m => m is { IsValueType: false, IsReadOnly: true });
                             
                             if (hasInitOnlyWithCycles)
                             {
@@ -127,11 +129,11 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
                             }
                         }
 
-                        var generator = new CloneCodeGenerator(model, usages);
-                        var generatedSource = generator.Generate();
+                        CloneCodeGenerator generator = new CloneCodeGenerator(model, usages);
+                        string generatedSource = generator.Generate();
                         
                         // Use FullyQualifiedName to avoid collisions when same class name exists in different namespaces
-                        var safeName = model.FullyQualifiedName
+                        string safeName = model.FullyQualifiedName
                             .Replace("global::", "")
                             .Replace(".", "_")
                             .Replace("<", "_")
@@ -144,7 +146,7 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
                     }
                     catch (System.Exception ex)
                     {
-                        var location = Location.None;
+                        Location location = Location.None;
                         ctx.ReportDiagnostic(
                             Diagnostic.Create(
                                 new DiagnosticDescriptor(
@@ -165,21 +167,21 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
         });
 
         // FastClonerContext Pipeline
-        var contextPipeline = context.SyntaxProvider.ForAttributeWithMetadataName<Result<ContextModel>>(
+        IncrementalValuesProvider<Result<ContextModel>> contextPipeline = context.SyntaxProvider.ForAttributeWithMetadataName<Result<ContextModel>>(
             fullyQualifiedMetadataName: "FastCloner.SourceGenerator.Shared.FastClonerRegisterAttribute",
             predicate: static (node, _) => node is ClassDeclarationSyntax,
             transform: ContextCollector.Collect);
 
         // Deduplicate pipeline results
-        var dedupedContextPipeline = contextPipeline.Collect().SelectMany((results, _) => 
+        IncrementalValuesProvider<Result<ContextModel>> dedupedContextPipeline = contextPipeline.Collect().SelectMany((results, _) => 
         {
              // Group successes by FQN to remove duplicates (caused by partial classes with attributes)
-             var uniqueSuccesses = results
+             IEnumerable<Result<ContextModel>> uniqueSuccesses = results
                  .Where(r => r.IsSuccess && r.Value != null)
                  .GroupBy(r => r.Value!.FullyQualifiedName)
                  .Select(g => g.First());
 
-             var errors = results.Where(r => !r.IsSuccess);
+             IEnumerable<Result<ContextModel>> errors = results.Where(r => !r.IsSuccess);
              
              return uniqueSuccesses.Concat(errors);
         });
@@ -191,10 +193,10 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
                 {
                     try
                     {
-                        var generator = new ContextCodeGenerator(model);
-                        var source = generator.Generate();
+                        ContextCodeGenerator generator = new ContextCodeGenerator(model);
+                        string source = generator.Generate();
                         
-                        var safeName = model.FullyQualifiedName
+                        string safeName = model.FullyQualifiedName
                             .Replace("global::", "")
                             .Replace(".", "_")
                             .Replace("<", "_")
@@ -207,7 +209,7 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
                     }
                     catch (System.Exception ex)
                     {
-                        var location = Location.None;
+                        Location location = Location.None;
                         ctx.ReportDiagnostic(
                             Diagnostic.Create(
                                 new DiagnosticDescriptor(

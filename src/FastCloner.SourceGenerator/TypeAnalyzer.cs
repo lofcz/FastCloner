@@ -26,7 +26,7 @@ internal static class TypeAnalyzer
     {
         if (type == null) return false;
         
-        var fullName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+        string fullName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
             .Replace("global::", "");
         
         // Check non-generic types
@@ -38,9 +38,9 @@ internal static class TypeAnalyzer
             return true;
         
         // Check generic type definitions
-        if (type is INamedTypeSymbol namedType && namedType.IsGenericType)
+        if (type is INamedTypeSymbol { IsGenericType: true } namedType)
         {
-            var metadataName = GetFullMetadataName(namedType.OriginalDefinition);
+            string metadataName = GetFullMetadataName(namedType.OriginalDefinition);
             if (SafeTypeCatalog.DoNotCloneGenericTypes.Contains(metadataName))
                 return true;
         }
@@ -66,7 +66,7 @@ internal static class TypeAnalyzer
         if (type == null) return false;
 
         // Handle nullable types
-        if (type is INamedTypeSymbol namedType && namedType.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+        if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } namedType)
         {
             return IsSafeTypeInternal(namedType.TypeArguments[0], compilation, visited);
         }
@@ -82,7 +82,7 @@ internal static class TypeAnalyzer
         }
 
         // Check SafeTypeCatalog for known safe types
-        var fullName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+        string fullName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
             .Replace("global::", ""); // SafeTypeCatalog doesn't use global:: prefix
 
         if (SafeTypeCatalog.SafeTypeNames.Contains(fullName)) return true;
@@ -99,7 +99,7 @@ internal static class TypeAnalyzer
         }
 
         // Recursively check Tuples and KeyValuePairs
-        if (type is INamedTypeSymbol namedSym && namedSym.IsGenericType)
+        if (type is INamedTypeSymbol { IsGenericType: true } namedSym)
         {
             if (fullName.StartsWith("System.Tuple") || 
                 fullName.StartsWith("System.ValueTuple") || 
@@ -107,7 +107,7 @@ internal static class TypeAnalyzer
             {
                 if (!visited.Add(type)) return true; // Cycle protection
 
-                foreach (var arg in namedSym.TypeArguments)
+                foreach (ITypeSymbol? arg in namedSym.TypeArguments)
                 {
                     if (!IsSafeTypeInternal(arg, compilation, visited)) return false;
                 }
@@ -116,7 +116,7 @@ internal static class TypeAnalyzer
         }
 
         // Check if it's a simple value type (struct with all safe fields)
-        if (type.IsValueType && !type.IsReferenceType)
+        if (type is { IsValueType: true, IsReferenceType: false })
         {
              if (!visited.Add(type)) return true; // Cycle protection
              return IsSimpleValueType(type, compilation, visited);
@@ -128,9 +128,9 @@ internal static class TypeAnalyzer
     private static bool IsSimpleValueType(ITypeSymbol type, Compilation compilation, HashSet<ITypeSymbol> visited)
     {
         // Check all fields recursively
-        foreach (var member in type.GetMembers())
+        foreach (ISymbol? member in type.GetMembers())
         {
-            if (member is IFieldSymbol field && !field.IsStatic && !field.IsConst)
+            if (member is IFieldSymbol { IsStatic: false, IsConst: false } field)
             {
                 if (!IsSafeTypeInternal(field.Type, compilation, visited))
                     return false;
@@ -220,7 +220,7 @@ internal static class TypeAnalyzer
         }
 
         // Generic IEnumerable<T> (most generic collections implement this)
-        var genericEnumerable = type.AllInterfaces.FirstOrDefault(i =>
+        INamedTypeSymbol? genericEnumerable = type.AllInterfaces.FirstOrDefault(i =>
             i.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T);
 
         if (genericEnumerable != null)
@@ -229,7 +229,7 @@ internal static class TypeAnalyzer
         }
 
         // Non-generic ICollection
-        var nonGenericCollection = type.AllInterfaces.FirstOrDefault(i =>
+        INamedTypeSymbol? nonGenericCollection = type.AllInterfaces.FirstOrDefault(i =>
             i.MetadataName == "ICollection" &&
             i.ContainingNamespace.ToDisplayString() == "System.Collections");
 
@@ -247,7 +247,7 @@ internal static class TypeAnalyzer
     public static (ITypeSymbol KeyType, ITypeSymbol ValueType)? GetDictionaryTypes(ITypeSymbol type, Compilation compilation)
     {
         // IDictionary<TKey, TValue>
-        var dictInterface = type.AllInterfaces.FirstOrDefault(i =>
+        INamedTypeSymbol? dictInterface = type.AllInterfaces.FirstOrDefault(i =>
             i.MetadataName == "IDictionary`2" &&
             i.ContainingNamespace.ToDisplayString() == "System.Collections.Generic");
 
@@ -257,7 +257,7 @@ internal static class TypeAnalyzer
         }
 
         // IReadOnlyDictionary<TKey, TValue>
-        var roDictInterface = type.AllInterfaces.FirstOrDefault(i =>
+        INamedTypeSymbol? roDictInterface = type.AllInterfaces.FirstOrDefault(i =>
             i.MetadataName == "IReadOnlyDictionary`2" &&
             i.ContainingNamespace.ToDisplayString() == "System.Collections.Generic");
 
@@ -270,14 +270,14 @@ internal static class TypeAnalyzer
         if ((type.MetadataName == "IDictionary`2" || type.MetadataName == "IReadOnlyDictionary`2") && 
             type.ContainingNamespace.ToDisplayString() == "System.Collections.Generic")
         {
-             if (type is INamedTypeSymbol namedType && namedType.TypeArguments.Length == 2)
+             if (type is INamedTypeSymbol { TypeArguments.Length: 2 } namedType)
              {
                  return (namedType.TypeArguments[0], namedType.TypeArguments[1]);
              }
         }
 
         // Non-generic IDictionary
-        var nonGenericDict = type.AllInterfaces.FirstOrDefault(i =>
+        INamedTypeSymbol? nonGenericDict = type.AllInterfaces.FirstOrDefault(i =>
             i.MetadataName == "IDictionary" &&
             i.ContainingNamespace.ToDisplayString() == "System.Collections");
 
@@ -322,10 +322,10 @@ internal static class TypeAnalyzer
     public static string GetTypeNameForSignature(ITypeSymbol type)
     {
         // Strip nullable annotation to get the underlying type
-        var nonNullableType = type.WithNullableAnnotation(NullableAnnotation.None);
+        ITypeSymbol nonNullableType = type.WithNullableAnnotation(NullableAnnotation.None);
         
         // Use a format with global:: prefix to avoid namespace conflicts
-        var format = new SymbolDisplayFormat(
+        SymbolDisplayFormat format = new SymbolDisplayFormat(
             globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
             typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
             genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
@@ -345,7 +345,7 @@ internal static class TypeAnalyzer
             return false;
 
         // Must be class or struct
-        if (!namedType.IsReferenceType && !namedType.IsValueType)
+        if (namedType is { IsReferenceType: false, IsValueType: false })
             return false;
             
         // Ignore delegates, etc.
@@ -385,10 +385,10 @@ internal static class TypeAnalyzer
 
     public static List<string> GetTypeConstraints(INamedTypeSymbol symbol)
     {
-        var constraints = new List<string>();
-        foreach (var tp in symbol.TypeParameters)
+        List<string> constraints = [];
+        foreach (ITypeParameterSymbol? tp in symbol.TypeParameters)
         {
-            var constraintParts = new List<string>();
+            List<string> constraintParts = [];
             
             if (tp.HasReferenceTypeConstraint)
                 constraintParts.Add("class");
@@ -399,7 +399,7 @@ internal static class TypeAnalyzer
             if (tp.HasNotNullConstraint)
                 constraintParts.Add("notnull");
             
-            foreach (var constraintType in tp.ConstraintTypes)
+            foreach (ITypeSymbol? constraintType in tp.ConstraintTypes)
             {
                 constraintParts.Add(constraintType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
             }
@@ -423,7 +423,7 @@ internal static class TypeAnalyzer
 
         if (!isStruct)
         {
-            var baseType = symbol.BaseType;
+            INamedTypeSymbol? baseType = symbol.BaseType;
             while (baseType != null && baseType.SpecialType != SpecialType.System_Object)
             {
                 if (HasClonableAttribute(baseType))
@@ -606,7 +606,7 @@ internal static class TypeAnalyzer
         if (GetFullMetadataName(type) == fullMetadataName) return true;
         
         // Check base types
-        var baseType = type.BaseType;
+        INamedTypeSymbol? baseType = type.BaseType;
         while (baseType != null)
         {
             if (GetFullMetadataName(baseType) == fullMetadataName) return true;
@@ -618,7 +618,7 @@ internal static class TypeAnalyzer
 
     private static bool HasInterface(ITypeSymbol type, string fullMetadataName)
     {
-        foreach (var iface in type.AllInterfaces)
+        foreach (INamedTypeSymbol? iface in type.AllInterfaces)
         {
             if (GetFullMetadataName(iface) == fullMetadataName) return true;
         }
@@ -630,14 +630,14 @@ internal static class TypeAnalyzer
         if (symbol is null) return string.Empty;
         if (IsRootNamespace(symbol)) return string.Empty;
         
-        var ns = symbol.ContainingNamespace;
-        var nsName = ns?.IsGlobalNamespace == false ? ns.ToDisplayString() : string.Empty;
+        INamespaceSymbol? ns = symbol.ContainingNamespace;
+        string nsName = ns?.IsGlobalNamespace == false ? ns.ToDisplayString() : string.Empty;
         
         return string.IsNullOrEmpty(nsName) ? symbol.MetadataName : $"{nsName}.{symbol.MetadataName}";
     }
 
     private static bool IsRootNamespace(ISymbol symbol) 
     {
-       return symbol is INamespaceSymbol s && s.IsGlobalNamespace;
+       return symbol is INamespaceSymbol { IsGlobalNamespace: true };
     }
 }

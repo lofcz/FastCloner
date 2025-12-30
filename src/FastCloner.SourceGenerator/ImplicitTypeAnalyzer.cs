@@ -22,7 +22,7 @@ internal static class ImplicitTypeAnalyzer
         if (processingStack.Contains(type))
             return true;
             
-        if (cache.TryGetValue(type, out var cached))
+        if (cache.TryGetValue(type, out TypeModel? cached))
         {
             implicitModel = cached;
             return cached != null;
@@ -37,17 +37,17 @@ internal static class ImplicitTypeAnalyzer
         processingStack.Add(type);
         
         // Analyze members
-        var memberAnalyses = MemberCollector.GetMembers(namedType, compilation, nullabilityEnabled);
-        var finalImplicitMembers = new List<MemberModel>();
-        var childRelatedTypes = new List<TypeModel>();
-        var implicitNestedMembers = new Dictionary<string, MemberModel>();
+        List<MemberAnalysis> memberAnalyses = MemberCollector.GetMembers(namedType, compilation, nullabilityEnabled);
+        List<MemberModel> finalImplicitMembers = [];
+        List<TypeModel> childRelatedTypes = [];
+        Dictionary<string, MemberModel> implicitNestedMembers = new Dictionary<string, MemberModel>();
         
         bool success = true;
         bool hasUnsafeReferenceMember = false;
 
-        foreach (var analysis in memberAnalyses)
+        foreach (MemberAnalysis analysis in memberAnalyses)
         {
-            var m = analysis.Model;
+            MemberModel m = analysis.Model;
             
             if (!m.IsValueType && !TypeAnalyzer.IsSafeType(analysis.Type, compilation))
             {
@@ -58,7 +58,7 @@ internal static class ImplicitTypeAnalyzer
             // If it requires FastCloner (Other) or is Implicit candidate, we must verify if it's implicit.
             if (m.TypeKind == MemberTypeKind.Other || m.TypeKind == MemberTypeKind.Implicit)
             {
-                if (TryAnalyze(analysis.Type, compilation, nullabilityEnabled, cache, processingStack, out var childModel))
+                if (TryAnalyze(analysis.Type, compilation, nullabilityEnabled, cache, processingStack, out TypeModel? childModel))
                 {
                     m = m with { TypeKind = MemberTypeKind.Implicit, RequiresFastCloner = false };
                     if (childModel != null) childRelatedTypes.Add(childModel);
@@ -77,11 +77,11 @@ internal static class ImplicitTypeAnalyzer
                 bool TryHandleComponent(ITypeSymbol componentType, out MemberModel? componentMember)
                 {
                     componentMember = null;
-                    if (TryAnalyze(componentType, compilation, nullabilityEnabled, cache, processingStack, out var compModel))
+                    if (TryAnalyze(componentType, compilation, nullabilityEnabled, cache, processingStack, out TypeModel? compModel))
                     {
                         if (compModel != null) childRelatedTypes.Add(compModel);
                         
-                        var typeName = componentType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                        string typeName = componentType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                         componentMember = new MemberModel(
                             Name: "Implicit_" + componentType.Name, 
                             TypeFullName: typeName,
@@ -99,9 +99,11 @@ internal static class ImplicitTypeAnalyzer
                             IsValueType: componentType.IsValueType,
                             IsInitOnly: false,
                             IsRequired: false,
-                            HasPrivateSetter: false,
                             ArrayRank: 0,
-                            IsNullable: false
+                            IsNullable: false,
+                            HasGetter: true,
+                            HasSetter: true,
+                            SetterIsAccessible: true
                         );
                         return true;
                     }
@@ -110,11 +112,11 @@ internal static class ImplicitTypeAnalyzer
 
                 if (m.TypeKind == MemberTypeKind.Array || m.TypeKind == MemberTypeKind.Collection)
                 {
-                    var elemType = (m.TypeKind == MemberTypeKind.Array) 
+                    ITypeSymbol? elemType = (m.TypeKind == MemberTypeKind.Array) 
                         ? ((IArrayTypeSymbol)analysis.Type).ElementType 
                         : TypeAnalyzer.GetCollectionElementType(analysis.Type, compilation);
 
-                    if (elemType != null && TryHandleComponent(elemType, out var elemMember))
+                    if (elemType != null && TryHandleComponent(elemType, out MemberModel? elemMember))
                     {
                         m = m with { RequiresFastCloner = false };
                         if (elemMember != null) implicitNestedMembers[elemMember.Value.TypeFullName] = elemMember.Value;
@@ -123,7 +125,7 @@ internal static class ImplicitTypeAnalyzer
                 }
                 else if (m.TypeKind == MemberTypeKind.Dictionary)
                 {
-                    var dictTypes = TypeAnalyzer.GetDictionaryTypes(analysis.Type, compilation);
+                    (ITypeSymbol KeyType, ITypeSymbol ValueType)? dictTypes = TypeAnalyzer.GetDictionaryTypes(analysis.Type, compilation);
                     if (dictTypes.HasValue)
                     {
                         bool keyOk = m.KeyIsSafe || m.KeyIsClonable;
@@ -131,7 +133,7 @@ internal static class ImplicitTypeAnalyzer
                         
                         if (!keyOk)
                         {
-                            if (TryHandleComponent(dictTypes.Value.KeyType, out var keyMember))
+                            if (TryHandleComponent(dictTypes.Value.KeyType, out MemberModel? keyMember))
                             {
                                 if (keyMember != null) implicitNestedMembers[keyMember.Value.TypeFullName] = keyMember.Value;
                                 keyOk = true;
@@ -140,7 +142,7 @@ internal static class ImplicitTypeAnalyzer
                         
                         if (!valOk)
                         {
-                            if (TryHandleComponent(dictTypes.Value.ValueType, out var valMember))
+                            if (TryHandleComponent(dictTypes.Value.ValueType, out MemberModel? valMember))
                             {
                                 if (valMember != null) implicitNestedMembers[valMember.Value.TypeFullName] = valMember.Value;
                                 valOk = true;
@@ -170,27 +172,27 @@ internal static class ImplicitTypeAnalyzer
         if (success)
         {
             // Gather all related types from children
-            var relatedTypesMap = new Dictionary<string, TypeModel>();
-            foreach (var child in childRelatedTypes)
+            Dictionary<string, TypeModel> relatedTypesMap = new Dictionary<string, TypeModel>();
+            foreach (TypeModel? child in childRelatedTypes)
             {
                 relatedTypesMap[child.FullyQualifiedName] = child;
-                foreach (var rel in child.RelatedTypes)
+                foreach (TypeModel? rel in child.RelatedTypes)
                 {
                     relatedTypesMap[rel.FullyQualifiedName] = rel;
                 }
             }
             
             // Construct model
-            var flags = TypeAnalyzer.GetStructureFlags(namedType);
+            (bool IsStruct, bool IsSealed, bool HasClonableBaseClass) flags = TypeAnalyzer.GetStructureFlags(namedType);
             
             // Can have circular references if any member is implicit (recursive) or clonable
             bool canHaveCircularRefs = hasUnsafeReferenceMember || flags.HasClonableBaseClass;
             
             // Check if type has a parameterless constructor (IsImplicitCandidate already validates this, but check explicitly)
-            var hasParameterlessConstructor = TypeAnalyzer.HasParameterlessConstructor(namedType);
+            bool hasParameterlessConstructor = TypeAnalyzer.HasParameterlessConstructor(namedType);
             
             // Check trust nullability
-            var trustNullability = namedType.GetAttributes()
+            bool trustNullability = namedType.GetAttributes()
                 .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerTrustNullabilityAttribute");
 
             implicitModel = new TypeModel(

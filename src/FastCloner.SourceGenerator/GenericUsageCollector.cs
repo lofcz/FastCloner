@@ -15,8 +15,8 @@ internal static class GenericUsageCollector
 
     public static EquatableArray<GenericUsage> Collect(GeneratorSyntaxContext context, CancellationToken cancellationToken)
     {
-        var node = (GenericNameSyntax)context.Node;
-        var symbol = context.SemanticModel.GetSymbolInfo(node, cancellationToken).Symbol as INamedTypeSymbol;
+        GenericNameSyntax node = (GenericNameSyntax)context.Node;
+        INamedTypeSymbol? symbol = context.SemanticModel.GetSymbolInfo(node, cancellationToken).Symbol as INamedTypeSymbol;
 
         if (symbol == null || !symbol.IsGenericType)
             return EquatableArray<GenericUsage>.Empty;
@@ -26,15 +26,15 @@ internal static class GenericUsageCollector
         if (!TypeAnalyzer.HasClonableAttribute(symbol.OriginalDefinition))
             return EquatableArray<GenericUsage>.Empty;
 
-        var usages = new List<GenericUsage>();
-        var compilation = context.SemanticModel.Compilation;
+        List<GenericUsage> usages = [];
+        Compilation compilation = context.SemanticModel.Compilation;
 
         // Nullability context at usage site
-        var nullability = context.SemanticModel.GetNullableContext(node.SpanStart).HasFlag(NullableContext.Enabled);
+        bool nullability = context.SemanticModel.GetNullableContext(node.SpanStart).HasFlag(NullableContext.Enabled);
 
-        foreach (var typeArg in symbol.TypeArguments)
+        foreach (ITypeSymbol? typeArg in symbol.TypeArguments)
         {
-            var usage = GenericTypeAnalyzer.Analyze(symbol, typeArg, compilation, nullability);
+            GenericUsage? usage = GenericTypeAnalyzer.Analyze(symbol, typeArg, compilation, nullability);
             if (usage.HasValue)
             {
                 usages.Add(usage.Value);

@@ -18,8 +18,8 @@ internal static class CircularReferenceAnalyzer
         }
         
         // Build a set of all reference types that can be reached from this type's MEMBERS
-        var reachableTypes = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
-        var visited = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+        HashSet<ITypeSymbol> reachableTypes = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+        HashSet<ITypeSymbol> visited = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
         
         log.Add($"  -> Collecting reachable reference types from {rootType.Name} members...");
         
@@ -30,7 +30,7 @@ internal static class CircularReferenceAnalyzer
         CollectReachableReferenceTypesFromMembers(rootType, reachableTypes, visited, compilation, log, rootType);
         
         log.Add($"  -> Found {reachableTypes.Count} reachable reference types:");
-        foreach (var type in reachableTypes)
+        foreach (ITypeSymbol? type in reachableTypes)
         {
             log.Add($"     - {type.ToDisplayString()}");
         }
@@ -49,24 +49,24 @@ internal static class CircularReferenceAnalyzer
     
     private static bool HasDirectSelfReference(INamedTypeSymbol type, INamedTypeSymbol rootType, Compilation compilation, List<string> log)
     {
-        foreach (var member in type.GetMembers())
+        foreach (ISymbol? member in type.GetMembers())
         {
             if (member.IsStatic || member.IsImplicitlyDeclared)
                 continue;
             
             ITypeSymbol? memberType = null;
-            if (member is IPropertySymbol property && property.GetMethod != null && property.SetMethod != null)
+            if (member is IPropertySymbol { GetMethod: not null, SetMethod: not null } property)
             {
                 memberType = property.Type;
             }
-            else if (member is IFieldSymbol field && !field.IsConst && !field.IsStatic)
+            else if (member is IFieldSymbol { IsConst: false, IsStatic: false } field)
             {
                 memberType = field.Type;
             }
             
             if (memberType != null)
             {
-                var underlyingMemberType = memberType.WithNullableAnnotation(NullableAnnotation.None);
+                ITypeSymbol underlyingMemberType = memberType.WithNullableAnnotation(NullableAnnotation.None);
                 if (SymbolEqualityComparer.Default.Equals(underlyingMemberType, rootType))
                 {
                     log.Add($"  -> Found direct self-reference: {member.Name} of type {rootType.Name}");
@@ -86,18 +86,18 @@ internal static class CircularReferenceAnalyzer
         List<string> log,
         INamedTypeSymbol rootType)
     {
-        foreach (var member in type.GetMembers())
+        foreach (ISymbol? member in type.GetMembers())
         {
             if (member.IsStatic || member.IsImplicitlyDeclared)
                 continue;
             
             ITypeSymbol? memberType = null;
-            if (member is IPropertySymbol property && property.GetMethod != null && property.SetMethod != null)
+            if (member is IPropertySymbol { GetMethod: not null, SetMethod: not null } property)
             {
                 memberType = property.Type;
                 log.Add($"     Analyzing property {member.Name}: {memberType.ToDisplayString()}");
             }
-            else if (member is IFieldSymbol field && !field.IsConst && !field.IsStatic)
+            else if (member is IFieldSymbol { IsConst: false, IsStatic: false } field)
             {
                 memberType = field.Type;
                 log.Add($"     Analyzing field {member.Name}: {memberType.ToDisplayString()}");
@@ -118,7 +118,7 @@ internal static class CircularReferenceAnalyzer
         List<string> log,
         INamedTypeSymbol rootType)
     {
-        var typeDisplayName = type.ToDisplayString();
+        string typeDisplayName = type.ToDisplayString();
         if (!visited.Add(type))
         {
             log.Add($"     [SKIP] {typeDisplayName} (already visited)");
@@ -137,7 +137,7 @@ internal static class CircularReferenceAnalyzer
             return;
         }
         
-        var underlyingType = type.WithNullableAnnotation(NullableAnnotation.None);
+        ITypeSymbol underlyingType = type.WithNullableAnnotation(NullableAnnotation.None);
         
         if (underlyingType is INamedTypeSymbol namedType)
         {
@@ -159,7 +159,7 @@ internal static class CircularReferenceAnalyzer
         }
         else if (TypeAnalyzer.IsCollectionType(type))
         {
-            var elementType = TypeAnalyzer.GetCollectionElementType(type, compilation);
+            ITypeSymbol? elementType = TypeAnalyzer.GetCollectionElementType(type, compilation);
             if (elementType != null)
             {
                 log.Add($"        -> Collection element type: {elementType.ToDisplayString()}");
@@ -168,7 +168,7 @@ internal static class CircularReferenceAnalyzer
         }
         else if (TypeAnalyzer.IsDictionaryType(type))
         {
-            var dictTypes = TypeAnalyzer.GetDictionaryTypes(type, compilation);
+            (ITypeSymbol KeyType, ITypeSymbol ValueType)? dictTypes = TypeAnalyzer.GetDictionaryTypes(type, compilation);
             if (dictTypes.HasValue)
             {
                 log.Add($"        -> Dictionary key type: {dictTypes.Value.KeyType.ToDisplayString()}");
@@ -179,7 +179,7 @@ internal static class CircularReferenceAnalyzer
         }
         else if (type is IArrayTypeSymbol arrayType)
         {
-            var elementType = arrayType.ElementType;
+            ITypeSymbol elementType = arrayType.ElementType;
             log.Add($"        -> Array element type: {elementType.ToDisplayString()}");
             CollectReachableReferenceTypes(elementType, reachableTypes, visited, compilation, log, rootType);
         }
@@ -194,24 +194,24 @@ internal static class CircularReferenceAnalyzer
             return false;
         }
         
-        foreach (var member in namedType.GetMembers())
+        foreach (ISymbol? member in namedType.GetMembers())
         {
             if (member.IsStatic || member.IsImplicitlyDeclared)
                 continue;
             
             ITypeSymbol? memberType = null;
-            if (member is IPropertySymbol property && property.GetMethod != null && property.SetMethod != null)
+            if (member is IPropertySymbol { GetMethod: not null, SetMethod: not null } property)
             {
                 memberType = property.Type;
             }
-            else if (member is IFieldSymbol field && !field.IsConst && !field.IsStatic)
+            else if (member is IFieldSymbol { IsConst: false, IsStatic: false } field)
             {
                 memberType = field.Type;
             }
             
             if (memberType != null)
             {
-                var underlyingType = memberType.WithNullableAnnotation(NullableAnnotation.None);
+                ITypeSymbol underlyingType = memberType.WithNullableAnnotation(NullableAnnotation.None);
                 if (SymbolEqualityComparer.Default.Equals(underlyingType, target))
                 {
                     log.Add($"        [MATCH] {member.Name} references {target.ToDisplayString()}");
@@ -220,10 +220,10 @@ internal static class CircularReferenceAnalyzer
                 
                 if (TypeAnalyzer.IsCollectionType(memberType))
                 {
-                    var elementType = TypeAnalyzer.GetCollectionElementType(memberType, compilation);
+                    ITypeSymbol? elementType = TypeAnalyzer.GetCollectionElementType(memberType, compilation);
                     if (elementType != null)
                     {
-                        var underlyingElementType = elementType.WithNullableAnnotation(NullableAnnotation.None);
+                        ITypeSymbol underlyingElementType = elementType.WithNullableAnnotation(NullableAnnotation.None);
                         if (SymbolEqualityComparer.Default.Equals(underlyingElementType, target))
                         {
                             log.Add($"        [MATCH] Collection {member.Name} contains {target.ToDisplayString()}");

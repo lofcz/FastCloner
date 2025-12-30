@@ -77,25 +77,32 @@ internal readonly record struct MemberModel(
     bool IsValueType,                // Whether the member type is a value type (struct)
     bool IsInitOnly,                 // Whether the property has init accessor (requires object initializer)
     bool IsRequired,                 // Whether the member is required (must be in object initializer)
-    bool HasPrivateSetter,           // Whether the setter is private/protected (may not be accessible from extension class)
     int ArrayRank,                   // For multi-dimensional arrays: the rank (2 for T[,], 3 for T[,,], etc.)
-    bool IsNullable                  // Whether the member is explicitly nullable (annotated with ?)
+    bool IsNullable,                 // Whether the member is explicitly nullable (annotated with ?)
+    // Property accessor capabilities
+    bool HasGetter,                  // Whether the property has a getter
+    bool HasSetter,                  // Whether the property has a setter (regular, not init-only)
+    bool SetterIsAccessible          // Whether the setter is publicly accessible (not private/protected)
 ) : IEquatable<MemberModel>
 {
     public static MemberModel Create(IPropertySymbol property, bool nullabilityEnabled, Compilation compilation)
     {
-        var (typeKind, elementName, keyName, valueName, elementSafe, elementClonable, keySafe, keyClonable, valSafe, valClonable, requiresFastCloner, collectionKind, concreteType, arrayRank) 
+        (MemberTypeKind typeKind, string? elementName, string? keyName, string? valueName, bool elementSafe, bool elementClonable, bool keySafe, bool keyClonable, bool valSafe, bool valClonable, bool requiresFastCloner, CollectionKind collectionKind, string? concreteType, int arrayRank) 
             = AnalyzeType(property.Type, compilation);
         
         // Check if the property has an init-only setter (C# 9+)
-        var isInitOnly = property.SetMethod?.IsInitOnly ?? false;
+        bool isInitOnly = property.SetMethod?.IsInitOnly ?? false;
         
-        // Check if the setter is not publicly accessible
-        var hasPrivateSetter = property.SetMethod != null && 
-                               property.SetMethod.DeclaredAccessibility != Accessibility.Public;
+        // Property accessor capabilities
+        bool hasGetter = property.GetMethod != null;
+        bool hasSetter = property.SetMethod != null && !isInitOnly;
+        bool setterIsAccessible = property.SetMethod != null &&
+                                  (property.SetMethod.DeclaredAccessibility == Accessibility.Public ||
+                                   property.SetMethod.DeclaredAccessibility == Accessibility.Internal ||
+                                   property.SetMethod.DeclaredAccessibility == Accessibility.ProtectedOrInternal);
         
         // Check nullability
-        var isNullable = property.NullableAnnotation == NullableAnnotation.Annotated;
+        bool isNullable = property.NullableAnnotation == NullableAnnotation.Annotated;
         
         return new MemberModel(
             property.Name,
@@ -119,18 +126,25 @@ internal readonly record struct MemberModel(
             property.Type.IsValueType,
             isInitOnly,
             property.IsRequired,
-            hasPrivateSetter,
             arrayRank,
-            isNullable);
+            isNullable,
+            hasGetter,
+            hasSetter,
+            setterIsAccessible);
     }
 
     public static MemberModel Create(IFieldSymbol field, bool nullabilityEnabled, Compilation compilation)
     {
-        var (typeKind, elementName, keyName, valueName, elementSafe, elementClonable, keySafe, keyClonable, valSafe, valClonable, requiresFastCloner, collectionKind, concreteType, arrayRank) 
+        (MemberTypeKind typeKind, string? elementName, string? keyName, string? valueName, bool elementSafe, bool elementClonable, bool keySafe, bool keyClonable, bool valSafe, bool valClonable, bool requiresFastCloner, CollectionKind collectionKind, string? concreteType, int arrayRank) 
             = AnalyzeType(field.Type, compilation);
         
         // Check nullability
-        var isNullable = field.NullableAnnotation == NullableAnnotation.Annotated;
+        bool isNullable = field.NullableAnnotation == NullableAnnotation.Annotated;
+        
+        // Field accessor capabilities - fields always have getters, setters depend on readonly
+        bool hasGetter = true;
+        bool hasSetter = !field.IsReadOnly;
+        bool setterIsAccessible = !field.IsReadOnly; // If not readonly, it's accessible (we only collect public fields)
         
         return new MemberModel(
             field.Name,
@@ -154,9 +168,11 @@ internal readonly record struct MemberModel(
             field.Type.IsValueType,
             false,  // Fields don't have init-only semantics
             field.IsRequired,
-            false,  // Fields accessibility is checked elsewhere (we only collect accessible fields)
             arrayRank,
-            isNullable);
+            isNullable,
+            hasGetter,
+            hasSetter,
+            setterIsAccessible);
     }
     
     private static (MemberTypeKind kind, string? elem, string? key, string? val, bool elemSafe, bool elemClon, bool keySafe, bool keyClon, bool valSafe, bool valClon, bool requiresFastCloner, CollectionKind collKind, string? concreteType, int arrayRank) 
@@ -190,43 +206,43 @@ internal readonly record struct MemberModel(
         // IMPORTANT: Check array BEFORE collection (arrays implement ICollection<T>)
         if (type is IArrayTypeSymbol arrayType)
         {
-            var elemName = arrayType.ElementType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            var elemSafe = TypeAnalyzer.IsSafeType(arrayType.ElementType, compilation);
-            var elemClon = TypeAnalyzer.HasClonableAttribute(arrayType.ElementType);
-            var rank = arrayType.Rank;
+            string elemName = arrayType.ElementType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            bool elemSafe = TypeAnalyzer.IsSafeType(arrayType.ElementType, compilation);
+            bool elemClon = TypeAnalyzer.HasClonableAttribute(arrayType.ElementType);
+            int rank = arrayType.Rank;
             
             // Multi-dimensional arrays (int[,], int[,,], etc.)
             if (rank > 1)
             {
                 // Multi-dimensional arrays: if element is not safe and not clonable, we need FastCloner to deep clone elements
-                var requiresFastCloner = !elemSafe && !elemClon;
+                bool requiresFastCloner = !elemSafe && !elemClon;
                 return (MemberTypeKind.MultiDimArray, elemName, null, null, elemSafe, elemClon, false, false, false, false, requiresFastCloner, CollectionKind.None, null, rank);
             }
             
             // Single-dimensional arrays: if element is not safe and not clonable, we need FastCloner to deep clone it
-            var requiresFastClonerSingle = !elemSafe && !elemClon;
+            bool requiresFastClonerSingle = !elemSafe && !elemClon;
             return (MemberTypeKind.Array, elemName, null, null, elemSafe, elemClon, false, false, false, false, requiresFastClonerSingle, CollectionKind.None, null, 1);
         }
         
         // Check dictionary BEFORE collection (dictionaries implement ICollection<KeyValuePair<K,V>>)
         if (TypeAnalyzer.IsDictionaryType(type))
         {
-            var dictTypes = TypeAnalyzer.GetDictionaryTypes(type, compilation);
+            (ITypeSymbol KeyType, ITypeSymbol ValueType)? dictTypes = TypeAnalyzer.GetDictionaryTypes(type, compilation);
             if (dictTypes.HasValue)
             {
-                var keyName = dictTypes.Value.KeyType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-                var valName = dictTypes.Value.ValueType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                string keyName = dictTypes.Value.KeyType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                string valName = dictTypes.Value.ValueType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
                 
-                var keySafe = TypeAnalyzer.IsSafeType(dictTypes.Value.KeyType, compilation);
-                var keyClon = TypeAnalyzer.HasClonableAttribute(dictTypes.Value.KeyType);
-                var valSafe = TypeAnalyzer.IsSafeType(dictTypes.Value.ValueType, compilation);
-                var valClon = TypeAnalyzer.HasClonableAttribute(dictTypes.Value.ValueType);
+                bool keySafe = TypeAnalyzer.IsSafeType(dictTypes.Value.KeyType, compilation);
+                bool keyClon = TypeAnalyzer.HasClonableAttribute(dictTypes.Value.KeyType);
+                bool valSafe = TypeAnalyzer.IsSafeType(dictTypes.Value.ValueType, compilation);
+                bool valClon = TypeAnalyzer.HasClonableAttribute(dictTypes.Value.ValueType);
                 
                 // If key or value is not safe/clonable, we might need FastCloner
-                var requiresFastCloner = (!keySafe && !keyClon) || (!valSafe && !valClon);
+                bool requiresFastCloner = (!keySafe && !keyClon) || (!valSafe && !valClon);
                 
-                var collKind = TypeAnalyzer.GetCollectionKind(type);
-                var concreteType = TypeAnalyzer.GetConcreteTypeForCollection(type, collKind, $"{keyName}, {valName}");
+                CollectionKind collKind = TypeAnalyzer.GetCollectionKind(type);
+                string concreteType = TypeAnalyzer.GetConcreteTypeForCollection(type, collKind, $"{keyName}, {valName}");
 
                 return (MemberTypeKind.Dictionary, null, keyName, valName, false, false, keySafe, keyClon, valSafe, valClon, requiresFastCloner, collKind, concreteType, 0);
             }
@@ -235,15 +251,15 @@ internal readonly record struct MemberModel(
         // Check collection (must be after array and dictionary)
         if (TypeAnalyzer.IsCollectionType(type))
         {
-            var elemType = TypeAnalyzer.GetCollectionElementType(type, compilation);
-            var elemName = elemType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            var elemSafe = elemType != null && TypeAnalyzer.IsSafeType(elemType, compilation);
-            var elemClon = elemType != null && TypeAnalyzer.HasClonableAttribute(elemType);
+            ITypeSymbol? elemType = TypeAnalyzer.GetCollectionElementType(type, compilation);
+            string? elemName = elemType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            bool elemSafe = elemType != null && TypeAnalyzer.IsSafeType(elemType, compilation);
+            bool elemClon = elemType != null && TypeAnalyzer.HasClonableAttribute(elemType);
             // If element is not safe and not clonable, we need FastCloner
-            var requiresFastCloner = !elemSafe && !elemClon;
+            bool requiresFastCloner = !elemSafe && !elemClon;
             
-            var collKind = TypeAnalyzer.GetCollectionKind(type);
-            var concreteType = TypeAnalyzer.GetConcreteTypeForCollection(type, collKind, elemName!);
+            CollectionKind collKind = TypeAnalyzer.GetCollectionKind(type);
+            string concreteType = TypeAnalyzer.GetConcreteTypeForCollection(type, collKind, elemName!);
             
             return (MemberTypeKind.Collection, elemName, null, null, elemSafe, elemClon, false, false, false, false, requiresFastCloner, collKind, concreteType, 0);
         }

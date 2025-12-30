@@ -9,7 +9,7 @@ internal static class ContextCollector
 {
     public static Result<ContextModel> Collect(GeneratorAttributeSyntaxContext context, System.Threading.CancellationToken cancellationToken)
     {
-        var symbol = context.TargetSymbol as INamedTypeSymbol;
+        INamedTypeSymbol? symbol = context.TargetSymbol as INamedTypeSymbol;
         if (symbol == null)
         {
             return Result<ContextModel>.Error(Diagnostic.Create(
@@ -18,7 +18,7 @@ internal static class ContextCollector
         }
 
         // Verify inheritance from FastClonerContext
-        var baseType = symbol.BaseType;
+        INamedTypeSymbol? baseType = symbol.BaseType;
         bool inheritsFromContext = false;
         while (baseType != null)
         {
@@ -38,27 +38,27 @@ internal static class ContextCollector
                 symbol.Locations.FirstOrDefault() ?? Location.None));
         }
 
-        var registeredTypes = new List<TypeModel>();
-        var compilation = context.SemanticModel.Compilation;
-        var nullabilityEnabled = context.SemanticModel.GetNullableContext(context.TargetNode.SpanStart)
+        List<TypeModel> registeredTypes = [];
+        Compilation compilation = context.SemanticModel.Compilation;
+        bool nullabilityEnabled = context.SemanticModel.GetNullableContext(context.TargetNode.SpanStart)
                         .HasFlag(NullableContext.Enabled);
         
         // Cache to prevent re-analyzing same types in recursion (shared across this context analysis)
-        var implicitCache = new Dictionary<ITypeSymbol, TypeModel?>(SymbolEqualityComparer.Default);
-        var processingStack = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+        Dictionary<ITypeSymbol, TypeModel?> implicitCache = new Dictionary<ITypeSymbol, TypeModel?>(SymbolEqualityComparer.Default);
+        HashSet<ITypeSymbol> processingStack = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
 
-        foreach (var attr in symbol.GetAttributes())
+        foreach (AttributeData? attr in symbol.GetAttributes())
         {
             if (attr.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerRegisterAttribute")
             {
                 if (attr.ConstructorArguments.Length > 0)
                 {
-                    var typesArg = attr.ConstructorArguments[0];
-                    var typesToProcess = new List<ITypeSymbol>();
+                    TypedConstant typesArg = attr.ConstructorArguments[0];
+                    List<ITypeSymbol> typesToProcess = [];
 
                     if (typesArg.Kind == TypedConstantKind.Array)
                     {
-                        foreach (var typedConst in typesArg.Values)
+                        foreach (TypedConstant typedConst in typesArg.Values)
                         {
                             if (typedConst.Value is ITypeSymbol type)
                             {
@@ -71,15 +71,15 @@ internal static class ContextCollector
                         typesToProcess.Add(type);
                     }
 
-                    foreach (var typeToRegister in typesToProcess)
+                    foreach (ITypeSymbol? typeToRegister in typesToProcess)
                     {
-                        if (ImplicitTypeAnalyzer.TryAnalyze(typeToRegister, compilation, nullabilityEnabled, implicitCache, processingStack, out var model))
+                        if (ImplicitTypeAnalyzer.TryAnalyze(typeToRegister, compilation, nullabilityEnabled, implicitCache, processingStack, out TypeModel? model))
                         {
                             if (model != null)
                             {
                                 registeredTypes.Add(model);
                                 // Also add related types!
-                                foreach (var rel in model.RelatedTypes)
+                                foreach (TypeModel? rel in model.RelatedTypes)
                                 {
                                     registeredTypes.Add(rel);
                                 }
@@ -91,13 +91,13 @@ internal static class ContextCollector
         }
 
         // Deduplicate
-        var uniqueTypes = registeredTypes.GroupBy(t => t.FullyQualifiedName).Select(g => g.First()).ToArray();
+        TypeModel[] uniqueTypes = registeredTypes.GroupBy(t => t.FullyQualifiedName).Select(g => g.First()).ToArray();
 
         // Check if FastCloner library is available (same check as TypeModelFactory)
-        var isFastClonerAvailable = compilation.GetTypeByMetadataName("FastCloner.FastCloner") != null;
+        bool isFastClonerAvailable = compilation.GetTypeByMetadataName("FastCloner.FastCloner") != null;
         
         // Check if type has SimulateNoRuntime attribute (for testing)
-        var hasSimulateNoRuntime = symbol.GetAttributes()
+        bool hasSimulateNoRuntime = symbol.GetAttributes()
             .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerSimulateNoRuntimeAttribute");
         
         if (hasSimulateNoRuntime)
@@ -107,7 +107,7 @@ internal static class ContextCollector
 
         // Check if NotNullIfNotNullAttribute exists in System.Diagnostics.CodeAnalysis
         // Generate attributes only if the built-in attribute is available
-        var hasNotNullIfNotNullAttribute = compilation.GetTypeByMetadataName("System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute") != null;
+        bool hasNotNullIfNotNullAttribute = compilation.GetTypeByMetadataName("System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute") != null;
 
         return Result<ContextModel>.Success(new ContextModel(
             symbol.Name,
