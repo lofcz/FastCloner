@@ -561,6 +561,147 @@ public class ShallowAttributeTests
         public OwnedData? OwnedData { get; set; }
     }
 
+    /// <summary>
+    /// Test class using C# 14 field keyword with [FastClonerShallow] attribute.
+    /// The field keyword generates the same &lt;PropertyName&gt;k__BackingField pattern.
+    /// </summary>
+    public class ClassWithFieldKeywordShallow
+    {
+        [FastClonerShallow]
+        public SharedState? ShallowWithValidation
+        {
+            get => field;
+            set => field = value; // Using field keyword
+        }
+        
+        public string NormalProperty
+        {
+            get => field ?? string.Empty;
+            set => field = value?.Trim();
+        }
+        
+        public OwnedData? DeepClonedData { get; set; }
+    }
+
+    /// <summary>
+    /// Test class using C# 14 field keyword with validation logic.
+    /// </summary>
+    public class ClassWithFieldKeywordValidation
+    {
+        [FastClonerShallow]
+        public SharedState? Config
+        {
+            get => field;
+            set
+            {
+                ArgumentNullException.ThrowIfNull(value);
+                field = value;
+            }
+        }
+        
+        public int Counter
+        {
+            get => field;
+            set => field = value < 0 ? 0 : value;
+        }
+    }
+
+    #endregion
+
+    #region C# 14 Field Keyword Tests
+
+    [Test]
+    public void Reflection_FieldKeyword_ShallowAttribute_ShouldBeRespected()
+    {
+        // Arrange
+        var sharedState = new SharedState
+        {
+            ConfigValue = "FieldKeywordTest",
+            Version = 42
+        };
+        
+        var ownedData = new OwnedData
+        {
+            Value = "Owned",
+            Count = 100
+        };
+        
+        var original = new ClassWithFieldKeywordShallow
+        {
+            ShallowWithValidation = sharedState,
+            NormalProperty = "  trimmed  ",
+            DeepClonedData = ownedData
+        };
+
+        // Act
+        var clone = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.That(clone, Is.Not.Null);
+        
+        // Property with [FastClonerShallow] and field keyword should preserve reference
+        Assert.That(clone!.ShallowWithValidation, Is.SameAs(sharedState));
+        
+        // Normal property should be copied
+        Assert.That(clone.NormalProperty, Is.EqualTo("trimmed"));
+        
+        // Deep cloned data should be a different reference
+        Assert.That(clone.DeepClonedData, Is.Not.SameAs(ownedData));
+        Assert.That(clone.DeepClonedData!.Value, Is.EqualTo("Owned"));
+    }
+
+    [Test]
+    public void Reflection_FieldKeyword_WithValidation_ShallowAttribute_ShouldWork()
+    {
+        // Arrange
+        var config = new SharedState
+        {
+            ConfigValue = "ValidationTest",
+            Version = 1
+        };
+        
+        var original = new ClassWithFieldKeywordValidation
+        {
+            Config = config,
+            Counter = -5 // Will be clamped to 0
+        };
+
+        // Act
+        var clone = FastCloner.DeepClone(original);
+
+        // Assert
+        Assert.That(clone, Is.Not.Null);
+        
+        // Config with [FastClonerShallow] should preserve reference
+        Assert.That(clone!.Config, Is.SameAs(config));
+        
+        // Counter should be cloned (value was already clamped to 0)
+        Assert.That(clone.Counter, Is.EqualTo(0));
+    }
+
+    [Test]
+    public void Reflection_FieldKeyword_ModifyingShallowClonedReference_AffectsOriginal()
+    {
+        // Arrange
+        var sharedState = new SharedState
+        {
+            ConfigValue = "Original",
+            Version = 1
+        };
+        
+        var original = new ClassWithFieldKeywordShallow
+        {
+            ShallowWithValidation = sharedState
+        };
+
+        // Act
+        var clone = FastCloner.DeepClone(original);
+        clone!.ShallowWithValidation!.ConfigValue = "Modified";
+
+        // Assert - modifying through clone should affect original
+        Assert.That(sharedState.ConfigValue, Is.EqualTo("Modified"));
+    }
+
     #endregion
 
     #region Source Generator (AOT) Cloning Tests
