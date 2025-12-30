@@ -84,6 +84,30 @@ TestPropsWithIgnored original = new TestPropsWithIgnored { A = 42, B = "Test val
 TestPropsWithIgnored clone = original.DeepClone(); // clone.B is null (default value of a given type)
 ```
 
+### Shallow Cloning Members
+
+When you need to copy a reference directly without deep cloning its contents, use `[FastClonerShallow]`.
+
+```csharp
+public class TreeNode
+{
+    public string Name { get; set; }
+    
+    [FastClonerShallow] // <-- reference copied directly
+    public TreeNode Parent { get; set; }
+    
+    public List<TreeNode> Children { get; set; }
+}
+
+TreeNode child = new TreeNode { 
+    Name = "Child", 
+    Parent = new TreeNode { Name = "Root" } 
+};
+TreeNode clone = child.DeepClone();
+```
+
+This differs from `[FastClonerIgnore]` which leaves the member as `null`/default. With `[FastClonerShallow]`, the original reference is preserved.
+
 You might also need to exclude certain types from ever being cloned. To do that, put offending types on a blacklist:
 ```cs
 FastCloner.FastCloner.IgnoreType(typeof(PropertyChangedEventHandler)); // or FastCloner.FastCloner.IgnoreTypes([ .. ])

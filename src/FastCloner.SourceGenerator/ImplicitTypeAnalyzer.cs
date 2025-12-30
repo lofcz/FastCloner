@@ -103,7 +103,8 @@ internal static class ImplicitTypeAnalyzer
                             IsNullable: false,
                             HasGetter: true,
                             HasSetter: true,
-                            SetterIsAccessible: true
+                            SetterIsAccessible: true,
+                            IsShallowClone: false
                         );
                         return true;
                     }

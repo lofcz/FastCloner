@@ -21,6 +21,7 @@ internal static class FastClonerCache
     private static readonly ClrCache<Dictionary<string, Type>> ignoredEventInfoCache = new ClrCache<Dictionary<string, Type>>();
     private static readonly ClrCache<List<MemberInfo>> allMembersCache = new ClrCache<List<MemberInfo>>();
     private static readonly GenericClrCache<MemberInfo, bool> memberIgnoreStatusCache = new GenericClrCache<MemberInfo, bool>();
+    private static readonly GenericClrCache<MemberInfo, bool> memberShallowStatusCache = new GenericClrCache<MemberInfo, bool>();
     private static readonly ClrCache<bool> typeContainsIgnoredMembersCache = new ClrCache<bool>();
     private static readonly ClrCache<object> specialTypesCache = new ClrCache<object>();
     private static readonly ClrCache<bool> isTypeSafeHandleCache = new ClrCache<bool>();
@@ -34,6 +35,7 @@ internal static class FastClonerCache
     public static Dictionary<string, Type> GetOrAddIgnoredEventInfo(Type type, Func<Type, Dictionary<string, Type>> valueFactory) => ignoredEventInfoCache.GetOrAdd(type, valueFactory);
     public static List<MemberInfo> GetOrAddAllMembers(Type type, Func<Type, List<MemberInfo>> valueFactory) => allMembersCache.GetOrAdd(type, valueFactory);
     public static bool GetOrAddMemberIgnoreStatus(MemberInfo memberInfo, Func<MemberInfo, bool> valueFactory) => memberIgnoreStatusCache.GetOrAdd(memberInfo, valueFactory);
+    public static bool GetOrAddMemberShallowStatus(MemberInfo memberInfo, Func<MemberInfo, bool> valueFactory) => memberShallowStatusCache.GetOrAdd(memberInfo, valueFactory);
     public static bool GetOrAddTypeContainsIgnoredMembers(Type type, Func<Type, bool> valueFactory)
     {
         return type.IsValueType && typeContainsIgnoredMembersCache.GetOrAdd(type, valueFactory);
@@ -55,6 +57,7 @@ internal static class FastClonerCache
         ignoredEventInfoCache.Clear();
         allMembersCache.Clear();
         memberIgnoreStatusCache.Clear();
+        memberShallowStatusCache.Clear();
         typeContainsIgnoredMembersCache.Clear();
         specialTypesCache.Clear();
         isTypeSafeHandleCache.Clear();

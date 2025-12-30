@@ -18,6 +18,12 @@ internal static class MemberCloneGenerator
             case { IsProperty: true, HasGetter: true, HasSetter: false, IsInitOnly: false }:
                 return string.Empty;
             default:
+                // Handle shallow clone - direct reference copy (before checking TypeKind)
+                if (member.IsShallowClone)
+                {
+                    return $"{memberName} = {sourceVar}.{memberName}";
+                }
+                
                 switch (member.TypeKind)
                 {
                     case MemberTypeKind.Safe:
@@ -118,6 +124,13 @@ internal static class MemberCloneGenerator
                 WriteGetterOnlyCollectionPopulation(context, member, resultVar, sourceVar, stateVar);
                 return;
             default:
+                // Handle shallow clone - direct reference copy (before checking TypeKind)
+                if (member.IsShallowClone)
+                {
+                    sb.AppendLine($"            {resultVar}.{memberName} = {sourceVar}.{memberName};");
+                    return;
+                }
+                
                 switch (member.TypeKind)
                 {
                     case MemberTypeKind.Safe:

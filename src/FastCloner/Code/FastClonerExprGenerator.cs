@@ -37,6 +37,33 @@ internal static class FastClonerExprGenerator
         });
     }
 
+    private static bool MemberIsShallow(MemberInfo memberInfo)
+    {
+        return FastClonerCache.GetOrAddMemberShallowStatus(memberInfo, mi =>
+        {
+            // Check if the member itself has the attribute
+            FastClonerShallowAttribute? fcShallow = mi.GetCustomAttribute<FastClonerShallowAttribute>();
+            if (fcShallow is not null)
+                return true;
+            
+            // For backing fields of auto-implemented properties, check the property
+            // Backing fields are named like "<PropertyName>k__BackingField"
+            if (mi is FieldInfo field && field.Name.StartsWith("<") && field.Name.EndsWith(">k__BackingField"))
+            {
+                string propertyName = field.Name.Substring(1, field.Name.Length - ">k__BackingField".Length - 1);
+                PropertyInfo? property = field.DeclaringType?.GetProperty(propertyName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                if (property != null)
+                {
+                    FastClonerShallowAttribute? propShallow = property.GetCustomAttribute<FastClonerShallowAttribute>();
+                    if (propShallow is not null)
+                        return true;
+                }
+            }
+            
+            return false;
+        });
+    }
+
     internal static bool CalculateTypeContainsIgnoredMembers(Type type)
     {
         IEnumerable<MemberInfo> members = FastClonerCache.GetOrAddAllMembers(type, GetAllMembers);
@@ -113,6 +140,20 @@ internal static class FastClonerExprGenerator
 
             if (FastClonerSafeTypes.CanReturnSameObject(memberType))
             {
+                continue;
+            }
+
+            // Check if member should be shallow cloned
+            if (MemberIsShallow(member))
+            {
+                // For shallow clone, just copy the reference/value directly
+                Expression originalValue = Expression.MakeMemberAccess(fromLocal, member);
+                expressionList.Add(Expression.Call(
+                    Expression.Constant(fieldInfo),
+                    fieldSetMethod,
+                    boxedToLocal,
+                    Expression.Convert(originalValue, typeof(object))
+                ));
                 continue;
             }
 
@@ -428,6 +469,41 @@ internal static class FastClonerExprGenerator
                         ));
                     }
 
+                    continue;
+                }
+
+                // Check if member should be shallow cloned (copy reference directly)
+                if (MemberIsShallow(member))
+                {
+                    MemberExpression shallowSourceValue = Expression.MakeMemberAccess(fromLocal, member);
+                    switch (member)
+                    {
+                        case FieldInfo fieldInfo:
+                        {
+                            bool isReadonly = readonlyFields.GetOrAdd(fieldInfo, f => f.IsInitOnly);
+                            if (isReadonly)
+                            {
+                                if (!skipReadonly)
+                                {
+                                    expressionList.Add(Expression.Call(
+                                        Expression.Constant(fieldInfo),
+                                        fieldSetMethod,
+                                        Expression.Convert(toLocal, typeof(object)),
+                                        Expression.Convert(shallowSourceValue, typeof(object))));
+                                }
+                            }
+                            else
+                            {
+                                expressionList.Add(Expression.Assign(Expression.Field(toLocal, fieldInfo), shallowSourceValue));
+                            }
+                            break;
+                        }
+                        case PropertyInfo { CanWrite: true }:
+                        {
+                            expressionList.Add(Expression.Assign(Expression.MakeMemberAccess(toLocal, member), shallowSourceValue));
+                            break;
+                        }
+                    }
                     continue;
                 }
 

@@ -82,10 +82,11 @@ internal readonly record struct MemberModel(
     // Property accessor capabilities
     bool HasGetter,                  // Whether the property has a getter
     bool HasSetter,                  // Whether the property has a setter (regular, not init-only)
-    bool SetterIsAccessible          // Whether the setter is publicly accessible (not private/protected)
+    bool SetterIsAccessible,         // Whether the setter is publicly accessible (not private/protected)
+    bool IsShallowClone              // Whether the member should be shallow cloned (has [FastClonerShallow] attribute)
 ) : IEquatable<MemberModel>
 {
-    public static MemberModel Create(IPropertySymbol property, bool nullabilityEnabled, Compilation compilation)
+    public static MemberModel Create(IPropertySymbol property, bool nullabilityEnabled, Compilation compilation, bool isShallowClone = false)
     {
         (MemberTypeKind typeKind, string? elementName, string? keyName, string? valueName, bool elementSafe, bool elementClonable, bool keySafe, bool keyClonable, bool valSafe, bool valClonable, bool requiresFastCloner, CollectionKind collectionKind, string? concreteType, int arrayRank) 
             = AnalyzeType(property.Type, compilation);
@@ -130,10 +131,11 @@ internal readonly record struct MemberModel(
             isNullable,
             hasGetter,
             hasSetter,
-            setterIsAccessible);
+            setterIsAccessible,
+            isShallowClone);
     }
 
-    public static MemberModel Create(IFieldSymbol field, bool nullabilityEnabled, Compilation compilation)
+    public static MemberModel Create(IFieldSymbol field, bool nullabilityEnabled, Compilation compilation, bool isShallowClone = false)
     {
         (MemberTypeKind typeKind, string? elementName, string? keyName, string? valueName, bool elementSafe, bool elementClonable, bool keySafe, bool keyClonable, bool valSafe, bool valClonable, bool requiresFastCloner, CollectionKind collectionKind, string? concreteType, int arrayRank) 
             = AnalyzeType(field.Type, compilation);
@@ -172,7 +174,8 @@ internal readonly record struct MemberModel(
             isNullable,
             hasGetter,
             hasSetter,
-            setterIsAccessible);
+            setterIsAccessible,
+            isShallowClone);
     }
     
     private static (MemberTypeKind kind, string? elem, string? key, string? val, bool elemSafe, bool elemClon, bool keySafe, bool keyClon, bool valSafe, bool valClon, bool requiresFastCloner, CollectionKind collKind, string? concreteType, int arrayRank) 

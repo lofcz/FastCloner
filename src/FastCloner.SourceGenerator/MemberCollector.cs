@@ -48,7 +48,8 @@ internal static class MemberCollector
                         {
                             if (!HasIgnoreAttribute(property, compilation))
                             {
-                                members.Add(new MemberAnalysis(MemberModel.Create(property, nullabilityEnabled, compilation), property.Type));
+                                bool isShallow = HasShallowAttribute(property, compilation);
+                                members.Add(new MemberAnalysis(MemberModel.Create(property, nullabilityEnabled, compilation, isShallow), property.Type));
                             }
                         }
                     }
@@ -59,7 +60,8 @@ internal static class MemberCollector
                     
                     if (!HasIgnoreAttribute(field, compilation))
                     {
-                        members.Add(new MemberAnalysis(MemberModel.Create(field, nullabilityEnabled, compilation), field.Type));
+                        bool isShallow = HasShallowAttribute(field, compilation);
+                        members.Add(new MemberAnalysis(MemberModel.Create(field, nullabilityEnabled, compilation, isShallow), field.Type));
                     }
                 }
             }
@@ -154,6 +156,23 @@ internal static class MemberCollector
             }
 
             if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, nonSerializedAttribute))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasShallowAttribute(ISymbol member, Compilation compilation)
+    {
+        INamedTypeSymbol? shallowAttribute = compilation.GetTypeByMetadataName("FastCloner.Code.FastClonerShallowAttribute");
+        if (shallowAttribute == null)
+            return false;
+
+        foreach (AttributeData? attr in member.GetAttributes())
+        {
+            if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, shallowAttribute))
             {
                 return true;
             }
