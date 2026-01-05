@@ -296,7 +296,7 @@ internal static class TypeAnalyzer
     public static bool HasClonableAttribute(ITypeSymbol type)
     {
         return type.GetAttributes()
-            .Any(a => GetFullMetadataName(a.AttributeClass) == "FastCloner.SourceGenerator.Shared.FastClonerClonableAttribute");
+            .Any(a => a.AttributeClass is not null && GetFullMetadataName(a.AttributeClass) == "FastCloner.SourceGenerator.Shared.FastClonerClonableAttribute");
     }
 
     /// <summary>

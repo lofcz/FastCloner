@@ -6,5 +6,5 @@ internal record ContextModel(
     string FullyQualifiedName,
     EquatableArray<TypeModel> RegisteredTypes,
     bool IsFastClonerAvailable,
-    bool HasNotNullIfNotNullAttribute
+    bool CodeAnalysisAvailable
 );

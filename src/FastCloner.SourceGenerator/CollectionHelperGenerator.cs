@@ -427,7 +427,7 @@ internal static class CollectionHelperGenerator
         if (context.IsFastClonerAvailable)
         {
             // Use runtime FastCloner for elements that require it (e.g. generics, unclonable types)
-            return $"({member.ElementTypeName}?)FastCloner.DeepClone({itemVar})";
+            return $"({member.ElementTypeName}?){CloneGeneratorContext.FastClonerDeepCloneCall(itemVar)}";
         }
 
         // Fallback to shallow copy (should be caught by diagnostics if it was required)
@@ -659,7 +659,7 @@ internal static class CollectionHelperGenerator
             }
             else if (context.IsFastClonerAvailable)
             {
-                keyExpr = $"({member.KeyTypeName})FastCloner.DeepClone(kvp.Key)";
+                keyExpr = $"({member.KeyTypeName}){CloneGeneratorContext.FastClonerDeepCloneCall("kvp.Key")}";
             }
         }
 
@@ -696,7 +696,7 @@ internal static class CollectionHelperGenerator
             }
             else if (context.IsFastClonerAvailable)
             {
-                valExpr = $"({member.ValueTypeName})FastCloner.DeepClone(kvp.Value)";
+                valExpr = $"({member.ValueTypeName}){CloneGeneratorContext.FastClonerDeepCloneCall("kvp.Value")}";
             }
         }
         
@@ -787,7 +787,7 @@ internal static class CollectionHelperGenerator
         else if (context.IsFastClonerAvailable)
         {
             // Use runtime FastCloner for elements that require it
-            itemExpr = $"({member.ElementTypeName})FastCloner.DeepClone(source[i])";
+            itemExpr = $"({member.ElementTypeName}){CloneGeneratorContext.FastClonerDeepCloneCall("source[i]")}";
         }
         else
         {
@@ -909,7 +909,7 @@ internal static class CollectionHelperGenerator
             else if (context.IsFastClonerAvailable)
             {
                 // Use runtime FastCloner for elements that require it
-                itemExpr = $"({member.ElementTypeName})FastCloner.DeepClone(source[{indexList}])";
+                itemExpr = $"({member.ElementTypeName}){CloneGeneratorContext.FastClonerDeepCloneCall($"source[{indexList}]")}";
             }
             else
             {

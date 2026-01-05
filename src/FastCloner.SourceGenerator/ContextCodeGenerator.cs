@@ -110,10 +110,9 @@ internal sealed class ContextCodeGenerator
         bool needsState = _needsState.ContainsKey(model.FullyQualifiedName) && _needsState[model.FullyQualifiedName];
 
         // Only generate NotNullIfNotNull attribute if it's available in the runtime (not from polyfill)
-        if (_model.HasNotNullIfNotNullAttribute)
-        {
-            _sb.AppendLine($"        [return: global::System.Diagnostics.CodeAnalysis.NotNullIfNotNull(\"source\")]");
-        }
+        string notNullAttr = CloneGeneratorContext.NotNullIfNotNullAttr(_model.CodeAnalysisAvailable);
+        if (!string.IsNullOrEmpty(notNullAttr))
+            _sb.AppendLine($"        {notNullAttr}");
         _sb.AppendLine($"        public {typeName}? Clone({typeName}? source)");
         _sb.AppendLine("        {");
         
@@ -203,7 +202,7 @@ internal sealed class ContextCodeGenerator
         // Fallback to reflection-based FastCloner if available, otherwise throw
         if (_model.IsFastClonerAvailable)
         {
-            _sb.AppendLine("            return FastCloner.DeepClone(input);");
+            _sb.AppendLine($"            return {CloneGeneratorContext.FastClonerDeepCloneCall("input")};");
         }
         else
         {
@@ -230,7 +229,7 @@ internal sealed class ContextCodeGenerator
     private void GenerateTryClone()
     {
         // Only generate NotNullWhen attribute if NotNullIfNotNull is available (they're in the same namespace)
-        if (_model.HasNotNullIfNotNullAttribute)
+        if (_model.CodeAnalysisAvailable)
         {
             _sb.AppendLine("        public override bool TryClone(object input, [global::System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? clone)");
         }

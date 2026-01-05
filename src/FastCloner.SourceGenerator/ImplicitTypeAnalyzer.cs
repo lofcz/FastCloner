@@ -215,7 +215,9 @@ internal static class ImplicitTypeAnalyzer
                 EquatableArray<TypeModel>.Empty, // Implicit types don't track derived types
                 nullabilityEnabled,
                 trustNullability,
-                hasParameterlessConstructor);
+                IsRefLikeType: false,
+                hasParameterlessConstructor,
+                CodeAnalysisAvailable: compilation.GetTypeByMetadataName("System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute") != null);
                 
             cache[type] = implicitModel;
             return true;

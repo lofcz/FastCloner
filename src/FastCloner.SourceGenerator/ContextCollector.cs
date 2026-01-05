@@ -105,9 +105,8 @@ internal static class ContextCollector
             isFastClonerAvailable = false;
         }
 
-        // Check if NotNullIfNotNullAttribute exists in System.Diagnostics.CodeAnalysis
-        // Generate attributes only if the built-in attribute is available
-        bool hasNotNullIfNotNullAttribute = compilation.GetTypeByMetadataName("System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute") != null;
+        // Check if System.Diagnostics.CodeAnalysis attributes are available
+        bool codeAnalysisAvailable = compilation.GetTypeByMetadataName("System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute") != null;
 
         return Result<ContextModel>.Success(new ContextModel(
             symbol.Name,
@@ -115,7 +114,7 @@ internal static class ContextCollector
             symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
             new EquatableArray<TypeModel>(uniqueTypes),
             isFastClonerAvailable,
-            hasNotNullIfNotNullAttribute
+            codeAnalysisAvailable
         ));
     }
 }

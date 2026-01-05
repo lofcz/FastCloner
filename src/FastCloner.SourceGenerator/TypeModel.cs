@@ -28,4 +28,5 @@ internal sealed record TypeModel(
     bool TrustNullability, // Whether to trust nullability annotations and skip null checks
     bool IsRefLikeType = false, // Whether the type is a ref struct (cannot be boxed/used as generic)
     bool HasParameterlessConstructor = true, // Whether the type has a public parameterless constructor (defaults to true for safety)
+    bool CodeAnalysisAvailable = false, // Whether System.Diagnostics.CodeAnalysis attributes are available
     EquatableArray<string> CircularAnalysisLog = default) : IEquatable<TypeModel>;

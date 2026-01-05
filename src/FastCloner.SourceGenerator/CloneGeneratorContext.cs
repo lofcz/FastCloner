@@ -223,4 +223,18 @@ internal sealed class CloneGeneratorContext
 
     private int _variableCounter = 0;
     public int GetNextVariableId() => System.Threading.Interlocked.Increment(ref _variableCounter);
+    
+    /// <summary>
+    /// Gets the fully-qualified call to FastCloner.DeepClone for use in generated code.
+    /// Uses global:: prefix to avoid namespace/class ambiguity (both are named "FastCloner").
+    /// </summary>
+    public static string FastClonerDeepCloneCall(string expression) => $"global::FastCloner.FastCloner.DeepClone({expression})";
+    
+    /// <summary>
+    /// Gets the NotNullIfNotNull attribute string for generated methods, or empty if unavailable.
+    /// </summary>
+    public static string NotNullIfNotNullAttr(bool isAvailable, string paramName = "source") 
+        => isAvailable 
+            ? $"[return: global::System.Diagnostics.CodeAnalysis.NotNullIfNotNull(\"{paramName}\")]" 
+            : "";
 }

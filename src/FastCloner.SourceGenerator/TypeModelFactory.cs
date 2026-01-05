@@ -28,6 +28,9 @@ internal static class TypeModelFactory
         bool trustNullability = symbol.GetAttributes()
             .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerTrustNullabilityAttribute");
         
+        // Check if System.Diagnostics.CodeAnalysis attributes are available (for nullability flow analysis)
+        bool codeAnalysisAvailable = compilation.GetTypeByMetadataName("System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute") != null;
+        
         if (hasSimulateNoRuntime)
         {
             isFastClonerAvailable = false;
@@ -279,6 +282,7 @@ internal static class TypeModelFactory
             trustNullability,
             isRefLikeType,
             hasParameterlessConstructor,
+            codeAnalysisAvailable,
             new EquatableArray<string>(circRefLog.ToArray()));
 
         return true;

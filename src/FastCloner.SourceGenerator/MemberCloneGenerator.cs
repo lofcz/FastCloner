@@ -212,47 +212,72 @@ internal static class MemberCloneGenerator
         if (member.TypeKind != MemberTypeKind.Collection && member.TypeKind != MemberTypeKind.Dictionary)
             return;
         
-        // Get the helper method that clones this collection type
-        string helperMethodName = context.GetOrCreateHelperMethodName(member);
-        bool memberNeedsState = MemberNeedsCircularRefTracking(context, member);
-        string actualStateVar = memberNeedsState ? stateVar : "null";
-        
-        // Generate unique variable name for the cloned collection
-        string clonedVar = $"cloned_{context.GetNextVariableId()}";
-        
         // Check if source collection is null
         sb.AppendLine($"            if ({sourceVar}.{memberName} != null)");
         sb.AppendLine("            {");
         
-        // Clone the source collection using the existing helper (handles all the complexity)
-        string helperCall = GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", memberNeedsState, actualStateVar);
-        sb.AppendLine($"                var {clonedVar} = {helperCall};");
-        sb.AppendLine($"                if ({clonedVar} != null)");
-        sb.AppendLine("                {");
+        // Clear target collection first
+        sb.AppendLine($"                {resultVar}.{memberName}.Clear();");
         
-        // Clear target and copy from cloned collection
-        sb.AppendLine($"                    {resultVar}.{memberName}.Clear();");
-        
-        if (member.TypeKind == MemberTypeKind.Dictionary)
+        // When [FastClonerShallow] is applied to getter-only collection, shallow clone items (just copy references)
+        if (member.IsShallowClone)
         {
-            // For dictionaries, copy key-value pairs
-            sb.AppendLine($"                    foreach (var kvp in {clonedVar})");
-            sb.AppendLine("                    {");
-            // Use indexer - works for all dictionary types including ConcurrentDictionary
-            sb.AppendLine($"                        {resultVar}.{memberName}[kvp.Key] = kvp.Value;");
-            sb.AppendLine("                    }");
+            if (member.TypeKind == MemberTypeKind.Dictionary)
+            {
+                // For dictionaries, copy key-value pairs directly (shallow)
+                sb.AppendLine($"                foreach (var kvp in {sourceVar}.{memberName})");
+                sb.AppendLine("                {");
+                sb.AppendLine($"                    {resultVar}.{memberName}[kvp.Key] = kvp.Value;");
+                sb.AppendLine("                }");
+            }
+            else
+            {
+                // For collections, add items directly (shallow)
+                string addMethod = GetAddMethodForCollection(member.CollectionKind);
+                sb.AppendLine($"                foreach (var item in {sourceVar}.{memberName})");
+                sb.AppendLine("                {");
+                sb.AppendLine($"                    {resultVar}.{memberName}.{addMethod}(item);");
+                sb.AppendLine("                }");
+            }
         }
         else
         {
-            // For collections, use the appropriate add method based on collection kind
-            string addMethod = GetAddMethodForCollection(member.CollectionKind);
-            sb.AppendLine($"                    foreach (var item in {clonedVar})");
-            sb.AppendLine("                    {");
-            sb.AppendLine($"                        {resultVar}.{memberName}.{addMethod}(item);");
-            sb.AppendLine("                    }");
+            // Deep clone: Get the helper method that clones this collection type
+            string helperMethodName = context.GetOrCreateHelperMethodName(member);
+            bool memberNeedsState = MemberNeedsCircularRefTracking(context, member);
+            string actualStateVar = memberNeedsState ? stateVar : "null";
+            
+            // Generate unique variable name for the cloned collection
+            string clonedVar = $"cloned_{context.GetNextVariableId()}";
+            
+            // Clone the source collection using the existing helper (handles all the complexity)
+            string helperCall = GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", memberNeedsState, actualStateVar);
+            sb.AppendLine($"                var {clonedVar} = {helperCall};");
+            sb.AppendLine($"                if ({clonedVar} != null)");
+            sb.AppendLine("                {");
+            
+            if (member.TypeKind == MemberTypeKind.Dictionary)
+            {
+                // For dictionaries, copy key-value pairs
+                sb.AppendLine($"                    foreach (var kvp in {clonedVar})");
+                sb.AppendLine("                    {");
+                // Use indexer - works for all dictionary types including ConcurrentDictionary
+                sb.AppendLine($"                        {resultVar}.{memberName}[kvp.Key] = kvp.Value;");
+                sb.AppendLine("                    }");
+            }
+            else
+            {
+                // For collections, use the appropriate add method based on collection kind
+                string addMethod = GetAddMethodForCollection(member.CollectionKind);
+                sb.AppendLine($"                    foreach (var item in {clonedVar})");
+                sb.AppendLine("                    {");
+                sb.AppendLine($"                        {resultVar}.{memberName}.{addMethod}(item);");
+                sb.AppendLine("                    }");
+            }
+            
+            sb.AppendLine("                }");
         }
         
-        sb.AppendLine("                }");
         sb.AppendLine("            }");
     }
     

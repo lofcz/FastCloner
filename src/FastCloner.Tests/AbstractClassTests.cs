@@ -464,7 +464,7 @@ public class AbstractClassTests
         
         // Act
         Pet pet = bird;
-        Pet? clone = pet.FastDeepClone();
+        Pet clone = pet.FastDeepClone();
         
         // Assert
         Assert.That(clone, Is.Not.Null);

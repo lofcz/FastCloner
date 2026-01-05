@@ -1028,5 +1028,131 @@ public class ShallowAttributeTests
         public AotOwnedData? OwnedData { get; set; }
     }
 
+    /// <summary>
+    /// Test class with getter-only collection (no setter) marked with [FastClonerShallow].
+    /// The semantics should be: shallow clone the items (just copy references, don't deep clone).
+    /// </summary>
+    [FastClonerClonable]
+    public partial class AotClassWithShallowGetterOnlyCollection
+    {
+        [FastClonerShallow]
+        public System.Collections.ObjectModel.ObservableCollection<AotOwnedData> Items { get; } = [];
+        
+        public string Name { get; set; } = string.Empty;
+    }
+    
+    /// <summary>
+    /// Test class with getter-only collection WITHOUT [FastClonerShallow].
+    /// The semantics should be: deep clone the items (the default behavior).
+    /// </summary>
+    [FastClonerClonable]
+    public partial class AotClassWithDeepGetterOnlyCollection
+    {
+        public System.Collections.ObjectModel.ObservableCollection<AotOwnedData> Items { get; } = [];
+        
+        public string Name { get; set; } = string.Empty;
+    }
+
+    #endregion
+
+    #region Getter-Only Collection Tests (Issue #22)
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void Aot_ShallowGetterOnlyCollection_ShouldShallowCloneItems()
+    {
+        // Arrange - Issue #22: [FastClonerShallow] on getter-only collection should shallow clone items
+        var item1 = new AotOwnedData { Value = "Item1", Count = 1 };
+        var item2 = new AotOwnedData { Value = "Item2", Count = 2 };
+        
+        var original = new AotClassWithShallowGetterOnlyCollection { Name = "ShallowGetterOnly" };
+        original.Items.Add(item1);
+        original.Items.Add(item2);
+
+        // Act
+        var clone = original.FastDeepClone();
+
+        // Assert
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone!.Name, Is.EqualTo("ShallowGetterOnly"));
+        Assert.That(clone.Items, Has.Count.EqualTo(2));
+        
+        // Items should be the SAME references (shallow cloned) - Issue #22 fix
+        Assert.That(clone.Items[0], Is.SameAs(item1), "Item 0 should be the same reference (shallow clone)");
+        Assert.That(clone.Items[1], Is.SameAs(item2), "Item 1 should be the same reference (shallow clone)");
+        
+        // The collection itself is a different instance (getter-only creates new collection)
+        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void Aot_DeepGetterOnlyCollection_ShouldDeepCloneItems()
+    {
+        // Arrange - Without [FastClonerShallow], getter-only collection should deep clone items
+        var item1 = new AotOwnedData { Value = "Item1", Count = 1 };
+        var item2 = new AotOwnedData { Value = "Item2", Count = 2 };
+        
+        var original = new AotClassWithDeepGetterOnlyCollection { Name = "DeepGetterOnly" };
+        original.Items.Add(item1);
+        original.Items.Add(item2);
+
+        // Act
+        var clone = original.FastDeepClone();
+
+        // Assert
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone!.Name, Is.EqualTo("DeepGetterOnly"));
+        Assert.That(clone.Items, Has.Count.EqualTo(2));
+        
+        // Items should be DIFFERENT references (deep cloned) - the default behavior
+        Assert.That(clone.Items[0], Is.Not.SameAs(item1), "Item 0 should be a different reference (deep clone)");
+        Assert.That(clone.Items[1], Is.Not.SameAs(item2), "Item 1 should be a different reference (deep clone)");
+        
+        // But values should be equal
+        Assert.That(clone.Items[0].Value, Is.EqualTo("Item1"));
+        Assert.That(clone.Items[0].Count, Is.EqualTo(1));
+        Assert.That(clone.Items[1].Value, Is.EqualTo("Item2"));
+        Assert.That(clone.Items[1].Count, Is.EqualTo(2));
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void Aot_ShallowGetterOnlyCollection_ModifyingClonedItemsAffectsOriginal()
+    {
+        // Arrange
+        var item1 = new AotOwnedData { Value = "Original", Count = 1 };
+        
+        var original = new AotClassWithShallowGetterOnlyCollection { Name = "Test" };
+        original.Items.Add(item1);
+
+        // Act
+        var clone = original.FastDeepClone();
+        clone!.Items[0].Value = "Modified";
+
+        // Assert - modifying through clone should affect original (shallow clone)
+        Assert.That(item1.Value, Is.EqualTo("Modified"));
+        Assert.That(original.Items[0].Value, Is.EqualTo("Modified"));
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void Aot_DeepGetterOnlyCollection_ModifyingClonedItemsDoesNotAffectOriginal()
+    {
+        // Arrange
+        var item1 = new AotOwnedData { Value = "Original", Count = 1 };
+        
+        var original = new AotClassWithDeepGetterOnlyCollection { Name = "Test" };
+        original.Items.Add(item1);
+
+        // Act
+        var clone = original.FastDeepClone();
+        clone!.Items[0].Value = "Modified";
+
+        // Assert - modifying through clone should NOT affect original (deep clone)
+        Assert.That(item1.Value, Is.EqualTo("Original"));
+        Assert.That(original.Items[0].Value, Is.EqualTo("Original"));
+    }
+
     #endregion
 }

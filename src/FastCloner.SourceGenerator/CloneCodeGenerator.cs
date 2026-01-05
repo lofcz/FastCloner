@@ -189,6 +189,10 @@ internal sealed class CloneCodeGenerator
         string returnTypeSuffix = isStruct ? "" : "?";
         string paramTypeSuffix = (isStruct || trustNullability) ? "" : "?";
 
+        // Add NotNullIfNotNull attribute for reference types (improves nullability flow analysis)
+        string notNullAttr = CloneGeneratorContext.NotNullIfNotNullAttr(_context.Model.CodeAnalysisAvailable && !isStruct);
+        if (!string.IsNullOrEmpty(notNullAttr))
+            sb.AppendLine($"        {notNullAttr}");
         sb.AppendLine($"        public static {typeName}{returnTypeSuffix} FastDeepClone{typeParams}(this {typeName}{paramTypeSuffix} source){constraints}");
         sb.AppendLine("        {");
 
@@ -204,7 +208,7 @@ internal sealed class CloneCodeGenerator
              sb.AppendLine("            // Fallback to runtime cloning due to complex language features:");
              if (hasInitOnlyWithCycles) sb.AppendLine("            // - Init-only members with circular reference tracking");
              if (structWithReadonlyRefs) sb.AppendLine("            // - Struct with readonly reference fields");
-             sb.AppendLine("            return FastCloner.DeepClone(source);");
+             sb.AppendLine($"            return {CloneGeneratorContext.FastClonerDeepCloneCall("source")};");
              sb.AppendLine("        }");
              sb.AppendLine();
              return;
@@ -275,7 +279,7 @@ internal sealed class CloneCodeGenerator
         {
              sb.AppendLine("            // Fallback to runtime cloning due to complex language features.");
              sb.AppendLine("            // Note: State is ignored here as the runtime handles its own circular reference tracking.");
-             sb.AppendLine("            return FastCloner.DeepClone(source);");
+             sb.AppendLine($"            return {CloneGeneratorContext.FastClonerDeepCloneCall("source")};");
              sb.AppendLine("        }");
              sb.AppendLine();
              return;
@@ -362,7 +366,7 @@ internal sealed class CloneCodeGenerator
         if (_context.IsFastClonerAvailable)
         {
             sb.AppendLine("            // Fallback for unknown derived types - use runtime cloner");
-            sb.AppendLine($"            return ({typeName})FastCloner.DeepClone(source);");
+            sb.AppendLine($"            return ({typeName}){CloneGeneratorContext.FastClonerDeepCloneCall("source")};");
         }
         else
         {
@@ -769,7 +773,7 @@ internal sealed class CloneCodeGenerator
         if (_context.IsFastClonerAvailable)
         {
             sb.AppendLine("                // If FastCloner is available, delegate to it for deep cloning");
-            sb.AppendLine($"                return ({fallbackCastTypeParam})FastCloner.DeepClone(source);");
+            sb.AppendLine($"                return ({fallbackCastTypeParam}){CloneGeneratorContext.FastClonerDeepCloneCall("source")};");
         }
         else
         {

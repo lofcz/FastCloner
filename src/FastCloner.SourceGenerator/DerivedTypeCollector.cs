@@ -158,7 +158,8 @@ internal static class DerivedTypeCollector
             nullabilityEnabled,
             trustNullability,
             IsRefLikeType: false, // Derived types from abstract base cannot be ref structs
-            hasParameterlessConstructor);
+            hasParameterlessConstructor,
+            CodeAnalysisAvailable: compilation.GetTypeByMetadataName("System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute") != null);
     }
 
     private static TypeModel? CreateFullTypeModel(
@@ -348,6 +349,7 @@ internal static class DerivedTypeCollector
             trustNullability,
             IsRefLikeType: false, // Derived types from abstract base cannot be ref structs
             hasParameterlessConstructor,
+            CodeAnalysisAvailable: compilation.GetTypeByMetadataName("System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute") != null,
             new EquatableArray<string>(circRefLog.ToArray()));
     }
 
