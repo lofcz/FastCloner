@@ -301,7 +301,7 @@ Intel Core i7-8700 CPU 3.20GHz (Max: 3.19GHz) (Coffee Lake), 1 CPU, 12 logical a
 | AnyCloneBenchmark  | 5,102.40 ns | 239.089 ns | 704.959 ns | 5,370.93 ns | 497.81 |   68.98 |   13 | 0.9003 |      - |    5656 B |       78.56 |
 ```
 
-You can run the benchmark [locally](https://github.com/lofcz/FastCloner/blob/next/FastCloner.Benchmark/BenchMinimal.cs) to verify the results. There are also [third-party benchmarks](https://github.com/AnderssonPeter/Dolly?tab=readme-ov-file#benchmarks) in some of the competing libraries confirming these results.
+You can run the benchmark [locally](https://github.com/lofcz/FastCloner/blob/next/src/FastCloner.Benchmark/BenchMinimal.cs) to verify the results. There are also [third-party benchmarks](https://github.com/AnderssonPeter/Dolly?tab=readme-ov-file#benchmarks) in some of the competing libraries confirming these results.
 
 ### Build Times & IDE Performance
 
