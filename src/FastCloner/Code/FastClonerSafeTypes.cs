@@ -58,7 +58,9 @@ internal static class FastClonerSafeTypes
         [StringComparer.OrdinalIgnoreCase.GetType()] = true,
         [StringComparer.InvariantCulture.GetType()] = true,
         [StringComparer.InvariantCultureIgnoreCase.GetType()] = true,
-        
+        [typeof(WeakReference)] = true,
+        [typeof(WeakReference<>)] = true,
+        [typeof(CancellationTokenSource)] = true,
 #if MODERN
         [typeof(Range)] = true,
         [typeof(Index)] = true
@@ -68,6 +70,11 @@ internal static class FastClonerSafeTypes
     private static readonly ConcurrentDictionary<Type, bool> knownTypes = [];
 
     static FastClonerSafeTypes()
+    {
+        InitializeKnownTypes();
+    }
+
+    private static void InitializeKnownTypes()
     {
         foreach (KeyValuePair<Type, bool> x in DefaultKnownTypes)
         {
@@ -173,9 +180,24 @@ internal static class FastClonerSafeTypes
     
     private static bool CanReturnSameType(Type type, HashSet<Type>? processingTypes = null)
     {
+        if (FastClonerCache.IsTypeReference(type))
+        {
+            return true;
+        }
+        
         if (knownTypes.TryGetValue(type, out bool isSafe))
         {
             return isSafe;
+        }
+        
+        if (type.IsGenericType)
+        {
+            var genericDef = type.GetGenericTypeDefinition();
+            if (knownTypes.TryGetValue(genericDef, out bool isGenericSafe))
+            {
+                knownTypes.TryAdd(type, isGenericSafe);
+                return isGenericSafe;
+            }
         }
 
         if (typeof(Delegate).IsAssignableFrom(type))
@@ -228,4 +250,10 @@ internal static class FastClonerSafeTypes
     }
 
     public static bool CanReturnSameObject(Type type) => CanReturnSameType(type);
+    
+    internal static void ClearKnownTypesCache()
+    {
+        knownTypes.Clear();
+        InitializeKnownTypes();
+    }
 }

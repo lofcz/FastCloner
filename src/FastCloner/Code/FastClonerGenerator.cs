@@ -1,6 +1,5 @@
 ﻿using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
 namespace FastCloner.Code;
 
@@ -16,11 +15,19 @@ internal static class FastClonerGenerator
         Type concreteTypeOfObj = obj.GetType();
         Type typeOfT = typeof(T);
         
-        if (FastClonerCache.AlwaysIgnoredTypes.ContainsKey(concreteTypeOfObj))
-        {
-            return default;
-        }
+        // Check for custom type behaviors first
+        CloneBehavior? behavior = FastClonerCache.GetTypeBehavior(concreteTypeOfObj);
         
+        switch (behavior)
+        {
+            case CloneBehavior.Skip:
+                return default;
+            case CloneBehavior.Reference:
+                return obj;
+            case CloneBehavior.Shallow:
+                return ShallowClonerGenerator.CloneObject(obj);
+        }
+
         if (FastClonerSafeTypes.DefaultKnownTypes.TryGetValue(concreteTypeOfObj, out _))
         {
             return obj;
@@ -290,16 +297,29 @@ internal static class FastClonerGenerator
         Type typeT = typeof(T);
         Type? underlyingTypeT = Nullable.GetUnderlyingType(typeT);
         
-        if (FastClonerCache.AlwaysIgnoredTypes.ContainsKey(typeT) || (underlyingTypeT != null && FastClonerCache.AlwaysIgnoredTypes.ContainsKey(underlyingTypeT)))
+        // Check for custom type behaviors
+        CloneBehavior? behavior = FastClonerCache.GetTypeBehavior(typeT);
+        if (behavior is null && underlyingTypeT is not null)
         {
-            return default;
+            behavior = FastClonerCache.GetTypeBehavior(underlyingTypeT);
         }
         
-        // no loops, no nulls, no inheritance
-        Func<T, FastCloneState, T>? cloner = GetClonerForValueType<T>();
+        switch (behavior)
+        {
+            case CloneBehavior.Skip:
+                return default!;
+            case CloneBehavior.Reference:
+            case CloneBehavior.Shallow:
+                return obj;
+            default:
+            {
+                // no loops, no nulls, no inheritance
+                Func<T, FastCloneState, T>? cloner = GetClonerForValueType<T>();
 
-        // safe object
-        return cloner is null ? obj : cloner(obj, state);
+                // safe object
+                return cloner is null ? obj : cloner(obj, state);
+            }
+        }
     }
 
     // when we can't use code generation, we can use these methods

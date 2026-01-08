@@ -1,11 +1,11 @@
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
+using System.Collections.Concurrent;
+using FastCloner.Code;
 
 namespace FastCloner.Tests;
 
 [TestFixture(Low)]
 [TestFixture(High)]
-public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
+public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     public class SimpleClass
     {
@@ -42,55 +42,14 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         public MyValueType MyStruct { get; set; }
     }
 
-    public class ClassWithNullableValueTypeProperty
-    {
-        public int Id { get; set; }
-        public MyValueType? MyNullableStruct { get; set; }
-    }
-
-    public class ClassWithPrimitiveProperties
-    {
-        public int IntProp { get; set; }
-        public bool BoolProp { get; set; }
-        public string? StringProp { get; set; }
-    }
-
-    public class BaseClassForIgnore
-    {
-        public int BaseValue { get; set; }
-    }
-
-    public class DerivedClassA : BaseClassForIgnore
-    {
-        public int DerivedAValue { get; set; }
-    }
-
-    public class DerivedClassB : BaseClassForIgnore
-    {
-        public int DerivedBValue { get; set; }
-    }
-
-    public class ContainerWithBaseClassProperties
-    {
-        public BaseClassForIgnore? PropA { get; set; }
-        public BaseClassForIgnore? PropB { get; set; }
-    }
-
-    public class ContainerWithMixedHierarchy
-    {
-        public BaseClassForIgnore? BaseProp { get; set; }
-        public DerivedClassA? DerivedAProp { get; set; }
-        public BaseClassForIgnore? DerivedBPropAsBase { get; set; }
-    }
-    
     [TearDown]
     public void TearDown()
     {
-        FastCloner.ClearIgnoredTypes();
+        FastCloner.ClearAllTypeBehaviors();
     }
 
     [Test]
-    public void IgnoreType_PropertyOfIgnoredReferenceType_IsNullAfterCloning()
+    public void SetTypeBehavior_Ignore_PropertyOfIgnoredReferenceType_IsNullAfterCloning()
     {
         // Arrange
         ClassWithProperties original = new ClassWithProperties
@@ -99,11 +58,11 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
             SimpleProp = new SimpleClass { IntValue = 10, StringValue = "Test" },
             AnotherSimpleProp = new AnotherSimpleClass { DoubleValue = 1.23 }
         };
-        FastCloner.IgnoreType(typeof(SimpleClass));
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Skip);
 
         // Act
         ClassWithProperties cloned = original.DeepClone();
-        FastCloner.ClearIgnoredTypes();
+        FastCloner.ClearTypeBehavior<SimpleClass>();
         ClassWithProperties cloned2 = original.DeepClone();
 
         // Assert
@@ -114,12 +73,46 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Assert.That(cloned.AnotherSimpleProp, Is.Not.Null, "AnotherSimpleProp should be cloned.");
         Assert.That(cloned.AnotherSimpleProp, Is.Not.SameAs(original.AnotherSimpleProp));
         Assert.That(cloned.AnotherSimpleProp!.DoubleValue, Is.EqualTo(original.AnotherSimpleProp!.DoubleValue));
-        
+
         Assert.That(cloned2.SimpleProp, Is.Not.Null, "SimpleProp should not null after resetting the ignored types.");
     }
-    
+
     [Test]
-    public void IgnoreType_PropertyOfIgnoredValueType_IsDefaultAfterCloning()
+    public void SetTypeBehavior_Reference_ReturnsSameInstance()
+    {
+        // Arrange
+        SimpleClass original = new SimpleClass { IntValue = 42, StringValue = "KeepMe" };
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Reference);
+
+        // Act
+        SimpleClass cloned = original.DeepClone();
+
+        // Assert
+        Assert.That(cloned, Is.SameAs(original));
+    }
+
+    [Test]
+    public void SetTypeBehavior_Reference_PropertyOfReferenceType_ReturnsSameInstance()
+    {
+        // Arrange
+        ClassWithProperties original = new ClassWithProperties
+        {
+            Id = 1,
+            SimpleProp = new SimpleClass { IntValue = 10, StringValue = "Test" },
+        };
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Reference);
+
+        // Act
+        ClassWithProperties cloned = original.DeepClone();
+
+        // Assert
+        Assert.That(cloned, Is.Not.Null);
+        Assert.That(cloned, Is.Not.SameAs(original));
+        Assert.That(cloned.SimpleProp, Is.SameAs(original.SimpleProp));
+    }
+
+    [Test]
+    public void SetTypeBehavior_Ignore_PropertyOfIgnoredValueType_IsDefaultAfterCloning()
     {
         // Arrange
         ClassWithValueTypeProperty original = new ClassWithValueTypeProperty
@@ -127,7 +120,7 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
             Id = 1,
             MyStruct = new MyValueType { Value = 42 }
         };
-        FastCloner.IgnoreType(typeof(MyValueType));
+        FastCloner.SetTypeBehavior<MyValueType>(CloneBehavior.Skip);
 
         // Act
         ClassWithValueTypeProperty cloned = original.DeepClone();
@@ -136,15 +129,79 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Assert.That(cloned, Is.Not.Null);
         Assert.That(cloned.Id, Is.EqualTo(original.Id));
         Assert.That(cloned.MyStruct, Is.EqualTo(default(MyValueType)), "Ignored value type property should be default.");
-        Assert.That(cloned.MyStruct.Value, Is.EqualTo(0)); // Default for int
+        Assert.That(cloned.MyStruct.Value, Is.EqualTo(0));
     }
-    
+
     [Test]
-    public void IgnoreType_RootObjectOfIgnoredType_ReturnsNull()
+    public void SetTypeBehavior_UpdatesBehaviorCorrectly()
+    {
+        // Arrange
+        FastCloner.ClearAllTypeBehaviors();
+
+        // Act
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Skip);
+        var behaviorIgnore = FastCloner.GetTypeBehavior<SimpleClass>();
+        
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Reference);
+        var behaviorReference = FastCloner.GetTypeBehavior<SimpleClass>();
+
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Clone);
+        var behaviorDeep = FastCloner.GetTypeBehavior<SimpleClass>();
+
+        // Assert
+        Assert.That(behaviorIgnore, Is.EqualTo(CloneBehavior.Skip));
+        Assert.That(behaviorReference, Is.EqualTo(CloneBehavior.Reference));
+        Assert.That(behaviorDeep, Is.Null, "Start behavior (Clone) should remove the entry.");
+    }
+
+    public class ClassWithPrimitiveProperties
+    {
+        public int IntProp { get; set; }
+        public bool BoolProp { get; set; }
+        public string? StringProp { get; set; }
+    }
+
+    public class ClassWithSetProperties
+    {
+        public int Id { get; set; }
+        public HashSet<SimpleClass>? SetOfSimpleClass { get; set; }
+        public HashSet<MyValueType>? SetOfMyValueType { get; set; }
+        public HashSet<string>? SetOfString { get; set; }
+    }
+
+    public class ClassWithArrayProperties
+    {
+        public int Id { get; set; }
+        public SimpleClass[]? ArrayOfSimpleClass { get; set; }
+        public MyValueType[]? ArrayOfMyValueType { get; set; }
+        public SimpleClass[,]? TwoDArrayOfSimpleClass { get; set; }
+        public MyValueType[,]? TwoDArrayOfMyValueType { get; set; }
+        public int[]? ArrayOfInt { get; set; }
+        public string[]? ArrayOfString { get; set; }
+    }
+
+    public class ClassWithDictionaryProperties
+    {
+        public int Id { get; set; }
+        public Dictionary<string, SimpleClass>? DictStringSimple { get; set; }
+        public Dictionary<SimpleClass, string>? DictSimpleString { get; set; }
+        public Dictionary<string, MyValueType>? DictStringValueType { get; set; }
+        public Dictionary<MyValueType, string>? DictValueTypeString { get; set; }
+        public Dictionary<int, string>? DictIntString { get; set; }
+    }
+
+    partial class IteratorInfo : System.ComponentModel.INotifyPropertyChanged
+    {
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged = (_, _) => { };
+        public bool HasPropertyChanged => PropertyChanged is not null;
+    }
+
+    [Test]
+    public void SetTypeBehavior_Ignore_RootObjectOfIgnoredType_ReturnsNull()
     {
         // Arrange
         ClassToBeIgnored original = new ClassToBeIgnored { Data = "Important Data" };
-        FastCloner.IgnoreType(typeof(ClassToBeIgnored));
+        FastCloner.SetTypeBehavior<ClassToBeIgnored>(CloneBehavior.Skip);
 
         // Act
         ClassToBeIgnored cloned = original.DeepClone();
@@ -154,43 +211,11 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
     
     [Test]
-    public void IgnoreType_AddsTypeToGetIgnoredTypesList()
-    {
-        // Arrange
-        FastCloner.ClearIgnoredTypes();
-
-        // Act
-        FastCloner.IgnoreType(typeof(SimpleClass));
-        HashSet<Type> ignoredTypes = FastCloner.GetIgnoredTypes();
-
-        // Assert
-        Assert.That(ignoredTypes, Is.Not.Null);
-        Assert.That(ignoredTypes.Count, Is.EqualTo(1));
-        Assert.That(ignoredTypes, Contains.Item(typeof(SimpleClass)));
-    }
-    
-    [Test]
-    public void IgnoreType_CalledMultipleTimesWithSameType_ResultsInOneEntry()
-    {
-        // Arrange
-        FastCloner.ClearIgnoredTypes();
-
-        // Act
-        FastCloner.IgnoreType(typeof(SimpleClass));
-        FastCloner.IgnoreType(typeof(SimpleClass)); // Call again
-        HashSet<Type> ignoredTypes = FastCloner.GetIgnoredTypes();
-
-        // Assert
-        Assert.That(ignoredTypes.Count, Is.EqualTo(1));
-        Assert.That(ignoredTypes, Contains.Item(typeof(SimpleClass)));
-    }
-    
-    [Test]
-    public void IgnoreType_ForPrimitiveIntProperty_SetsToDefault()
+    public void SetTypeBehavior_Ignore_ForPrimitiveIntProperty_SetsToDefault()
     {
         // Arrange
         ClassWithPrimitiveProperties original = new ClassWithPrimitiveProperties { IntProp = 123, BoolProp = true, StringProp = "Hello" };
-        FastCloner.IgnoreType(typeof(int));
+        FastCloner.SetTypeBehavior<int>(CloneBehavior.Skip);
 
         // Act
         ClassWithPrimitiveProperties cloned = original.DeepClone();
@@ -201,9 +226,9 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Assert.That(cloned.BoolProp, Is.EqualTo(original.BoolProp), "BoolProp should not be affected.");
         Assert.That(cloned.StringProp, Is.EqualTo(original.StringProp), "StringProp should not be affected.");
     }
-    
+
     [Test]
-    public void IgnoreTypes_MultiplePropertiesOfIgnoredTypes_AreNullOrDefaultForValueTypes()
+    public void SetTypeBehavior_IgnoreTypes_MultiplePropertiesOfIgnoredTypes_AreNullOrDefaultForValueTypes()
     {
         // Arrange
         ClassWithProperties original = new ClassWithProperties
@@ -212,8 +237,8 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
             SimpleProp = new SimpleClass { IntValue = 10, StringValue = "Test" },
             AnotherSimpleProp = new AnotherSimpleClass { DoubleValue = 1.23 }
         };
-        List<Type> typesToIgnore = new List<Type> { typeof(SimpleClass), typeof(AnotherSimpleClass) };
-        FastCloner.IgnoreTypes(typesToIgnore);
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<AnotherSimpleClass>(CloneBehavior.Skip);
 
         // Act
         ClassWithProperties cloned = original.DeepClone();
@@ -224,13 +249,11 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Assert.That(cloned.SimpleProp, Is.Null, "SimpleProp should be null.");
         Assert.That(cloned.AnotherSimpleProp, Is.Null, "AnotherSimpleProp should be null.");
     }
-    
+
     [Test]
-    public void IgnoreTypes_ItemsInCollectionOfIgnoredType_BecomeNullInClonedCollection()
+    public void SetTypeBehavior_IgnoreTypes_ItemsInCollectionOfIgnoredType_BecomeNullInClonedCollection()
     {
         // Arrange
-        FastCloner.ClearIgnoredTypes();
-        
         ClassWithProperties original = new ClassWithProperties
         {
             Id = 1,
@@ -240,7 +263,7 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
                 new SimpleClass { IntValue = 2, StringValue = "B" }
             ]
         };
-        FastCloner.IgnoreType(typeof(SimpleClass));
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Skip);
 
         // Act
         ClassWithProperties cloned = original.DeepClone();
@@ -254,26 +277,17 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Assert.That(cloned.ListOfSimpleProp[0], Is.Null, "First item of ignored type should be null in cloned list.");
         Assert.That(cloned.ListOfSimpleProp[1], Is.Null, "Second item of ignored type should be null in cloned list.");
     }
-    
-    public class ClassWithSetProperties
-    {
-        public int Id { get; set; }
-        public HashSet<SimpleClass>? SetOfSimpleClass { get; set; }
-        public HashSet<MyValueType>? SetOfMyValueType { get; set; }
-        public HashSet<string>? SetOfString { get; set; }
-    }
-    
+
     [Test]
-    public void IgnoreType_StringsInSet_OriginalStringsUsedIfStringIgnored()
+    public void SetTypeBehavior_Ignore_StringsInSet_OriginalStringsUsedIfStringIgnored()
     {
         // Arrange
-        FastCloner.ClearIgnoredTypes();
         ClassWithSetProperties original = new ClassWithSetProperties
         {
             Id = 1,
             SetOfString = ["Hello", "World"]
         };
-        FastCloner.IgnoreType(typeof(string));
+        FastCloner.SetTypeBehavior<string>(CloneBehavior.Skip);
 
         // Act
         ClassWithSetProperties cloned = original.DeepClone();
@@ -288,10 +302,9 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
     
     [Test]
-    public void IgnoreType_ItemsInSetOfIgnoredValueType_OriginalItemsUsedIfElementIgnored()
+    public void SetTypeBehavior_IgnoreType_ItemsInSetOfIgnoredValueType_OriginalItemsUsedIfElementIgnored()
     {
         // Arrange
-        FastCloner.ClearIgnoredTypes();
         MyValueType item1 = new MyValueType { Value = 10 };
         MyValueType item2 = new MyValueType { Value = 20 };
         ClassWithSetProperties original = new ClassWithSetProperties
@@ -299,7 +312,7 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
             Id = 1,
             SetOfMyValueType = [item1, item2]
         };
-        FastCloner.IgnoreType(typeof(MyValueType));
+        FastCloner.SetTypeBehavior<MyValueType>(CloneBehavior.Skip);
 
         // Act
         ClassWithSetProperties cloned = original.DeepClone();
@@ -312,12 +325,11 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Assert.That(cloned.SetOfMyValueType, Contains.Item(item2)); // Original item2
         Assert.That(cloned.SetOfMyValueType.Contains(default), Is.False);
     }
-    
+
     [Test]
-    public void IgnoreType_ItemsInSetOfIgnoredReferenceType_OriginalItemsUsedIfElementIgnored()
+    public void SetTypeBehavior_IgnoreType_ItemsInSetOfIgnoredReferenceType_OriginalItemsUsedIfElementIgnored()
     {
         // Arrange
-        FastCloner.ClearIgnoredTypes();
         SimpleClass item1 = new SimpleClass { IntValue = 1, StringValue = "A" };
         SimpleClass item2 = new SimpleClass { IntValue = 2, StringValue = "B" };
         ClassWithSetProperties original = new ClassWithSetProperties
@@ -325,7 +337,7 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
             Id = 1,
             SetOfSimpleClass = [item1, item2]
         };
-        FastCloner.IgnoreType(typeof(SimpleClass));
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Skip);
 
         // Act
         ClassWithSetProperties cloned = original.DeepClone();
@@ -337,23 +349,11 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Assert.That(cloned.SetOfSimpleClass, Contains.Item(item1), "Set should contain original item1 instance.");
         Assert.That(cloned.SetOfSimpleClass, Contains.Item(item2), "Set should contain original item2 instance.");
     }
-    
-    public class ClassWithArrayProperties
-    {
-        public int Id { get; set; }
-        public SimpleClass[]? ArrayOfSimpleClass { get; set; }
-        public MyValueType[]? ArrayOfMyValueType { get; set; }
-        public SimpleClass[,]? TwoDArrayOfSimpleClass { get; set; }
-        public MyValueType[,]? TwoDArrayOfMyValueType { get; set; }
-        public int[]? ArrayOfInt { get; set; } // For ignoring primitive types in arrays
-        public string[]? ArrayOfString { get; set; } // For ignoring string types in arrays
-    }
-    
+
     [Test]
-    public void IgnoreType_ItemsIn1DArrayOfIgnoredReferenceType_BecomeNull()
+    public void SetTypeBehavior_IgnoreType_ItemsIn1DArrayOfIgnoredReferenceType_BecomeNull()
     {
         // Arrange
-        FastCloner.ClearIgnoredTypes();
         ClassWithArrayProperties original = new ClassWithArrayProperties
         {
             Id = 1,
@@ -363,7 +363,7 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
                 new SimpleClass { IntValue = 2, StringValue = "B" }
             ]
         };
-        FastCloner.IgnoreType(typeof(SimpleClass));
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Skip);
 
         // Act
         ClassWithArrayProperties cloned = original.DeepClone();
@@ -379,10 +379,9 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
     
     [Test]
-    public void IgnoreType_ItemsIn1DArrayOfIgnoredValueType_BecomeDefault()
+    public void SetTypeBehavior_IgnoreType_ItemsIn1DArrayOfIgnoredValueType_BecomeDefault()
     {
         // Arrange
-        FastCloner.ClearIgnoredTypes();
         ClassWithArrayProperties original = new ClassWithArrayProperties
         {
             Id = 1,
@@ -392,7 +391,7 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
                 new MyValueType { Value = 20 }
             ]
         };
-        FastCloner.IgnoreType(typeof(MyValueType));
+        FastCloner.SetTypeBehavior<MyValueType>(CloneBehavior.Skip);
 
         // Act
         ClassWithArrayProperties cloned = original.DeepClone();
@@ -409,10 +408,9 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
     
     [Test]
-    public void IgnoreType_ItemsIn2DArrayOfIgnoredReferenceType_BecomeNull()
+    public void SetTypeBehavior_IgnoreType_ItemsIn2DArrayOfIgnoredReferenceType_BecomeNull()
     {
         // Arrange
-        FastCloner.ClearIgnoredTypes();
         ClassWithArrayProperties original = new ClassWithArrayProperties
         {
             Id = 1,
@@ -422,7 +420,7 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
                 { new SimpleClass { IntValue = 2, StringValue = "B" } }
             }
         };
-        FastCloner.IgnoreType(typeof(SimpleClass));
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Skip);
 
         // Act
         ClassWithArrayProperties cloned = original.DeepClone();
@@ -439,16 +437,15 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
     
     [Test]
-    public void IgnoreType_PrimitiveIntInArray_BecomesDefault()
+    public void SetTypeBehavior_IgnoreType_PrimitiveIntInArray_BecomesDefault()
     {
         // Arrange
-        FastCloner.ClearIgnoredTypes();
         ClassWithArrayProperties original = new ClassWithArrayProperties
         {
             Id = 1,
             ArrayOfInt = [10, 20, 30]
         };
-        FastCloner.IgnoreType(typeof(int));
+        FastCloner.SetTypeBehavior<int>(CloneBehavior.Skip);
 
         // Act
         ClassWithArrayProperties cloned = original.DeepClone();
@@ -463,16 +460,15 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
     
     [Test]
-    public void IgnoreType_StringInArray_BecomesNull()
+    public void SetTypeBehavior_IgnoreType_StringInArray_BecomesNull()
     {
         // Arrange
-        FastCloner.ClearIgnoredTypes();
         ClassWithArrayProperties original = new ClassWithArrayProperties
         {
             Id = 1,
             ArrayOfString = ["Hello", "World"]
         };
-        FastCloner.IgnoreType(typeof(string));
+        FastCloner.SetTypeBehavior<string>(CloneBehavior.Skip);
 
         // Act
         ClassWithArrayProperties cloned = original.DeepClone();
@@ -485,21 +481,10 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Assert.That(cloned.ArrayOfString[1], Is.Null);
     }
     
-    public class ClassWithDictionaryProperties
-    {
-        public int Id { get; set; }
-        public Dictionary<string, SimpleClass>? DictStringSimple { get; set; }
-        public Dictionary<SimpleClass, string>? DictSimpleString { get; set; }
-        public Dictionary<string, MyValueType>? DictStringValueType { get; set; }
-        public Dictionary<MyValueType, string>? DictValueTypeString { get; set; }
-        public Dictionary<int, string>? DictIntString { get; set; }
-    }
-
     [Test]
-    public void IgnoreType_StringValuesInDictionary_BecomeNull()
+    public void SetTypeBehavior_IgnoreType_StringValuesInDictionary_BecomeNull()
     {
         // Arrange
-        FastCloner.ClearIgnoredTypes();
         ClassWithDictionaryProperties original = new ClassWithDictionaryProperties
         {
             Id = 1,
@@ -509,7 +494,7 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
                 [2] = "World"
             }
         };
-        FastCloner.IgnoreType(typeof(string));
+        FastCloner.SetTypeBehavior<string>(CloneBehavior.Skip);
 
         // Act
         ClassWithDictionaryProperties cloned = original.DeepClone();
@@ -523,18 +508,17 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
 
     [Test]
-    public void IgnoreType_BothKeyAndValueIgnored_ReferenceTypes_UsesOriginalKeysAndNullValues()
+    public void SetTypeBehavior_IgnoreType_BothKeyAndValueIgnored_ReferenceTypes_UsesOriginalKeysAndNullValues()
     {
         // Arrange
-        FastCloner.ClearIgnoredTypes();
         SimpleClass key1 = new SimpleClass { IntValue = 101, StringValue = "Key1" };
         AnotherSimpleClass value1 = new AnotherSimpleClass { DoubleValue = 1.1 };
         Dictionary<SimpleClass, AnotherSimpleClass> original = new Dictionary<SimpleClass, AnotherSimpleClass>
         {
             [key1] = value1
         };
-        FastCloner.IgnoreType(typeof(SimpleClass));      // Ignore Key Type
-        FastCloner.IgnoreType(typeof(AnotherSimpleClass)); // Ignore Value Type
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<AnotherSimpleClass>(CloneBehavior.Skip);
 
         // Act
         Dictionary<SimpleClass, AnotherSimpleClass> cloned = original.DeepClone();
@@ -547,17 +531,16 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
 
     [Test]
-    public void IgnoreType_BothKeyAndValueIgnored_ValueTypes_UsesOriginalKeysAndDefaultValues()
+    public void SetTypeBehavior_IgnoreType_BothKeyAndValueIgnored_ValueTypes_UsesOriginalKeysAndDefaultValues()
     {
         // Arrange
-        FastCloner.ClearIgnoredTypes();
         MyValueType key1 = new MyValueType { Value = 77 };
-        MyValueType value1 = new MyValueType { Value = 88 }; // Using MyValueType for both for simplicity
+        MyValueType value1 = new MyValueType { Value = 88 };
         Dictionary<MyValueType, MyValueType> original = new Dictionary<MyValueType, MyValueType>
         {
             [key1] = value1
         };
-        FastCloner.IgnoreType(typeof(MyValueType)); // Ignore the type used for both key and value
+        FastCloner.SetTypeBehavior<MyValueType>(CloneBehavior.Skip);
 
         // Act
         Dictionary<MyValueType, MyValueType> cloned = original.DeepClone();
@@ -570,16 +553,15 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
     
     [Test]
-    public void IgnoreType_PrimitiveKeyTypeInt_And_ReferenceValueTypeIgnored()
+    public void SetTypeBehavior_IgnoreType_PrimitiveKeyTypeInt_And_ReferenceValueTypeIgnored()
     {
         // Arrange
-        FastCloner.ClearIgnoredTypes();
         Dictionary<int, SimpleClass> original = new Dictionary<int, SimpleClass>
         {
             [1] = new SimpleClass { IntValue = 10, StringValue = "Val1" },
             [2] = new SimpleClass { IntValue = 20, StringValue = "Val2" }
         };
-        FastCloner.IgnoreType(typeof(SimpleClass)); // Ignore value type
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Skip);
 
         // Act
         Dictionary<int, SimpleClass> cloned = original.DeepClone();
@@ -592,16 +574,15 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
     
     [Test]
-    public void IgnoreType_ReferenceKeyType_And_PrimitiveValueTypeIntIgnored()
+    public void SetTypeBehavior_IgnoreType_ReferenceKeyType_And_PrimitiveValueTypeIntIgnored()
     {
         // Arrange
-        FastCloner.ClearIgnoredTypes();
         SimpleClass key1 = new SimpleClass { IntValue = 1, StringValue = "Key1" };
         Dictionary<SimpleClass, int> original = new Dictionary<SimpleClass, int>
         {
             [key1] = 100
         };
-        FastCloner.IgnoreType(typeof(int)); // Ignore value type
+        FastCloner.SetTypeBehavior<int>(CloneBehavior.Skip);
 
         // Act
         Dictionary<SimpleClass, int> cloned = original.DeepClone();
@@ -612,32 +593,11 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Assert.That(cloned.FirstOrDefault().Value, Is.EqualTo(0), "Ignored int value should be default.");
     }
 
-    partial class IteratorInfo : INotifyPropertyChanged
-    {
-        public event PropertyChangedEventHandler? PropertyChanged = (_, _) =>
-        {
-            
-        };
-        
-        protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
-        {
-            OnPropertyChanged(new PropertyChangedEventArgs(propertyName));
-        }
-        
-        protected virtual void OnPropertyChanged(PropertyChangedEventArgs eventArgs)
-        {
-            PropertyChanged?.Invoke(this, eventArgs);
-        }
-
-        public bool HasPropertyChanged => PropertyChanged is not null;
-    }
-
     [Test]
-    public void MinimalIssue8Ignored()
+    public void SetTypeBehavior_MinimalIssue8Ignored()
     {
         // Arrange
-        FastCloner.ClearIgnoredTypes();
-        FastCloner.IgnoreType(typeof(PropertyChangedEventHandler));
+        FastCloner.SetTypeBehavior<System.ComponentModel.PropertyChangedEventHandler>(CloneBehavior.Skip);
         
         IteratorInfo nfo = new IteratorInfo();
 
@@ -651,11 +611,9 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
     
     [Test]
-    public void MinimalIssue8Kept()
+    public void SetTypeBehavior_MinimalIssue8Kept()
     {
         // Arrange
-        FastCloner.ClearIgnoredTypes();
-
         IteratorInfo nfo = new IteratorInfo();
 
         // Act
@@ -665,5 +623,29 @@ public class IgnoredTypesTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Assert.That(copy, Is.Not.Null);
         Assert.That(nfo.HasPropertyChanged, Is.True);
         Assert.That(copy.HasPropertyChanged, Is.True);
+    }
+
+    [Test]
+    public void SetTypeBehavior_Shallow_PerformsShallowCopy()
+    {
+        // Arrange
+        ClassWithProperties original = new ClassWithProperties
+        {
+            Id = 1,
+            SimpleProp = new SimpleClass { IntValue = 10, StringValue = "Shared" }
+        };
+        FastCloner.SetTypeBehavior<ClassWithProperties>(CloneBehavior.Shallow);
+
+        // Act
+        ClassWithProperties clone = original.DeepClone();
+
+        // Assert
+        Assert.That(clone, Is.Not.SameAs(original), "Shallow clone should be a new object");
+        Assert.That(clone.Id, Is.EqualTo(1));
+        Assert.That(clone.SimpleProp, Is.SameAs(original.SimpleProp), "Shallow clone should share references");
+        
+        // Value types should still be independent copies (because it's a new container)
+        clone.Id = 2;
+        Assert.That(original.Id, Is.EqualTo(1));
     }
 }

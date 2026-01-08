@@ -261,7 +261,7 @@ internal static class FastClonerExprGenerator
         }
 
         // Some namespaces use structs as opaque handles to internal static state or singletons.
-        // Deep cloning these handles breaks their identity (e.g. they no longer match the static singletons),
+        // Clone cloning these handles breaks their identity (e.g. they no longer match the static singletons),
         // causing equality checks and lookups to fail.
         // For these specific namespaces, we assume structs with readonly fields are intended to be "Safe Handles"
         // and should have their readonly references preserved (shallow copied), not deep cloned.

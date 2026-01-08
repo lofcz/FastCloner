@@ -14,6 +14,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Numerics;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -795,6 +796,64 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Assert.That(clonedResult, Is.EquivalentTo(originalResult), "Both delegates should produce the same result");
     }
 
+    [Test]
+    public void ConditionalWeakTable_DeepClone_VerifyBehavior()
+    {
+        ConditionalWeakTable<string, string> cwt = new ConditionalWeakTable<string, string>();
+        string key = "key";
+        string val = "value";
+        cwt.Add(key, val);
+        
+        var clone = cwt.DeepClone();
+        
+        Assert.That(clone, Is.Not.SameAs(cwt));
+        
+        if (clone.TryGetValue(key, out string? clonedVal))
+        {
+            Console.WriteLine("Clone found key: " + clonedVal);
+        }
+        else
+        {
+            Console.WriteLine("Clone did NOT find key");
+        }
+    }
+
+    [Test]
+    public void WeakReferenceGeneric_DeepClone_VerifyBehavior()
+    {
+        string target = "target";
+        WeakReference<string> weak = new WeakReference<string>(target);
+        
+        var clone = weak.DeepClone();
+        
+        Assert.That(clone, Is.SameAs(weak));
+        
+        bool hasTarget = clone.TryGetTarget(out string? clonedTarget);
+        
+        Console.WriteLine($"Original target alive: {weak.TryGetTarget(out _)}");
+        Console.WriteLine($"Clone target alive: {hasTarget}");
+    }
+
+    [Test]
+    public void CancellationTokenSource_DeepClone_VerifyBehavior()
+    {
+        CancellationTokenSource cts = new CancellationTokenSource();
+        var clone = cts.DeepClone();
+        Assert.That(clone, Is.SameAs(cts));
+    }
+
+    [Test]
+    public void CancellationTokenSource_DeepClone_VerifySafety()
+    {
+        // CancellationTokenSource manages native handles and cannot be safely deep cloned by value.
+        // It is now treated as a "Safe" type, meaning DeepClone returns the SAME instance.
+        
+        using var cts = new CancellationTokenSource();
+        var clone = cts.DeepClone();
+        
+        // Assert it is the SAME object (Reference Copy)
+        Assert.That(clone, Is.SameAs(cts));
+    }
     [Test]
     public void Test_Static_Action_Delegate_Clone()
     {
@@ -3285,5 +3344,23 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         var clone = original.DeepClone();
         
         Assert.That(clone.Result, Is.EqualTo(42));
+    }
+
+
+    [Test]
+    public void WeakReferenceGeneric_DeepClone_VerifySafety()
+    {
+        string target = "target";
+        WeakReference<string> weak = new WeakReference<string>(target);
+        
+        var clone = weak.DeepClone();
+        
+        // Assert it is the SAME object (Reference Copy)
+        Assert.That(clone, Is.SameAs(weak));
+        
+        bool hasTarget = clone.TryGetTarget(out string? clonedTarget);
+        
+        Console.WriteLine($"Original target alive: {weak.TryGetTarget(out _)}");
+        Console.WriteLine($"Clone target alive: {hasTarget}");
     }
 }

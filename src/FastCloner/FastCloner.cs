@@ -40,56 +40,105 @@ public static class FastCloner
     /// Clears all cached information about classes, structs, types, and other CLR objects.
     /// </summary>
     public static void ClearCache() => FastClonerCache.ClearCache();
-
+    
     /// <summary>
-    /// Types given will always be ignored, regardless of <see cref="FastClonerIgnoreAttribute"/>.
+    /// Sets the cloning behavior for a type.
+    /// <list type="bullet">
+    /// <item><description><see cref="CloneBehavior.Clone"/> - Default behavior, performs deep cloning (removes any custom behavior).</description></item>
+    /// <item><description><see cref="CloneBehavior.Reference"/> - Returns the same instance without cloning (for immutable/safe types).</description></item>
+    /// <item><description><see cref="CloneBehavior.Skip"/> - Returns null/default and skips cloning entirely.</description></item>
+    /// </list>
     /// </summary>
-    /// <param name="types">Types to ignore.</param>
-    public static void IgnoreTypes(IEnumerable<Type> types)
+    /// <param name="type">The type to configure.</param>
+    /// <param name="behavior">The cloning behavior to apply.</param>
+    /// <remarks>
+    /// Setting <see cref="CloneBehavior.Clone"/> removes any custom behavior (equivalent to <see cref="ClearTypeBehavior"/>).
+    /// Note that changing behavior clears the cache, which may impact performance until the cache is repopulated.
+    /// </remarks>
+    public static void SetTypeBehavior(Type type, CloneBehavior behavior)
     {
-        // should someone modify this while we enumerate
-        foreach (Type type in types.ToList())
+        if (behavior == CloneBehavior.Clone)
         {
-            FastClonerCache.AlwaysIgnoredTypes.TryAdd(type, true);
+            // Clone is the default - remove any custom behavior
+            if (FastClonerCache.TypeBehaviors.TryRemove(type, out _))
+            {
+                FastClonerSafeTypes.ClearKnownTypesCache();
+                FastClonerCache.ClearCache();
+            }
+        }
+        else
+        {
+            FastClonerCache.TypeBehaviors[type] = behavior;
+            FastClonerSafeTypes.ClearKnownTypesCache();
+            FastClonerCache.ClearCache();
         }
     }
 
     /// <summary>
-    /// Type given will always be ignored when cloning.
+    /// Sets the cloning behavior for a type.
     /// </summary>
-    /// <param name="type">Type to ignore</param>
-    public static void IgnoreType(Type type)
+    /// <typeparam name="T">The type to configure.</typeparam>
+    /// <param name="behavior">The cloning behavior to apply.</param>
+    public static void SetTypeBehavior<T>(CloneBehavior behavior) => SetTypeBehavior(typeof(T), behavior);
+
+    /// <summary>
+    /// Gets the configured cloning behavior for a type, or null if using default behavior.
+    /// </summary>
+    /// <param name="type">The type to query.</param>
+    /// <returns>The configured behavior, or null if no custom behavior is set.</returns>
+    public static CloneBehavior? GetTypeBehavior(Type type) => FastClonerCache.GetTypeBehavior(type);
+
+    /// <summary>
+    /// Gets the configured cloning behavior for a type, or null if using default behavior.
+    /// </summary>
+    /// <typeparam name="T">The type to query.</typeparam>
+    /// <returns>The configured behavior, or null if no custom behavior is set.</returns>
+    public static CloneBehavior? GetTypeBehavior<T>() => GetTypeBehavior(typeof(T));
+
+    /// <summary>
+    /// Returns all types with custom cloning behaviors configured.
+    /// </summary>
+    public static Dictionary<Type, CloneBehavior> GetTypeBehaviors()
     {
-        FastClonerCache.AlwaysIgnoredTypes.TryAdd(type, true);
+        return new Dictionary<Type, CloneBehavior>(FastClonerCache.TypeBehaviors);
     }
 
     /// <summary>
-    /// Returns currently always ignored types.
+    /// Clears any custom cloning behavior for a type, returning it to default deep clone behavior.
     /// </summary>
-    public static HashSet<Type> GetIgnoredTypes()
+    /// <param name="type">The type to clear.</param>
+    /// <returns>True if a custom behavior was removed, false if none was set.</returns>
+    /// <remarks>
+    /// Note that this clears the cache, which may have negative impact on cloning performance until the cache is repopulated.
+    /// </remarks>
+    public static bool ClearTypeBehavior(Type type)
     {
-#if MODERN
-        return FastClonerCache.AlwaysIgnoredTypes.Keys.ToHashSet();
-#else
-        return [..FastClonerCache.AlwaysIgnoredTypes.Keys];
-#endif
+        bool removed = FastClonerCache.TypeBehaviors.TryRemove(type, out _);
+        if (removed)
+        {
+            FastClonerSafeTypes.ClearKnownTypesCache();
+            FastClonerCache.ClearCache();
+        }
+        return removed;
     }
 
     /// <summary>
-    /// Checks whether the given type is always ignored.
+    /// Clears any custom cloning behavior for a type, returning it to default deep clone behavior.
     /// </summary>
-    public static bool IsTypeIgnored(Type type)
-    {
-        return FastClonerCache.AlwaysIgnoredTypes.TryGetValue(type, out _);
-    }
+    /// <typeparam name="T">The type to clear.</typeparam>
+    /// <returns>True if a custom behavior was removed, false if none was set.</returns>
+    public static bool ClearTypeBehavior<T>() => ClearTypeBehavior(typeof(T));
 
     /// <summary>
-    /// Removes all types from the always ignored types, this does not affect members annotated with <see cref="FastClonerIgnoreAttribute"/>.<br/>
-    /// Note that this also clears the cache, and will have negative impact on cloning performance until the cache is repopulated.
+    /// Clears all custom type behaviors, returning all types to default deep clone behavior.
     /// </summary>
-    public static void ClearIgnoredTypes()
+    /// <remarks>
+    /// Note that this clears the cache, which may have negative impact on cloning performance until the cache is repopulated.
+    /// </remarks>
+    public static void ClearAllTypeBehaviors()
     {
-        FastClonerCache.AlwaysIgnoredTypes.Clear();
-        FastClonerCache.ClearCache(); 
+        FastClonerCache.TypeBehaviors.Clear();
+        FastClonerSafeTypes.ClearKnownTypesCache();
+        FastClonerCache.ClearCache();
     }
 }

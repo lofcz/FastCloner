@@ -3,13 +3,49 @@ using System.Reflection;
 
 namespace FastCloner.Code;
 
+/// <summary>
+/// Specifies how a type should be handled during cloning.
+/// </summary>
+public enum CloneBehavior
+{
+    /// <summary>
+    /// Perform deep cloning (default behavior).
+    /// </summary>
+    Clone,
+    
+    /// <summary>
+    /// Return the same instance without cloning (for immutable/safe types).
+    /// </summary>
+    Reference,
+    
+    /// <summary>
+    /// Perform shallow cloning (MemberwiseClone).
+    /// </summary>
+    Shallow,
+
+    /// <summary>
+    /// Return default and skip cloning entirely.
+    /// </summary>
+    Skip
+}
+
 internal static class FastClonerCache
 {
-    internal static readonly ConcurrentDictionary<Type, bool> AlwaysIgnoredTypes = [];
+    internal static readonly ConcurrentDictionary<Type, CloneBehavior> TypeBehaviors = [];
 
     internal static bool IsTypeIgnored(Type type)
     {
-        return AlwaysIgnoredTypes.TryGetValue(type, out _);
+        return TypeBehaviors.TryGetValue(type, out CloneBehavior behavior) && behavior == CloneBehavior.Skip;
+    }
+    
+    internal static bool IsTypeReference(Type type)
+    {
+        return TypeBehaviors.TryGetValue(type, out CloneBehavior behavior) && behavior == CloneBehavior.Reference;
+    }
+    
+    internal static CloneBehavior? GetTypeBehavior(Type type)
+    {
+        return TypeBehaviors.TryGetValue(type, out CloneBehavior behavior) ? behavior : null;
     }
     
     private static readonly ClrCache<object?> classCache = new ClrCache<object?>();

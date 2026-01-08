@@ -108,17 +108,25 @@ TreeNode clone = child.DeepClone();
 
 This differs from `[FastClonerIgnore]` which leaves the member as `null`/default. With `[FastClonerShallow]`, the original reference is preserved.
 
-You might also need to exclude certain types from ever being cloned. To do that, put offending types on a blacklist:
-```cs
-FastCloner.FastCloner.IgnoreType(typeof(PropertyChangedEventHandler)); // or FastCloner.FastCloner.IgnoreTypes([ .. ])
+You might also need to customize how certain types are handled globally. Use `FastCloner.FastCloner.SetTypeBehavior<T>` to configure specific behaviors.
+
+```csharp
+FastCloner.FastCloner.SetTypeBehavior<MySingletonService>(CloneBehavior.Skip);
 ```
 
-If needed, the types can be removed from the blacklist later:
-```cs
-// note: doing this invalidates precompiled expressions and clears the cache,
-// performance will be negatively affected until the cache is repopulated
-FastCloner.FastCloner.ClearIgnoredTypes();
+Available behaviors:
+*   `Clone`: Deep recursive copy.
+*   `Reference`: Return the original instance.
+*   `Shallow`: Top-level `MemberwiseClone`.
+*   `Skip`: Return `default`, skip cloning.
+
+To reset behavior:
+```csharp
+FastCloner.FastCloner.ClearTypeBehavior<MySingletonService>();
+FastCloner.FastCloner.ClearAllTypeBehaviors();
 ```
+
+>*Note: Changing type behavior automatically invalidates the internal cache, which may temporarily impact performance. Configure this at application startup.*
 
 Cache can be invalidated to reduce the memory footprint, if needed:
 

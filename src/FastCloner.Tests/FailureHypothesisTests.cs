@@ -85,21 +85,22 @@ public class FailureHypothesisTests
     }
 
     [Test]
-    public void CancellationTokenSource_Should_Be_Deep_Cloned_Independently()
+    public void CancellationTokenSource_Should_Be_Reference_Copied()
     {
         using var original = new CancellationTokenSource();
         var clone = original.DeepClone();
 
-        Assert.That(clone, Is.Not.SameAs(original));
+        Assert.That(clone, Is.SameAs(original));
         Assert.That(clone.IsCancellationRequested, Is.False);
 
         // Cancel original
         original.Cancel();
         
         Assert.That(original.IsCancellationRequested, Is.True);
-        Assert.That(clone.IsCancellationRequested, Is.False, "Clone should not be cancelled when original is cancelled");
+        // Since it is a reference copy, the clone (same object) MUST be cancelled too.
+        Assert.That(clone.IsCancellationRequested, Is.True, "Clone is the same object, so it should be cancelled");
         
-        // Cancel clone
+        // Cancel clone (safe to call again)
         clone.Cancel();
         Assert.That(clone.IsCancellationRequested, Is.True);
     }
