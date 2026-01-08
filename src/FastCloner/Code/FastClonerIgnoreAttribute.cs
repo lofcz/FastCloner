@@ -1,13 +1,41 @@
 namespace FastCloner.Code;
 
 /// <summary>
-/// Marks given field/property/event as ignored, effectively assigning a default value when cloning such entity.
+/// Marks a member or type as ignored, effectively assigning a default value when cloning.
+/// When applied to a type, all usages of that type will be set to default.
+/// When applied to a member, that specific member will be set to default.
 /// </summary>
-[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Event)]
-public class FastClonerIgnoreAttribute(bool ignored = true) : Attribute
+/// <example>
+/// <code>
+/// // Type-level: all usages of CancellationToken get default value
+/// [FastClonerIgnore]
+/// public struct MyCancellationWrapper { }
+/// 
+/// // Member-level
+/// public class MyClass
+/// {
+///     [FastClonerIgnore]
+///     public CancellationToken Token { get; set; }
+/// }
+/// </code>
+/// </example>
+/// <remarks>
+/// This attribute is a shorthand for <c>[FastClonerBehavior(CloneBehavior.Ignore)]</c>.
+/// </remarks>
+[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Event | AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface)]
+public class FastClonerIgnoreAttribute : FastClonerBehaviorAttribute
 {
     /// <summary>
-    /// Gets whether the member should be ignored during cloning.
+    /// Initializes a new instance of <see cref="FastClonerIgnoreAttribute"/>.
     /// </summary>
-    public bool Ignored { get; } = ignored;
+    /// <param name="ignored">Whether the member/type should be ignored during cloning. Default is true.</param>
+    public FastClonerIgnoreAttribute(bool ignored = true) 
+        : base(ignored ? CloneBehavior.Ignore : CloneBehavior.Clone)
+    {
+    }
+    
+    /// <summary>
+    /// Gets whether the member/type should be ignored during cloning.
+    /// </summary>
+    public bool Ignored => Behavior == CloneBehavior.Ignore;
 }

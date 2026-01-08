@@ -1,22 +1,35 @@
 namespace FastCloner.Code;
 
 /// <summary>
-/// Marks a field or property for shallow cloning instead of deep cloning.
-/// The member reference will be copied directly without recursively cloning its contents.
+/// Marks a member or type for shallow cloning instead of deep cloning.
+/// When applied to a type, all usages perform MemberwiseClone without recursing into members.
+/// When applied to a member, that reference is copied directly without deep cloning its contents.
 /// This is useful for parent references, shared state, or when deep cloning would cause issues.
 /// </summary>
 /// <example>
 /// <code>
+/// // Type-level: shallow clone the entire Config type
+/// [FastClonerShallow]
+/// public class Config { }
+/// 
+/// // Member-level: shallow clone only this member
 /// public class Node
 /// {
 ///     [FastClonerShallow]
-///     public ParentObject Parent { get; set; }  // Reference copied, not deep cloned
-///     
-///     public Foo OtherProperty { get; set; }    // Deep cloned normally
+///     public ParentObject Parent { get; set; }
 /// }
 /// </code>
 /// </example>
-[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
-public class FastClonerShallowAttribute : Attribute
+/// <remarks>
+/// This attribute is a shorthand for <c>[FastClonerBehavior(CloneBehavior.Shallow)]</c>.
+/// </remarks>
+[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Class | AttributeTargets.Struct | AttributeTargets.Interface)]
+public class FastClonerShallowAttribute : FastClonerBehaviorAttribute
 {
+    /// <summary>
+    /// Initializes a new instance of <see cref="FastClonerShallowAttribute"/>.
+    /// </summary>
+    public FastClonerShallowAttribute() : base(CloneBehavior.Shallow)
+    {
+    }
 }

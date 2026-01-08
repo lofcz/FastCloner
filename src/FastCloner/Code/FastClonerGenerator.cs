@@ -20,7 +20,7 @@ internal static class FastClonerGenerator
         
         switch (behavior)
         {
-            case CloneBehavior.Skip:
+            case CloneBehavior.Ignore:
                 return default;
             case CloneBehavior.Reference:
                 return obj;
@@ -306,7 +306,7 @@ internal static class FastClonerGenerator
         
         switch (behavior)
         {
-            case CloneBehavior.Skip:
+            case CloneBehavior.Ignore:
                 return default!;
             case CloneBehavior.Reference:
             case CloneBehavior.Shallow:

@@ -71,70 +71,68 @@ var clone = original.FastDeepClone();
 
 ## Advanced Usage
 
-Sometimes, you might want to exclude certain fields/events/properties from cloning:
+### Customizing Clone Behavior
+
+FastCloner supports behavior attributes that control how types and members are cloned:
+
+| Behavior | Effect |
+|----------|--------|
+| `Clone` | Deep recursive copy |
+| `Reference` | Return original instance unchanged |
+| `Shallow` | `MemberwiseClone` without recursion |
+| `Ignore` | Return `default` |
+
+#### Compile-time (Attributes)
+
+Apply attributes to **types** or **members**. Member-level attributes override type-level:
+
 ```csharp
-private class TestPropsWithIgnored
+[FastClonerReference]  // Type-level: all usages preserve reference
+public class SharedService { }
+
+public class MyClass
 {
-    [FastClonerIgnore] // <-- decorate with [FastClonerIgnore] or [NonSerialized]
-    public string B { get; set; } = "My string";
-    public int A { get; set; } = 10;
-}
-
-TestPropsWithIgnored original = new TestPropsWithIgnored { A = 42, B = "Test value" };
-TestPropsWithIgnored clone = original.DeepClone(); // clone.B is null (default value of a given type)
-```
-
-### Shallow Cloning Members
-
-When you need to copy a reference directly without deep cloning its contents, use `[FastClonerShallow]`.
-
-```csharp
-public class TreeNode
-{
-    public string Name { get; set; }
+    public SharedService Svc { get; set; }      // Uses type-level → Reference
     
-    [FastClonerShallow] // <-- reference copied directly
-    public TreeNode Parent { get; set; }
+    [FastClonerBehavior(CloneBehavior.Clone)]   // Member-level override → Clone
+    public SharedService ClonedSvc { get; set; }
     
-    public List<TreeNode> Children { get; set; }
+    [FastClonerIgnore]                          // → null/default
+    public CancellationToken Token { get; set; }
+    
+    [FastClonerShallow]                         // → Reference copied directly
+    public ParentNode Parent { get; set; }
 }
-
-TreeNode child = new TreeNode { 
-    Name = "Child", 
-    Parent = new TreeNode { Name = "Root" } 
-};
-TreeNode clone = child.DeepClone();
 ```
 
-This differs from `[FastClonerIgnore]` which leaves the member as `null`/default. With `[FastClonerShallow]`, the original reference is preserved.
+Shorthand attributes: `[FastClonerIgnore]`, `[FastClonerShallow]`, `[FastClonerReference]`  
+Explicit: `[FastClonerBehavior(CloneBehavior.X)]`
 
-### Customizing Reflection Cloning
+#### Runtime (Reflection only)
 
-Use `FastCloner.FastCloner.SetTypeBehavior<T>` to configure how specific types are cloned globally.
+Configure type behavior dynamically. Runtime settings are checked **before** attributes:
 
 ```csharp
-FastCloner.FastCloner.SetTypeBehavior<MySingletonService>(CloneBehavior.Skip);
+FastCloner.FastCloner.SetTypeBehavior<MySingleton>(CloneBehavior.Reference);
+FastCloner.FastCloner.ClearTypeBehavior<MySingleton>();    // Reset one
+FastCloner.FastCloner.ClearAllTypeBehaviors();             // Reset all
 ```
 
-Available behaviors:
-*   `Clone`: Deep recursive copy.
-*   `Reference`: Return the original instance.
-*   `Shallow`: Top-level `MemberwiseClone`.
-*   `Skip`: Return `default`, skip cloning.
+> **Note**: Changing runtime behavior invalidates the cache. Try to configure once at startup, or use compile-time attributes when possible.
 
-To reset a behavior:
-```csharp
-FastCloner.FastCloner.ClearTypeBehavior<MySingletonService>();
-FastCloner.FastCloner.ClearAllTypeBehaviors();
-```
+#### Precedence (highest to lowest)
 
->*Note: Changing type behavior at runtime automatically invalidates the internal cache, which may temporarily impact performance. Try to configure behaviors once, at application startup.*
+1. Runtime `SetTypeBehavior<T>()` 
+2. Member-level attribute
+3. Type-level attribute on member's type
+4. Default behavior
 
-Cache can be invalidated to reduce the memory footprint, if needed:
+### Cache Management
 
 ```csharp
-FastCloner.FastCloner.ClearCache();
+FastCloner.FastCloner.ClearCache();  // Free memory from reflection cache
 ```
+
 
 ### Generic Classes and Abstract Types
 

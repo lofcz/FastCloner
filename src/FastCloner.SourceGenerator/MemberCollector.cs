@@ -3,6 +3,18 @@ using Microsoft.CodeAnalysis;
 
 namespace FastCloner.SourceGenerator;
 
+/// <summary>
+/// Represents the member-level clone behavior as determined by attributes.
+/// Mirrors FastCloner.Code.CloneBehavior enum values.
+/// </summary>
+internal enum MemberCloneBehavior
+{
+    Clone = 0,      // Default: deep clone
+    Reference = 1,  // Copy reference directly
+    Shallow = 2,    // MemberwiseClone (treated same as Reference for members)
+    Ignore = 3      // Skip, set to default
+}
+
 internal record struct MemberAnalysis(MemberModel Model, ITypeSymbol Type);
 
 internal static class MemberCollector
@@ -46,10 +58,10 @@ internal static class MemberCollector
                         // Include property if it has an accessible setter OR it's a getter-only populatable collection
                         if (hasAccessibleSetter || isPopulatableCollection)
                         {
-                            if (!HasIgnoreAttribute(property, compilation))
+                            MemberCloneBehavior behavior = GetMemberBehavior(property, compilation);
+                            if (behavior != MemberCloneBehavior.Ignore)
                             {
-                                bool isShallow = HasShallowAttribute(property, compilation);
-                                members.Add(new MemberAnalysis(MemberModel.Create(property, nullabilityEnabled, compilation, isShallow), property.Type));
+                                members.Add(new MemberAnalysis(MemberModel.Create(property, nullabilityEnabled, compilation, behavior), property.Type));
                             }
                         }
                     }
@@ -58,10 +70,10 @@ internal static class MemberCollector
                 {
                     if (field.IsConst) continue; // Skip const fields
                     
-                    if (!HasIgnoreAttribute(field, compilation))
+                    MemberCloneBehavior behavior = GetMemberBehavior(field, compilation);
+                    if (behavior != MemberCloneBehavior.Ignore)
                     {
-                        bool isShallow = HasShallowAttribute(field, compilation);
-                        members.Add(new MemberAnalysis(MemberModel.Create(field, nullabilityEnabled, compilation, isShallow), field.Type));
+                        members.Add(new MemberAnalysis(MemberModel.Create(field, nullabilityEnabled, compilation, behavior), field.Type));
                     }
                 }
             }
@@ -138,46 +150,136 @@ internal static class MemberCollector
         return false;
     }
 
-    private static bool HasIgnoreAttribute(ISymbol member, Compilation compilation)
+    /// <summary>
+    /// Gets the clone behavior for a type by checking for FastClonerBehaviorAttribute on the type definition.
+    /// </summary>
+    private static MemberCloneBehavior? GetTypeBehavior(ITypeSymbol type, Compilation compilation)
     {
+        INamedTypeSymbol? behaviorAttribute = compilation.GetTypeByMetadataName("FastCloner.Code.FastClonerBehaviorAttribute");
         INamedTypeSymbol? ignoreAttribute = compilation.GetTypeByMetadataName("FastCloner.Code.FastClonerIgnoreAttribute");
+        INamedTypeSymbol? shallowAttribute = compilation.GetTypeByMetadataName("FastCloner.Code.FastClonerShallowAttribute");
+        INamedTypeSymbol? referenceAttribute = compilation.GetTypeByMetadataName("FastCloner.Code.FastClonerReferenceAttribute");
+
+        foreach (AttributeData attr in type.GetAttributes())
+        {
+            INamedTypeSymbol? attrClass = attr.AttributeClass;
+            if (attrClass == null)
+                continue;
+
+            if (ignoreAttribute != null && SymbolEqualityComparer.Default.Equals(attrClass, ignoreAttribute))
+            {
+                return attr.ConstructorArguments.Length switch
+                {
+                    0 => MemberCloneBehavior.Ignore,
+                    > 0 when attr.ConstructorArguments[0].Value is bool ignored => ignored ? MemberCloneBehavior.Ignore : null,
+                    _ => MemberCloneBehavior.Ignore
+                };
+            }
+
+            if (shallowAttribute != null && SymbolEqualityComparer.Default.Equals(attrClass, shallowAttribute))
+            {
+                return MemberCloneBehavior.Shallow;
+            }
+
+            if (referenceAttribute != null && SymbolEqualityComparer.Default.Equals(attrClass, referenceAttribute))
+            {
+                return MemberCloneBehavior.Reference;
+            }
+
+            if (behaviorAttribute != null && SymbolEqualityComparer.Default.Equals(attrClass, behaviorAttribute))
+            {
+                if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is int behaviorInt)
+                {
+                    return (MemberCloneBehavior)behaviorInt;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Gets the clone behavior for a member by checking:
+    /// 1. Member-level FastClonerBehaviorAttribute (highest priority)
+    /// 2. [NonSerialized] attribute (treat as Ignore)
+    /// 3. Type-level FastClonerBehaviorAttribute on the member's type (lowest priority)
+    /// </summary>
+    private static MemberCloneBehavior GetMemberBehavior(ISymbol member, ITypeSymbol memberType, Compilation compilation)
+    {
+        // Get all relevant attribute types
+        INamedTypeSymbol? behaviorAttribute = compilation.GetTypeByMetadataName("FastCloner.Code.FastClonerBehaviorAttribute");
+        INamedTypeSymbol? ignoreAttribute = compilation.GetTypeByMetadataName("FastCloner.Code.FastClonerIgnoreAttribute");
+        INamedTypeSymbol? shallowAttribute = compilation.GetTypeByMetadataName("FastCloner.Code.FastClonerShallowAttribute");
+        INamedTypeSymbol? referenceAttribute = compilation.GetTypeByMetadataName("FastCloner.Code.FastClonerReferenceAttribute");
         INamedTypeSymbol? nonSerializedAttribute = compilation.GetTypeByMetadataName("System.NonSerializedAttribute");
 
-        foreach (AttributeData? attr in member.GetAttributes())
+        // 1. Check for member-level attributes first (highest priority)
+        foreach (AttributeData attr in member.GetAttributes())
         {
-            if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, ignoreAttribute))
+            INamedTypeSymbol? attrClass = attr.AttributeClass;
+            if (attrClass == null)
+                continue;
+
+            // Check for specific derived attributes first (shorthand attributes)
+            if (ignoreAttribute != null && SymbolEqualityComparer.Default.Equals(attrClass, ignoreAttribute))
             {
-                // Check if Ignored property is true (default is true)
-                if (attr.ConstructorArguments.Length == 0)
-                    return true;
-                if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is bool ignored)
-                    return ignored;
-                return true;
+                return attr.ConstructorArguments.Length switch
+                {
+                    // Check if Ignored property is true (default is true)
+                    0 => MemberCloneBehavior.Ignore,
+                    > 0 when attr.ConstructorArguments[0].Value is bool ignored => ignored ? MemberCloneBehavior.Ignore : MemberCloneBehavior.Clone,
+                    _ => MemberCloneBehavior.Ignore
+                };
             }
 
-            if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, nonSerializedAttribute))
+            if (shallowAttribute != null && SymbolEqualityComparer.Default.Equals(attrClass, shallowAttribute))
             {
-                return true;
+                return MemberCloneBehavior.Shallow;
+            }
+
+            if (referenceAttribute != null && SymbolEqualityComparer.Default.Equals(attrClass, referenceAttribute))
+            {
+                return MemberCloneBehavior.Reference;
+            }
+
+            // Check for base FastClonerBehaviorAttribute with explicit behavior parameter
+            if (behaviorAttribute != null && SymbolEqualityComparer.Default.Equals(attrClass, behaviorAttribute))
+            {
+                if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is int behaviorInt)
+                {
+                    return (MemberCloneBehavior)behaviorInt;
+                }
+            }
+
+            // Check for [NonSerialized] - treat as Ignore
+            if (nonSerializedAttribute != null && SymbolEqualityComparer.Default.Equals(attrClass, nonSerializedAttribute))
+            {
+                return MemberCloneBehavior.Ignore;
             }
         }
 
-        return false;
+        // 2. Check for type-level attribute on the member's type
+        MemberCloneBehavior? typeBehavior = GetTypeBehavior(memberType, compilation);
+        
+        return typeBehavior ?? MemberCloneBehavior.Clone;
     }
 
-    private static bool HasShallowAttribute(ISymbol member, Compilation compilation)
+    /// <summary>
+    /// Gets the clone behavior for a member (overload for backward compatibility).
+    /// </summary>
+    private static MemberCloneBehavior GetMemberBehavior(ISymbol member, Compilation compilation)
     {
-        INamedTypeSymbol? shallowAttribute = compilation.GetTypeByMetadataName("FastCloner.Code.FastClonerShallowAttribute");
-        if (shallowAttribute == null)
-            return false;
-
-        foreach (AttributeData? attr in member.GetAttributes())
+        ITypeSymbol? memberType = member switch
         {
-            if (SymbolEqualityComparer.Default.Equals(attr.AttributeClass, shallowAttribute))
-            {
-                return true;
-            }
-        }
+            IFieldSymbol f => f.Type,
+            IPropertySymbol p => p.Type,
+            IEventSymbol e => e.Type,
+            _ => null
+        };
 
-        return false;
+        return memberType != null 
+            ? GetMemberBehavior(member, memberType, compilation) 
+            : MemberCloneBehavior.Clone;
     }
 }
+

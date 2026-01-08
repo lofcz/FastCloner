@@ -24,9 +24,9 @@ public enum CloneBehavior
     Shallow,
 
     /// <summary>
-    /// Return default and skip cloning entirely.
+    /// Skip cloning, return default.
     /// </summary>
-    Skip
+    Ignore
 }
 
 internal static class FastClonerCache
@@ -35,7 +35,7 @@ internal static class FastClonerCache
 
     internal static bool IsTypeIgnored(Type type)
     {
-        return TypeBehaviors.TryGetValue(type, out CloneBehavior behavior) && behavior == CloneBehavior.Skip;
+        return TypeBehaviors.TryGetValue(type, out CloneBehavior behavior) && behavior == CloneBehavior.Ignore;
     }
     
     internal static bool IsTypeReference(Type type)
@@ -56,8 +56,7 @@ internal static class FastClonerCache
     private static readonly GenericClrCache<Tuple<Type, string>, object?> fieldCache = new GenericClrCache<Tuple<Type, string>, object?>();
     private static readonly ClrCache<Dictionary<string, Type>> ignoredEventInfoCache = new ClrCache<Dictionary<string, Type>>();
     private static readonly ClrCache<List<MemberInfo>> allMembersCache = new ClrCache<List<MemberInfo>>();
-    private static readonly GenericClrCache<MemberInfo, bool> memberIgnoreStatusCache = new GenericClrCache<MemberInfo, bool>();
-    private static readonly GenericClrCache<MemberInfo, bool> memberShallowStatusCache = new GenericClrCache<MemberInfo, bool>();
+    private static readonly GenericClrCache<MemberInfo, CloneBehavior?> memberBehaviorCache = new GenericClrCache<MemberInfo, CloneBehavior?>();
     private static readonly ClrCache<bool> typeContainsIgnoredMembersCache = new ClrCache<bool>();
     private static readonly ClrCache<object> specialTypesCache = new ClrCache<object>();
     private static readonly ClrCache<bool> isTypeSafeHandleCache = new ClrCache<bool>();
@@ -70,8 +69,7 @@ internal static class FastClonerCache
     public static T GetOrAddConvertor<T>(Type from, Type to, Func<Type, Type, T> valueFactory) => (T)typeConvertCache.GetOrAdd(from, to, (f, t) => valueFactory(f, t));
     public static Dictionary<string, Type> GetOrAddIgnoredEventInfo(Type type, Func<Type, Dictionary<string, Type>> valueFactory) => ignoredEventInfoCache.GetOrAdd(type, valueFactory);
     public static List<MemberInfo> GetOrAddAllMembers(Type type, Func<Type, List<MemberInfo>> valueFactory) => allMembersCache.GetOrAdd(type, valueFactory);
-    public static bool GetOrAddMemberIgnoreStatus(MemberInfo memberInfo, Func<MemberInfo, bool> valueFactory) => memberIgnoreStatusCache.GetOrAdd(memberInfo, valueFactory);
-    public static bool GetOrAddMemberShallowStatus(MemberInfo memberInfo, Func<MemberInfo, bool> valueFactory) => memberShallowStatusCache.GetOrAdd(memberInfo, valueFactory);
+    public static CloneBehavior? GetOrAddMemberBehavior(MemberInfo memberInfo, Func<MemberInfo, CloneBehavior?> valueFactory) => memberBehaviorCache.GetOrAdd(memberInfo, valueFactory);
     public static bool GetOrAddTypeContainsIgnoredMembers(Type type, Func<Type, bool> valueFactory)
     {
         return type.IsValueType && typeContainsIgnoredMembersCache.GetOrAdd(type, valueFactory);
@@ -92,8 +90,7 @@ internal static class FastClonerCache
         fieldCache.Clear();
         ignoredEventInfoCache.Clear();
         allMembersCache.Clear();
-        memberIgnoreStatusCache.Clear();
-        memberShallowStatusCache.Clear();
+        memberBehaviorCache.Clear();
         typeContainsIgnoredMembersCache.Clear();
         specialTypesCache.Clear();
         isTypeSafeHandleCache.Clear();

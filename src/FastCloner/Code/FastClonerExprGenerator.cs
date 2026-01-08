@@ -29,24 +29,60 @@ internal static class FastClonerExprGenerator
 
     private static bool MemberIsIgnored(MemberInfo memberInfo)
     {
-        return FastClonerCache.GetOrAddMemberIgnoreStatus(memberInfo, mi =>
-        {
-            FastClonerIgnoreAttribute? fcIgnored = mi.GetCustomAttribute<FastClonerIgnoreAttribute>();
-            NonSerializedAttribute? nonSerialized = mi.GetCustomAttribute<NonSerializedAttribute>();
-            return fcIgnored?.Ignored ?? nonSerialized is not null;
-        });
+        return GetMemberBehavior(memberInfo) == CloneBehavior.Ignore;
     }
 
     internal static bool MemberIsShallow(MemberInfo memberInfo)
     {
-        return FastClonerCache.GetOrAddMemberShallowStatus(memberInfo, mi =>
+        return GetMemberBehavior(memberInfo) == CloneBehavior.Shallow;
+    }
+    
+    internal static bool MemberIsReference(MemberInfo memberInfo)
+    {
+        return GetMemberBehavior(memberInfo) == CloneBehavior.Reference;
+    }
+    
+    /// <summary>
+    /// Returns true if the member should have its reference copied directly without deep cloning.
+    /// This applies to both Shallow and Reference behaviors.
+    /// </summary>
+    internal static bool MemberShouldCopyReference(MemberInfo memberInfo)
+    {
+        CloneBehavior? behavior = GetMemberBehavior(memberInfo);
+        return behavior is CloneBehavior.Shallow or CloneBehavior.Reference;
+    }
+    
+    /// <summary>
+    /// Gets the clone behavior for a type by checking for FastClonerBehaviorAttribute on the type definition.
+    /// </summary>
+    internal static CloneBehavior? GetTypeBehavior(Type type)
+    {
+        FastClonerBehaviorAttribute? behaviorAttr = type.GetCustomAttribute<FastClonerBehaviorAttribute>();
+        return behaviorAttr?.Behavior;
+    }
+    
+    /// <summary>
+    /// Gets the clone behavior for a member by checking:
+    /// 1. Member-level FastClonerBehaviorAttribute (highest priority)
+    /// 2. [NonSerialized] attribute (treat as Ignore)
+    /// 3. Backing field's corresponding property
+    /// 4. Type-level FastClonerBehaviorAttribute on the member's type (lowest priority)
+    /// </summary>
+    internal static CloneBehavior? GetMemberBehavior(MemberInfo memberInfo)
+    {
+        return FastClonerCache.GetOrAddMemberBehavior(memberInfo, mi =>
         {
-            // Check if the member itself has the attribute
-            FastClonerShallowAttribute? fcShallow = mi.GetCustomAttribute<FastClonerShallowAttribute>();
-            if (fcShallow is not null)
-                return true;
-            
-            // For backing fields of auto-implemented properties, check the property
+            // 1. Check for member-level FastClonerBehaviorAttribute (base class covers all derived attributes)
+            FastClonerBehaviorAttribute? behaviorAttr = mi.GetCustomAttribute<FastClonerBehaviorAttribute>();
+            if (behaviorAttr is not null)
+                return behaviorAttr.Behavior;
+
+            // 2. Check [NonSerialized] (treat as Ignore)
+            NonSerializedAttribute? nonSerialized = mi.GetCustomAttribute<NonSerializedAttribute>();
+            if (nonSerialized is not null)
+                return CloneBehavior.Ignore;
+
+            // 3. For backing fields of auto-implemented properties, check the corresponding property
             // Backing fields are named like "<PropertyName>k__BackingField"
             if (mi is FieldInfo field && field.Name.StartsWith("<") && field.Name.EndsWith(">k__BackingField"))
             {
@@ -55,19 +91,37 @@ internal static class FastClonerExprGenerator
                 PropertyInfo? property = field.DeclaringType?.GetProperty(propertyName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
                 if (property != null)
                 {
-                    FastClonerShallowAttribute? propShallow = property.GetCustomAttribute<FastClonerShallowAttribute>();
-                    if (propShallow is not null)
-                        return true;
+                    FastClonerBehaviorAttribute? propBehavior = property.GetCustomAttribute<FastClonerBehaviorAttribute>();
+                    if (propBehavior is not null)
+                        return propBehavior.Behavior;
                 }
             }
+
+            // 4. Check for type-level attribute on the member's type
+            Type? memberType = mi switch
+            {
+                FieldInfo f => f.FieldType,
+                PropertyInfo p => p.PropertyType,
+                EventInfo e => e.EventHandlerType,
+                _ => null
+            };
             
-            return false;
+            if (memberType != null)
+            {
+                CloneBehavior? typeBehavior = GetTypeBehavior(memberType);
+                if (typeBehavior.HasValue)
+                    return typeBehavior.Value;
+            }
+
+            return null;
         });
     }
+
 
     internal static bool CalculateTypeContainsIgnoredMembers(Type type)
     {
         IEnumerable<MemberInfo> members = FastClonerCache.GetOrAddAllMembers(type, GetAllMembers);
+
         return members.Any(MemberIsIgnored);
     }
 
@@ -144,10 +198,10 @@ internal static class FastClonerExprGenerator
                 continue;
             }
 
-            // Check if member should be shallow cloned
-            if (MemberIsShallow(member))
+            // Check if member should copy reference directly (Shallow or Reference behavior)
+            if (MemberShouldCopyReference(member))
             {
-                // For shallow clone, just copy the reference/value directly
+                // For shallow/reference clone, just copy the reference/value directly
                 Expression originalValue = Expression.MakeMemberAccess(fromLocal, member);
                 expressionList.Add(Expression.Call(
                     Expression.Constant(fieldInfo),
@@ -473,8 +527,8 @@ internal static class FastClonerExprGenerator
                     continue;
                 }
 
-                // Check if member should be shallow cloned (copy reference directly)
-                if (MemberIsShallow(member))
+                // Check if member should copy reference directly (Shallow or Reference behavior)
+                if (MemberShouldCopyReference(member))
                 {
                     MemberExpression shallowSourceValue = Expression.MakeMemberAccess(fromLocal, member);
                     switch (member)

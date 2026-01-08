@@ -104,7 +104,7 @@ internal static class ImplicitTypeAnalyzer
                             HasGetter: true,
                             HasSetter: true,
                             SetterIsAccessible: true,
-                            IsShallowClone: false
+                            MemberBehavior: MemberCloneBehavior.Clone
                         );
                         return true;
                     }

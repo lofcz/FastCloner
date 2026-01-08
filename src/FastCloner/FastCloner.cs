@@ -46,7 +46,7 @@ public static class FastCloner
     /// <list type="bullet">
     /// <item><description><see cref="CloneBehavior.Clone"/> - Default behavior, performs deep cloning (removes any custom behavior).</description></item>
     /// <item><description><see cref="CloneBehavior.Reference"/> - Returns the same instance without cloning (for immutable/safe types).</description></item>
-    /// <item><description><see cref="CloneBehavior.Skip"/> - Returns null/default and skips cloning entirely.</description></item>
+    /// <item><description><see cref="CloneBehavior.Ignore"/> - Returns null/default and skips cloning entirely.</description></item>
     /// </list>
     /// </summary>
     /// <param name="type">The type to configure.</param>

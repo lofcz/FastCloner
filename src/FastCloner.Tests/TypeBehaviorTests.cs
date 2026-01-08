@@ -58,7 +58,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
             SimpleProp = new SimpleClass { IntValue = 10, StringValue = "Test" },
             AnotherSimpleProp = new AnotherSimpleClass { DoubleValue = 1.23 }
         };
-        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Ignore);
 
         // Act
         ClassWithProperties cloned = original.DeepClone();
@@ -120,7 +120,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
             Id = 1,
             MyStruct = new MyValueType { Value = 42 }
         };
-        FastCloner.SetTypeBehavior<MyValueType>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<MyValueType>(CloneBehavior.Ignore);
 
         // Act
         ClassWithValueTypeProperty cloned = original.DeepClone();
@@ -139,7 +139,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         FastCloner.ClearAllTypeBehaviors();
 
         // Act
-        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Ignore);
         var behaviorIgnore = FastCloner.GetTypeBehavior<SimpleClass>();
         
         FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Reference);
@@ -149,7 +149,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         var behaviorDeep = FastCloner.GetTypeBehavior<SimpleClass>();
 
         // Assert
-        Assert.That(behaviorIgnore, Is.EqualTo(CloneBehavior.Skip));
+        Assert.That(behaviorIgnore, Is.EqualTo(CloneBehavior.Ignore));
         Assert.That(behaviorReference, Is.EqualTo(CloneBehavior.Reference));
         Assert.That(behaviorDeep, Is.Null, "Start behavior (Clone) should remove the entry.");
     }
@@ -201,7 +201,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     {
         // Arrange
         ClassToBeIgnored original = new ClassToBeIgnored { Data = "Important Data" };
-        FastCloner.SetTypeBehavior<ClassToBeIgnored>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<ClassToBeIgnored>(CloneBehavior.Ignore);
 
         // Act
         ClassToBeIgnored cloned = original.DeepClone();
@@ -215,7 +215,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     {
         // Arrange
         ClassWithPrimitiveProperties original = new ClassWithPrimitiveProperties { IntProp = 123, BoolProp = true, StringProp = "Hello" };
-        FastCloner.SetTypeBehavior<int>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<int>(CloneBehavior.Ignore);
 
         // Act
         ClassWithPrimitiveProperties cloned = original.DeepClone();
@@ -237,8 +237,8 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
             SimpleProp = new SimpleClass { IntValue = 10, StringValue = "Test" },
             AnotherSimpleProp = new AnotherSimpleClass { DoubleValue = 1.23 }
         };
-        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Skip);
-        FastCloner.SetTypeBehavior<AnotherSimpleClass>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Ignore);
+        FastCloner.SetTypeBehavior<AnotherSimpleClass>(CloneBehavior.Ignore);
 
         // Act
         ClassWithProperties cloned = original.DeepClone();
@@ -263,7 +263,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
                 new SimpleClass { IntValue = 2, StringValue = "B" }
             ]
         };
-        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Ignore);
 
         // Act
         ClassWithProperties cloned = original.DeepClone();
@@ -287,7 +287,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
             Id = 1,
             SetOfString = ["Hello", "World"]
         };
-        FastCloner.SetTypeBehavior<string>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<string>(CloneBehavior.Ignore);
 
         // Act
         ClassWithSetProperties cloned = original.DeepClone();
@@ -312,7 +312,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
             Id = 1,
             SetOfMyValueType = [item1, item2]
         };
-        FastCloner.SetTypeBehavior<MyValueType>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<MyValueType>(CloneBehavior.Ignore);
 
         // Act
         ClassWithSetProperties cloned = original.DeepClone();
@@ -337,7 +337,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
             Id = 1,
             SetOfSimpleClass = [item1, item2]
         };
-        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Ignore);
 
         // Act
         ClassWithSetProperties cloned = original.DeepClone();
@@ -363,7 +363,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
                 new SimpleClass { IntValue = 2, StringValue = "B" }
             ]
         };
-        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Ignore);
 
         // Act
         ClassWithArrayProperties cloned = original.DeepClone();
@@ -391,7 +391,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
                 new MyValueType { Value = 20 }
             ]
         };
-        FastCloner.SetTypeBehavior<MyValueType>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<MyValueType>(CloneBehavior.Ignore);
 
         // Act
         ClassWithArrayProperties cloned = original.DeepClone();
@@ -420,7 +420,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
                 { new SimpleClass { IntValue = 2, StringValue = "B" } }
             }
         };
-        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Ignore);
 
         // Act
         ClassWithArrayProperties cloned = original.DeepClone();
@@ -445,7 +445,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
             Id = 1,
             ArrayOfInt = [10, 20, 30]
         };
-        FastCloner.SetTypeBehavior<int>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<int>(CloneBehavior.Ignore);
 
         // Act
         ClassWithArrayProperties cloned = original.DeepClone();
@@ -468,7 +468,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
             Id = 1,
             ArrayOfString = ["Hello", "World"]
         };
-        FastCloner.SetTypeBehavior<string>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<string>(CloneBehavior.Ignore);
 
         // Act
         ClassWithArrayProperties cloned = original.DeepClone();
@@ -494,7 +494,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
                 [2] = "World"
             }
         };
-        FastCloner.SetTypeBehavior<string>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<string>(CloneBehavior.Ignore);
 
         // Act
         ClassWithDictionaryProperties cloned = original.DeepClone();
@@ -517,8 +517,8 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         {
             [key1] = value1
         };
-        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Skip);
-        FastCloner.SetTypeBehavior<AnotherSimpleClass>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Ignore);
+        FastCloner.SetTypeBehavior<AnotherSimpleClass>(CloneBehavior.Ignore);
 
         // Act
         Dictionary<SimpleClass, AnotherSimpleClass> cloned = original.DeepClone();
@@ -540,7 +540,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         {
             [key1] = value1
         };
-        FastCloner.SetTypeBehavior<MyValueType>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<MyValueType>(CloneBehavior.Ignore);
 
         // Act
         Dictionary<MyValueType, MyValueType> cloned = original.DeepClone();
@@ -561,7 +561,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
             [1] = new SimpleClass { IntValue = 10, StringValue = "Val1" },
             [2] = new SimpleClass { IntValue = 20, StringValue = "Val2" }
         };
-        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Ignore);
 
         // Act
         Dictionary<int, SimpleClass> cloned = original.DeepClone();
@@ -582,7 +582,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         {
             [key1] = 100
         };
-        FastCloner.SetTypeBehavior<int>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<int>(CloneBehavior.Ignore);
 
         // Act
         Dictionary<SimpleClass, int> cloned = original.DeepClone();
@@ -597,7 +597,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     public void SetTypeBehavior_MinimalIssue8Ignored()
     {
         // Arrange
-        FastCloner.SetTypeBehavior<System.ComponentModel.PropertyChangedEventHandler>(CloneBehavior.Skip);
+        FastCloner.SetTypeBehavior<System.ComponentModel.PropertyChangedEventHandler>(CloneBehavior.Ignore);
         
         IteratorInfo nfo = new IteratorInfo();
 

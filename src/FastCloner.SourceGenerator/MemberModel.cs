@@ -83,10 +83,19 @@ internal readonly record struct MemberModel(
     bool HasGetter,                  // Whether the property has a getter
     bool HasSetter,                  // Whether the property has a setter (regular, not init-only)
     bool SetterIsAccessible,         // Whether the setter is publicly accessible (not private/protected)
-    bool IsShallowClone              // Whether the member should be shallow cloned (has [FastClonerShallow] attribute)
+    MemberCloneBehavior MemberBehavior  // The clone behavior for this member (Clone, Reference, Shallow, Ignore)
 ) : IEquatable<MemberModel>
 {
-    public static MemberModel Create(IPropertySymbol property, bool nullabilityEnabled, Compilation compilation, bool isShallowClone = false)
+    /// <summary>
+    /// Returns true if the member should have its reference copied directly without deep cloning.
+    /// This applies to both Shallow and Reference behaviors.
+    /// </summary>
+    public bool ShouldCopyReference => MemberBehavior == MemberCloneBehavior.Shallow || MemberBehavior == MemberCloneBehavior.Reference;
+    
+    // Legacy property for backward compatibility
+    public bool IsShallowClone => ShouldCopyReference;
+
+    public static MemberModel Create(IPropertySymbol property, bool nullabilityEnabled, Compilation compilation, MemberCloneBehavior memberBehavior = MemberCloneBehavior.Clone)
     {
         (MemberTypeKind typeKind, string? elementName, string? keyName, string? valueName, bool elementSafe, bool elementClonable, bool keySafe, bool keyClonable, bool valSafe, bool valClonable, bool requiresFastCloner, CollectionKind collectionKind, string? concreteType, int arrayRank) 
             = AnalyzeType(property.Type, compilation);
@@ -132,10 +141,10 @@ internal readonly record struct MemberModel(
             hasGetter,
             hasSetter,
             setterIsAccessible,
-            isShallowClone);
+            memberBehavior);
     }
 
-    public static MemberModel Create(IFieldSymbol field, bool nullabilityEnabled, Compilation compilation, bool isShallowClone = false)
+    public static MemberModel Create(IFieldSymbol field, bool nullabilityEnabled, Compilation compilation, MemberCloneBehavior memberBehavior = MemberCloneBehavior.Clone)
     {
         (MemberTypeKind typeKind, string? elementName, string? keyName, string? valueName, bool elementSafe, bool elementClonable, bool keySafe, bool keyClonable, bool valSafe, bool valClonable, bool requiresFastCloner, CollectionKind collectionKind, string? concreteType, int arrayRank) 
             = AnalyzeType(field.Type, compilation);
@@ -175,7 +184,7 @@ internal readonly record struct MemberModel(
             hasGetter,
             hasSetter,
             setterIsAccessible,
-            isShallowClone);
+            memberBehavior);
     }
     
     private static (MemberTypeKind kind, string? elem, string? key, string? val, bool elemSafe, bool elemClon, bool keySafe, bool keyClon, bool valSafe, bool valClon, bool requiresFastCloner, CollectionKind collKind, string? concreteType, int arrayRank) 

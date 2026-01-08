@@ -84,7 +84,7 @@ internal static class NestedTypeCollector
                     true,  // HasGetter - helper methods always have access
                     true,  // HasSetter - helper methods always have access
                     true,  // SetterIsAccessible - helper methods always have access
-                    false  // IsShallowClone - helper methods are never shallow
+                    MemberCloneBehavior.Clone  // MemberBehavior - helper methods use default cloning
                  );
                  
                  if (!nestedTypes.ContainsKey(model.TypeFullName))
@@ -142,7 +142,7 @@ internal static class NestedTypeCollector
                     true,  // HasGetter - helper methods always have access
                     true,  // HasSetter - helper methods always have access
                     true,  // SetterIsAccessible - helper methods always have access
-                    false  // IsShallowClone - helper methods are never shallow
+                    MemberCloneBehavior.Clone  // MemberBehavior - helper methods use default cloning
                  );
 
                  if (!nestedTypes.ContainsKey(model.TypeFullName))
