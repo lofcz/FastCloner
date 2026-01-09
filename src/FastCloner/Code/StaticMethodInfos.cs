@@ -6,15 +6,15 @@ internal static class StaticMethodInfos
 {
     internal static class DeepCloneStateMethods
     {
-        internal static MethodInfo AddKnownRef { get; } = typeof(FastCloneState).GetMethod(nameof(FastCloneState.AddKnownRef))!;
+        internal static readonly MethodInfo AddKnownRef = typeof(FastCloneState).GetMethod(nameof(FastCloneState.AddKnownRef))!;
     }
 
     internal static class DeepClonerGeneratorMethods
     {
-        internal static MethodInfo CloneStructInternal { get; } =
+        internal static readonly MethodInfo CloneStructInternal =
             typeof(FastClonerGenerator).GetMethod(nameof(FastClonerGenerator.CloneStructInternal),
                                                   BindingFlags.NonPublic | BindingFlags.Static)!;
-        internal static MethodInfo CloneClassInternal { get; } =
+        internal static readonly MethodInfo CloneClassInternal =
             typeof(FastClonerGenerator).GetMethod(nameof(FastClonerGenerator.CloneClassInternal),
                                                   BindingFlags.NonPublic | BindingFlags.Static)!;
 
@@ -23,8 +23,12 @@ internal static class StaticMethodInfos
                 ? CloneStructInternal.MakeGenericMethod(fieldType)
                 : CloneClassInternal;
 
-        internal static MethodInfo GetClonerForValueType { get; } =
+        internal static readonly MethodInfo GetClonerForValueType =
             typeof(FastClonerGenerator).GetMethod(nameof(FastClonerGenerator.GetClonerForValueType),
                                                   BindingFlags.NonPublic | BindingFlags.Static)!;
+        
+        internal static readonly MethodInfo ExpandoObjectCopyMethod = typeof(FastClonerGenerator).GetMethod(nameof(FastClonerGenerator.CloneExpandoValue), 
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+
     }
 }

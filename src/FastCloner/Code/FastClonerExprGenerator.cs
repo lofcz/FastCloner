@@ -1001,7 +1001,7 @@ internal static class FastClonerExprGenerator
         LabelTarget breakLabel = CreateLoopLabel(position);
 
         Expression clonedLogic = Expression.Call(
-            typeof(FastClonerGenerator).GetMethod("CloneClassInternal", BindingFlags.NonPublic | BindingFlags.Static)!,
+            StaticMethodInfos.DeepClonerGeneratorMethods.ExpandoObjectCopyMethod,
             valueToClone,
             state
         );

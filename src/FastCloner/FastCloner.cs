@@ -64,6 +64,7 @@ public static class FastCloner
             {
                 FastClonerSafeTypes.ClearKnownTypesCache();
                 FastClonerCache.ClearCache();
+                FastClonerCache.RecalculateSafeTypeOverrides();
             }
         }
         else
@@ -71,6 +72,7 @@ public static class FastCloner
             FastClonerCache.TypeBehaviors[type] = behavior;
             FastClonerSafeTypes.ClearKnownTypesCache();
             FastClonerCache.ClearCache();
+            FastClonerCache.RecalculateSafeTypeOverrides();
         }
     }
 
@@ -118,6 +120,7 @@ public static class FastCloner
         {
             FastClonerSafeTypes.ClearKnownTypesCache();
             FastClonerCache.ClearCache();
+            FastClonerCache.RecalculateSafeTypeOverrides();
         }
         return removed;
     }
@@ -140,5 +143,6 @@ public static class FastCloner
         FastClonerCache.TypeBehaviors.Clear();
         FastClonerSafeTypes.ClearKnownTypesCache();
         FastClonerCache.ClearCache();
+        FastClonerCache.HasSafeTypeOverrides = false; 
     }
 }

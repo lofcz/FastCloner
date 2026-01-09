@@ -11,4 +11,5 @@
   <Project Path="FastCloner.SourceGenerator/FastCloner.SourceGenerator.csproj" />
   <Project Path="FastCloner.Tests/FastCloner.Tests.csproj" />
   <Project Path="FastCloner/FastCloner.csproj" />
+  <Project Path="FastCloner.Profiling/FastCloner.Profiling.csproj" />
 </Solution>

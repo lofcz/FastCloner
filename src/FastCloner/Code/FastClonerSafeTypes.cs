@@ -2,6 +2,7 @@
 using System.Globalization;
 using System.Numerics;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace FastCloner.Code;
@@ -11,7 +12,7 @@ namespace FastCloner.Code;
 /// </summary>
 internal static class FastClonerSafeTypes
 {
-    internal static readonly Dictionary<Type, bool> DefaultKnownTypes = new Dictionary<Type, bool>(34)
+    internal static readonly Dictionary<Type, bool> DefaultKnownTypes = new Dictionary<Type, bool>(64)
     {
         // Primitives
         [typeof(byte)] = true,
@@ -138,6 +139,15 @@ internal static class FastClonerSafeTypes
         }
     }
     
+    private static bool IsAnonymousType(Type type)
+    {
+        return FastClonerCache.GetOrAddAnonymousTypeStatus(type, t => 
+            t.IsClass && t is { IsSealed: true, IsNotPublic: true }
+                      && t.IsDefined(typeof(CompilerGeneratedAttribute), false)
+                      && (t.Name.StartsWith("<>") || t.Name.StartsWith("VB$"))
+                      && t.Name.Contains("AnonymousType"));
+    }
+
     private static readonly HashSet<string> safeTypeExact = new HashSet<string>(StringComparer.Ordinal)
     {
         "System.Threading.Tasks.Task",
@@ -192,7 +202,7 @@ internal static class FastClonerSafeTypes
         
         if (type.IsGenericType)
         {
-            var genericDef = type.GetGenericTypeDefinition();
+            Type? genericDef = type.GetGenericTypeDefinition();
             if (knownTypes.TryGetValue(genericDef, out bool isGenericSafe))
             {
                 knownTypes.TryAdd(type, isGenericSafe);
@@ -214,7 +224,7 @@ internal static class FastClonerSafeTypes
             return true;
         }
 
-        if (!type.IsValueType())
+        if (!IsAnonymousType(type) && !type.IsValueType())
         {
             knownTypes.TryAdd(type, false);
             return false;
