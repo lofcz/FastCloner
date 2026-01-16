@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Numerics;
 using System.Reflection;
@@ -265,5 +265,57 @@ internal static class FastClonerSafeTypes
     {
         knownTypes.Clear();
         InitializeKnownTypes();
+    }
+    
+    /// <summary>
+    /// Determines whether GetHashCode() result won't change after deep cloning (best effort).
+    /// </summary>
+    internal static bool HasStableHashSemantics(Type type)
+    {
+        return FastClonerCache.GetOrAddStableHashSemantics(type, CalculateHasStableHashSemantics);
+    }
+    
+    private static bool CalculateHasStableHashSemantics(Type type)
+    {
+        // Primitives are always stable - their hash is based on their value
+        if (type.IsPrimitive)
+            return true;
+        
+        // String is immutable and has value-based hash
+        if (type == typeof(string))
+            return true;
+        
+        // Enums are always stable - hash is based on underlying value
+        if (type.IsEnum)
+            return true;
+        
+        // Value types: even if they don't override GetHashCode, their fields are copied
+        // so the hash remains consistent after cloning
+        if (type.IsValueType)
+            return true;
+        
+        // Known safe types from our dictionary are stable
+        if (DefaultKnownTypes.ContainsKey(type))
+            return true;
+        
+        // Check if the type overrides GetHashCode (not using object.GetHashCode)
+        // If a type has overridden GetHashCode, it's using value-based hashing
+        MethodInfo? getHashCodeMethod = type.GetMethod(
+            "GetHashCode",
+            BindingFlags.Public | BindingFlags.Instance,
+            null,
+            Type.EmptyTypes,
+            null);
+        
+        if (getHashCodeMethod is not null && getHashCodeMethod.DeclaringType != typeof(object))
+        {
+            // Type has custom GetHashCode implementation
+            // This indicates value-based equality semantics
+            return true;
+        }
+        
+        // Reference types using default GetHashCode use identity-based hash
+        // These are NOT stable after cloning
+        return false;
     }
 }

@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 
 namespace FastCloner.Code;
 
@@ -26,9 +26,5 @@ internal static class StaticMethodInfos
         internal static readonly MethodInfo GetClonerForValueType =
             typeof(FastClonerGenerator).GetMethod(nameof(FastClonerGenerator.GetClonerForValueType),
                                                   BindingFlags.NonPublic | BindingFlags.Static)!;
-        
-        internal static readonly MethodInfo ExpandoObjectCopyMethod = typeof(FastClonerGenerator).GetMethod(nameof(FastClonerGenerator.CloneExpandoValue), 
-            BindingFlags.NonPublic | BindingFlags.Static)!;
-
     }
 }

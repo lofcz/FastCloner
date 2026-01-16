@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Collections.ObjectModel;
@@ -1781,17 +1781,22 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         {
             Assert.That(cloned.Name, Is.EqualTo("Test"), "String property should be copied");
 
+            // Original delegate increments the original counter
             int originalResult = original.Increment();
-            int clonedResult = cloned.Increment();
             Assert.That(originalResult, Is.EqualTo(1), "Original delegate should increment counter");
-            Assert.That(clonedResult, Is.EqualTo(2), "Cloned delegate should share the same counter");
-            Assert.That(counter, Is.EqualTo(2), "Counter should be incremented twice");
+            Assert.That(counter, Is.EqualTo(1), "Original counter should be 1");
 
+            // Cloned delegate has its own cloned closure with independent counter
+            int clonedResult = cloned.Increment();
+            Assert.That(clonedResult, Is.EqualTo(1), "Cloned delegate has independent counter starting at 0");
+            Assert.That(counter, Is.EqualTo(1), "Original counter unchanged by cloned delegate");
+
+            // Both continue independently
             originalResult = original.Increment();
             clonedResult = cloned.Increment();
-            Assert.That(originalResult, Is.EqualTo(3), "Original delegate should continue counting");
-            Assert.That(clonedResult, Is.EqualTo(4), "Cloned delegate should continue counting");
-            Assert.That(counter, Is.EqualTo(4), "Counter should be incremented four times");
+            Assert.That(originalResult, Is.EqualTo(2), "Original delegate continues counting");
+            Assert.That(clonedResult, Is.EqualTo(2), "Cloned delegate continues independently");
+            Assert.That(counter, Is.EqualTo(2), "Original counter only affected by original delegate");
         });
     }
 

@@ -36,7 +36,7 @@ public class BenchDynamic
     public object FastCloner_Simple() => FastCloner.DeepClone(_simple);
     
     [Benchmark(Baseline = true), BenchmarkCategory("Simple")]
-    public object? DeepCloner_Simple() => _simple.DeepClone();
+    public object? DeepCloner_Simple() => _simple.DeepClone();*/
 
     // Nested ExpandoObject
     [Benchmark, BenchmarkCategory("Nested")]
@@ -71,7 +71,7 @@ public class BenchDynamic
     public object? FastCloner_Mixed() => FastCloner.DeepClone(_mixed);
     
     [Benchmark(Baseline = true), BenchmarkCategory("Mixed")]
-    public object? DeepCloner_Mixed() => _mixed.DeepClone();*/
+    public object? DeepCloner_Mixed() => _mixed.DeepClone();
 
     // Large ExpandoObject (100 properties)
     [Benchmark, BenchmarkCategory("Large")]
@@ -232,7 +232,7 @@ public class BenchDynamic
                     {
                         NestedId = i,
                         NestedValue = $"Nested {i}"
-                    };;
+                    };
                     break;
             }
         }

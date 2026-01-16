@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
@@ -77,6 +77,7 @@ internal static class FastClonerCache
     private static readonly ClrCache<object> specialTypesCache = new ClrCache<object>();
     private static readonly ClrCache<bool> isTypeSafeHandleCache = new ClrCache<bool>();
     private static readonly ClrCache<bool> anonymousTypeStatusCache = new ClrCache<bool>();
+    private static readonly ClrCache<bool> stableHashSemanticsCache = new ClrCache<bool>();
 
     public static object? GetOrAddField(Type type, string name, Func<Type, object?> valueFactory) => fieldCache.GetOrAdd(new Tuple<Type, string>(type, name), k => valueFactory(k.Item1));
     public static object? GetOrAddClass(Type type, Func<Type, object?> valueFactory) => classCache.GetOrAdd(type, valueFactory);
@@ -94,6 +95,7 @@ internal static class FastClonerCache
     public static object GetOrAddSpecialType(Type type, Func<Type, object> valueFactory) => specialTypesCache.GetOrAdd(type, valueFactory);
     public static bool GetOrAddIsTypeSafeHandle(Type type, Func<Type, bool> valueFactory) => isTypeSafeHandleCache.GetOrAdd(type, valueFactory);
     public static bool GetOrAddAnonymousTypeStatus(Type type, Func<Type, bool> valueFactory) => anonymousTypeStatusCache.GetOrAdd(type, valueFactory);
+    public static bool GetOrAddStableHashSemantics(Type type, Func<Type, bool> valueFactory) => stableHashSemanticsCache.GetOrAdd(type, valueFactory);
     
     /// <summary>
     /// Clears the FastCloner cached reflection metadata.
@@ -113,6 +115,7 @@ internal static class FastClonerCache
         specialTypesCache.Clear();
         isTypeSafeHandleCache.Clear();
         anonymousTypeStatusCache.Clear();
+        stableHashSemanticsCache.Clear();
     }
     
     internal sealed class ClrCache<TValue>

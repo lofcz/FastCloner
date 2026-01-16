@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 
 namespace FastCloner.Code;
@@ -167,11 +167,6 @@ internal static class FastClonerGenerator
         return false;
     }
     
-    internal static object? CloneExpandoValue(object? obj, FastCloneState state)
-    {
-        return obj is null ? null : CloneClassInternalTyped(obj, obj.GetType(), state);
-    }
-
     internal static object? CloneClassInternal(object? obj, FastCloneState state)
     {
         return obj is null ? null : CloneClassInternalTyped(obj, obj.GetType(), state);

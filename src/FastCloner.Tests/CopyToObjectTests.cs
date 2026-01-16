@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -825,5 +825,613 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         D2 wrapper = new D2(baseObject);
         Assert.That(wrapper.A, Is.EqualTo(12));
         Assert.That(wrapper.B, Is.EqualTo(14));
+    }
+    
+    [Test]
+    public void DictionaryWithStringKeys_FastPath_ShouldCloneCorrectly()
+    {
+        // Arrange - string keys have stable hash semantics (fast path)
+        Dictionary<string, int> original = new Dictionary<string, int>
+        {
+            ["one"] = 1,
+            ["two"] = 2,
+            ["three"] = 3
+        };
+        
+        // Act
+        Dictionary<string, int> cloned = original.DeepClone();
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original));
+            Assert.That(cloned.Count, Is.EqualTo(3));
+            Assert.That(cloned["one"], Is.EqualTo(1));
+            Assert.That(cloned["two"], Is.EqualTo(2));
+            Assert.That(cloned["three"], Is.EqualTo(3));
+            Assert.That(cloned.ContainsKey("one"), Is.True);
+            Assert.That(cloned.ContainsKey("two"), Is.True);
+            Assert.That(cloned.ContainsKey("three"), Is.True);
+        });
+    }
+    
+    [Test]
+    public void DictionaryWithIntKeys_FastPath_ShouldCloneCorrectly()
+    {
+        // Arrange - int keys have stable hash semantics (fast path)
+        Dictionary<int, string> original = new Dictionary<int, string>
+        {
+            [1] = "one",
+            [2] = "two",
+            [100] = "hundred"
+        };
+        
+        // Act
+        Dictionary<int, string> cloned = original.DeepClone();
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original));
+            Assert.That(cloned.Count, Is.EqualTo(3));
+            Assert.That(cloned[1], Is.EqualTo("one"));
+            Assert.That(cloned[2], Is.EqualTo("two"));
+            Assert.That(cloned[100], Is.EqualTo("hundred"));
+            Assert.That(cloned.ContainsKey(1), Is.True);
+            Assert.That(cloned.ContainsKey(2), Is.True);
+            Assert.That(cloned.ContainsKey(100), Is.True);
+        });
+    }
+    
+    [Test]
+    public void DictionaryWithGuidKeys_FastPath_ShouldCloneCorrectly()
+    {
+        // Arrange - Guid keys have stable hash semantics (fast path)
+        Guid key1 = Guid.NewGuid();
+        Guid key2 = Guid.NewGuid();
+        
+        Dictionary<Guid, string> original = new Dictionary<Guid, string>
+        {
+            [key1] = "value1",
+            [key2] = "value2"
+        };
+        
+        // Act
+        Dictionary<Guid, string> cloned = original.DeepClone();
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original));
+            Assert.That(cloned.Count, Is.EqualTo(2));
+            Assert.That(cloned[key1], Is.EqualTo("value1"));
+            Assert.That(cloned[key2], Is.EqualTo("value2"));
+            Assert.That(cloned.ContainsKey(key1), Is.True);
+            Assert.That(cloned.ContainsKey(key2), Is.True);
+        });
+    }
+    
+    public record RecordKey(string Name, int Id);
+    
+    [Test]
+    public void DictionaryWithRecordKeys_FastPath_ShouldCloneCorrectly()
+    {
+        // Arrange - record keys have compiler-generated GetHashCode (fast path)
+        RecordKey key1 = new RecordKey("Alice", 1);
+        RecordKey key2 = new RecordKey("Bob", 2);
+        
+        Dictionary<RecordKey, string> original = new Dictionary<RecordKey, string>
+        {
+            [key1] = "data1",
+            [key2] = "data2"
+        };
+        
+        // Act
+        Dictionary<RecordKey, string> cloned = original.DeepClone();
+        RecordKey clonedKey1 = cloned.Keys.First(k => k.Name == "Alice");
+        RecordKey clonedKey2 = cloned.Keys.First(k => k.Name == "Bob");
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original));
+            Assert.That(cloned.Count, Is.EqualTo(2));
+            
+            // Records should be cloned (not same reference)
+            Assert.That(clonedKey1, Is.Not.SameAs(key1));
+            Assert.That(clonedKey2, Is.Not.SameAs(key2));
+            
+            // But should still be equal (value equality)
+            Assert.That(clonedKey1, Is.EqualTo(key1));
+            Assert.That(clonedKey2, Is.EqualTo(key2));
+            
+            // Dictionary lookups should work
+            Assert.That(cloned.ContainsKey(clonedKey1), Is.True);
+            Assert.That(cloned.ContainsKey(clonedKey2), Is.True);
+            Assert.That(cloned[clonedKey1], Is.EqualTo("data1"));
+            Assert.That(cloned[clonedKey2], Is.EqualTo("data2"));
+        });
+    }
+    
+    public struct StructKey
+    {
+        public int Id { get; set; }
+        public string Name { get; set; }
+    }
+    
+    [Test]
+    public void DictionaryWithStructKeys_FastPath_ShouldCloneCorrectly()
+    {
+        // Arrange - struct keys have value-based hash (fast path)
+        StructKey key1 = new StructKey { Id = 1, Name = "One" };
+        StructKey key2 = new StructKey { Id = 2, Name = "Two" };
+        
+        Dictionary<StructKey, string> original = new Dictionary<StructKey, string>
+        {
+            [key1] = "value1",
+            [key2] = "value2"
+        };
+        
+        // Act
+        Dictionary<StructKey, string> cloned = original.DeepClone();
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original));
+            Assert.That(cloned.Count, Is.EqualTo(2));
+            Assert.That(cloned.ContainsKey(key1), Is.True);
+            Assert.That(cloned.ContainsKey(key2), Is.True);
+            Assert.That(cloned[key1], Is.EqualTo("value1"));
+            Assert.That(cloned[key2], Is.EqualTo("value2"));
+        });
+    }
+    
+    [Test]
+    public void HashSetWithStrings_FastPath_ShouldCloneCorrectly()
+    {
+        // Arrange - string elements have stable hash semantics (fast path)
+        HashSet<string> original = ["apple", "banana", "cherry"];
+        
+        // Act
+        HashSet<string> cloned = original.DeepClone();
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original));
+            Assert.That(cloned.Count, Is.EqualTo(3));
+            Assert.That(cloned.Contains("apple"), Is.True);
+            Assert.That(cloned.Contains("banana"), Is.True);
+            Assert.That(cloned.Contains("cherry"), Is.True);
+        });
+    }
+    
+    [Test]
+    public void HashSetWithInts_FastPath_ShouldCloneCorrectly()
+    {
+        // Arrange - int elements have stable hash semantics (fast path)
+        HashSet<int> original = [1, 2, 3, 100, 999];
+        
+        // Act
+        HashSet<int> cloned = original.DeepClone();
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original));
+            Assert.That(cloned.Count, Is.EqualTo(5));
+            Assert.That(cloned.Contains(1), Is.True);
+            Assert.That(cloned.Contains(2), Is.True);
+            Assert.That(cloned.Contains(3), Is.True);
+            Assert.That(cloned.Contains(100), Is.True);
+            Assert.That(cloned.Contains(999), Is.True);
+        });
+    }
+    
+    [Test]
+    public void HashSetWithRecords_FastPath_ShouldCloneCorrectly()
+    {
+        // Arrange - record elements have compiler-generated GetHashCode (fast path)
+        RecordKey item1 = new RecordKey("Alice", 1);
+        RecordKey item2 = new RecordKey("Bob", 2);
+        
+        HashSet<RecordKey> original = [item1, item2];
+        
+        // Act
+        HashSet<RecordKey> cloned = original.DeepClone();
+        RecordKey clonedItem1 = cloned.First(k => k.Name == "Alice");
+        RecordKey clonedItem2 = cloned.First(k => k.Name == "Bob");
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original));
+            Assert.That(cloned.Count, Is.EqualTo(2));
+            
+            // Records should be cloned (not same reference)
+            Assert.That(clonedItem1, Is.Not.SameAs(item1));
+            Assert.That(clonedItem2, Is.Not.SameAs(item2));
+            
+            // But should still be equal (value equality)
+            Assert.That(clonedItem1, Is.EqualTo(item1));
+            Assert.That(clonedItem2, Is.EqualTo(item2));
+            
+            // Set lookups should work
+            Assert.That(cloned.Contains(clonedItem1), Is.True);
+            Assert.That(cloned.Contains(clonedItem2), Is.True);
+        });
+    }
+    
+    [Test]
+    public void DictionaryWithReferenceKeys_SlowPath_ShouldCloneCorrectly()
+    {
+        // Arrange - KeyClass uses default GetHashCode (identity-based, slow path)
+        KeyClass key1 = new KeyClass { Value = "Key1" };
+        KeyClass key2 = new KeyClass { Value = "Key2" };
+        
+        Dictionary<KeyClass, int> original = new Dictionary<KeyClass, int>
+        {
+            [key1] = 100,
+            [key2] = 200
+        };
+        
+        // Act
+        Dictionary<KeyClass, int> cloned = original.DeepClone();
+        KeyClass clonedKey1 = cloned.Keys.First(k => k.Value == "Key1");
+        KeyClass clonedKey2 = cloned.Keys.First(k => k.Value == "Key2");
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original));
+            Assert.That(cloned.Count, Is.EqualTo(2));
+            
+            // Keys should be cloned (not same reference)
+            Assert.That(clonedKey1, Is.Not.SameAs(key1));
+            Assert.That(clonedKey2, Is.Not.SameAs(key2));
+            
+            // Dictionary lookups should work with cloned keys (slow path ensures this)
+            Assert.That(cloned.ContainsKey(clonedKey1), Is.True);
+            Assert.That(cloned.ContainsKey(clonedKey2), Is.True);
+            Assert.That(cloned[clonedKey1], Is.EqualTo(100));
+            Assert.That(cloned[clonedKey2], Is.EqualTo(200));
+        });
+    }
+    
+    [Test]
+    public void HashSetWithReferenceElements_SlowPath_ShouldCloneCorrectly()
+    {
+        // Arrange - KeyClass uses default GetHashCode (identity-based, slow path)
+        KeyClass item1 = new KeyClass { Value = "Item1" };
+        KeyClass item2 = new KeyClass { Value = "Item2" };
+        
+        HashSet<KeyClass> original = [item1, item2];
+        
+        // Act
+        HashSet<KeyClass> cloned = original.DeepClone();
+        KeyClass clonedItem1 = cloned.First(k => k.Value == "Item1");
+        KeyClass clonedItem2 = cloned.First(k => k.Value == "Item2");
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original));
+            Assert.That(cloned.Count, Is.EqualTo(2));
+            
+            // Elements should be cloned (not same reference)
+            Assert.That(clonedItem1, Is.Not.SameAs(item1));
+            Assert.That(clonedItem2, Is.Not.SameAs(item2));
+            
+            // Set lookups should work with cloned elements (slow path ensures this)
+            Assert.That(cloned.Contains(clonedItem1), Is.True);
+            Assert.That(cloned.Contains(clonedItem2), Is.True);
+        });
+    }
+    
+    [Test]
+    public void LargeDictionary_FastPath_ShouldCloneEfficiently()
+    {
+        // Arrange - large dictionary with string keys (fast path)
+        Dictionary<string, int> original = new Dictionary<string, int>();
+        for (int i = 0; i < 10000; i++)
+        {
+            original[$"key_{i}"] = i;
+        }
+        
+        // Act
+        Dictionary<string, int> cloned = original.DeepClone();
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That(cloned, Is.Not.SameAs(original));
+            Assert.That(cloned.Count, Is.EqualTo(10000));
+            
+            // Verify some random entries
+            Assert.That(cloned["key_0"], Is.EqualTo(0));
+            Assert.That(cloned["key_5000"], Is.EqualTo(5000));
+            Assert.That(cloned["key_9999"], Is.EqualTo(9999));
+            Assert.That(cloned.ContainsKey("key_1234"), Is.True);
+        });
+    }
+    
+    [Test]
+    public void LargeExpandoObject_ShouldCloneCorrectly()
+    {
+        // Arrange - this is the "Large" benchmark scenario (100 properties of various types)
+        dynamic original = new System.Dynamic.ExpandoObject();
+        IDictionary<string, object?> dict = original;
+        
+        for (int i = 0; i < 100; i++)
+        {
+            switch (i % 5)
+            {
+                case 0:
+                    dict[$"StringProp_{i}"] = $"String value {i}";
+                    break;
+                case 1:
+                    dict[$"IntProp_{i}"] = i * 10;
+                    break;
+                case 2:
+                    dict[$"DoubleProp_{i}"] = i * 1.5;
+                    break;
+                case 3:
+                    dict[$"DateProp_{i}"] = DateTime.UtcNow.AddDays(i);
+                    break;
+                case 4:
+                    dict[$"NestedProp_{i}"] = new { NestedId = i, NestedValue = $"Nested {i}" };
+                    break;
+            }
+        }
+        
+        // Act
+        dynamic cloned = FastCloner.DeepClone(original);
+        IDictionary<string, object?> clonedDict = cloned;
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That((object)cloned, Is.Not.SameAs((object)original));
+            Assert.That(clonedDict.Count, Is.EqualTo(100));
+            
+            // Verify string properties
+            Assert.That(clonedDict["StringProp_0"], Is.EqualTo("String value 0"));
+            Assert.That(clonedDict["StringProp_50"], Is.EqualTo("String value 50"));
+            
+            // Verify int properties
+            Assert.That(clonedDict["IntProp_1"], Is.EqualTo(10));
+            Assert.That(clonedDict["IntProp_51"], Is.EqualTo(510));
+            
+            // Verify double properties  
+            Assert.That(clonedDict["DoubleProp_2"], Is.EqualTo(3.0));
+            Assert.That(clonedDict["DoubleProp_52"], Is.EqualTo(78.0));
+            
+            // Verify nested anonymous types are cloned
+            dynamic nested4 = clonedDict["NestedProp_4"];
+            Assert.That((int)nested4.NestedId, Is.EqualTo(4));
+            Assert.That((string)nested4.NestedValue, Is.EqualTo("Nested 4"));
+            
+            dynamic nested99 = clonedDict["NestedProp_99"];
+            Assert.That((int)nested99.NestedId, Is.EqualTo(99));
+            Assert.That((string)nested99.NestedValue, Is.EqualTo("Nested 99"));
+        });
+    }
+    
+    [Test]
+    public void LargeExpandoObject_WithNestedExpandos_ShouldCloneCorrectly()
+    {
+        // Arrange - nested ExpandoObjects similar to benchmark
+        dynamic root = new System.Dynamic.ExpandoObject();
+        root.Name = "Root";
+        root.Level = 0;
+        
+        dynamic child1 = new System.Dynamic.ExpandoObject();
+        child1.Name = "Child1";
+        child1.Level = 1;
+        child1.Data = "Some data for child 1";
+        
+        dynamic grandchild = new System.Dynamic.ExpandoObject();
+        grandchild.Name = "Grandchild";
+        grandchild.Level = 2;
+        grandchild.Tags = new[] { "tag1", "tag2", "tag3" };
+        
+        child1.Child = grandchild;
+        root.Children = new List<object> { child1 };
+        
+        // Act
+        dynamic cloned = FastCloner.DeepClone(root);
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That((object)cloned, Is.Not.SameAs((object)root));
+            Assert.That((string)cloned.Name, Is.EqualTo("Root"));
+            Assert.That((int)cloned.Level, Is.EqualTo(0));
+            
+            // Verify nested structure is cloned
+            List<object> clonedChildren = cloned.Children;
+            Assert.That(clonedChildren, Is.Not.SameAs((List<object>)root.Children));
+            Assert.That(clonedChildren.Count, Is.EqualTo(1));
+            
+            dynamic clonedChild1 = clonedChildren[0];
+            Assert.That((object)clonedChild1, Is.Not.SameAs((object)child1));
+            Assert.That((string)clonedChild1.Name, Is.EqualTo("Child1"));
+            
+            dynamic clonedGrandchild = clonedChild1.Child;
+            Assert.That((object)clonedGrandchild, Is.Not.SameAs((object)grandchild));
+            Assert.That((string)clonedGrandchild.Name, Is.EqualTo("Grandchild"));
+            
+            string[] clonedTags = clonedGrandchild.Tags;
+            Assert.That(clonedTags, Is.Not.SameAs((string[])grandchild.Tags));
+            Assert.That(clonedTags, Is.EqualTo(new[] { "tag1", "tag2", "tag3" }));
+        });
+    }
+    
+    [Test]
+    public void ExpandoObject_WithCircularReference_ShouldCloneCorrectly()
+    {
+        // Arrange - circular reference similar to benchmark
+        dynamic parent = new System.Dynamic.ExpandoObject();
+        parent.Name = "Parent";
+        parent.Id = 1;
+        
+        dynamic child = new System.Dynamic.ExpandoObject();
+        child.Name = "Child";
+        child.Id = 2;
+        child.Parent = parent;
+        
+        parent.Child = child;
+        parent.Self = parent;
+        
+        // Act
+        dynamic cloned = FastCloner.DeepClone(parent);
+        
+        // Assert
+        Assert.Multiple(() =>
+        {
+            Assert.That((object)cloned, Is.Not.SameAs((object)parent));
+            Assert.That((string)cloned.Name, Is.EqualTo("Parent"));
+            Assert.That((int)cloned.Id, Is.EqualTo(1));
+            
+            // Verify circular reference is preserved
+            dynamic clonedChild = cloned.Child;
+            Assert.That((object)clonedChild, Is.Not.SameAs((object)child));
+            Assert.That((string)clonedChild.Name, Is.EqualTo("Child"));
+            
+            // Child's parent should point to cloned parent, not original
+            Assert.That((object)clonedChild.Parent, Is.SameAs((object)cloned));
+            Assert.That((object)clonedChild.Parent, Is.Not.SameAs((object)parent));
+            
+            // Self reference should point to cloned parent
+            Assert.That((object)cloned.Self, Is.SameAs((object)cloned));
+            Assert.That((object)cloned.Self, Is.Not.SameAs((object)parent));
+        });
+    }
+    
+    [Test]
+    public void LargeExpandoObject_BenchmarkScenario_VerifyDeepClone()
+    {
+        dynamic original = new System.Dynamic.ExpandoObject();
+        IDictionary<string, object?> originalDict = original;
+        
+        for (int i = 0; i < 100; i++)
+        {
+            switch (i % 5)
+            {
+                case 0:
+                    originalDict[$"StringProp_{i}"] = $"String value {i}";
+                    break;
+                case 1:
+                    originalDict[$"IntProp_{i}"] = i * 10;
+                    break;
+                case 2:
+                    originalDict[$"DoubleProp_{i}"] = i * 1.5;
+                    break;
+                case 3:
+                    originalDict[$"DateProp_{i}"] = DateTime.UtcNow.AddDays(i);
+                    break;
+                case 4:
+                    originalDict[$"NestedProp_{i}"] = new { NestedId = i, NestedValue = $"Nested {i}" };
+                    break;
+            }
+        }
+        
+        // Act
+        dynamic cloned = FastCloner.DeepClone(original);
+        IDictionary<string, object?> clonedDict = cloned;
+        
+        Assert.Multiple(() =>
+        {
+            // 1. Clone is a different object instance
+            Assert.That((object)cloned, Is.Not.SameAs((object)original), 
+                "Clone must be a different object instance");
+            
+            // 2. All 100 properties are present
+            Assert.That(clonedDict.Count, Is.EqualTo(100), 
+                "Clone must have all 100 properties");
+            
+            // 3. Modifying clone does NOT affect original (independence test)
+            clonedDict["StringProp_0"] = "MODIFIED";
+            Assert.That(originalDict["StringProp_0"], Is.EqualTo("String value 0"), 
+                "Modifying clone must not affect original string");
+            
+            clonedDict["IntProp_1"] = 99999;
+            Assert.That(originalDict["IntProp_1"], Is.EqualTo(10), 
+                "Modifying clone must not affect original int");
+            
+            // 4. Anonymous types are immutable, so sharing is correct - verify values match
+            dynamic originalNested4 = originalDict["NestedProp_4"];
+            dynamic clonedNested4 = clonedDict["NestedProp_4"];
+            Assert.That((int)clonedNested4.NestedId, Is.EqualTo(4));
+            Assert.That((string)clonedNested4.NestedValue, Is.EqualTo("Nested 4"));
+            
+            // 5. Verify multiple nested values are correct
+            dynamic clonedNested99 = clonedDict["NestedProp_99"];
+            Assert.That((int)clonedNested99.NestedId, Is.EqualTo(99));
+            Assert.That((string)clonedNested99.NestedValue, Is.EqualTo("Nested 99"));
+            
+            // 6. Original values unchanged after all modifications
+            Assert.That(originalDict["StringProp_50"], Is.EqualTo("String value 50"));
+            Assert.That(originalDict["IntProp_51"], Is.EqualTo(510));
+            Assert.That(originalDict["DoubleProp_52"], Is.EqualTo(78.0));
+            
+            // 7. Replacing nested property in clone doesn't affect original
+            clonedDict["NestedProp_4"] = new { NestedId = 999, NestedValue = "Replaced" };
+            Assert.That((int)originalNested4.NestedId, Is.EqualTo(4), 
+                "Original nested value unchanged after replacing in clone");
+        });
+    }
+    
+    [Test]
+    public void LargeExpandoObject_ModifyClonedNestedObjects_OriginalUnchanged()
+    {
+        // Arrange - ExpandoObject with mutable nested objects
+        dynamic original = new System.Dynamic.ExpandoObject();
+        original.Name = "Root";
+        original.MutableList = new List<string> { "Item1", "Item2", "Item3" };
+        original.MutableDict = new Dictionary<string, int> { ["Key1"] = 1, ["Key2"] = 2 };
+        original.NestedExpando = new System.Dynamic.ExpandoObject();
+        original.NestedExpando.Value = "OriginalValue";
+        
+        // Act
+        dynamic cloned = FastCloner.DeepClone(original);
+        
+        // Modify the cloned nested objects
+        cloned.MutableList.Add("NewItem");
+        cloned.MutableList[0] = "ModifiedItem1";
+        cloned.MutableDict["Key1"] = 999;
+        cloned.MutableDict["NewKey"] = 100;
+        cloned.NestedExpando.Value = "ModifiedValue";
+        cloned.NestedExpando.NewProp = "AddedProperty";
+        
+        // Assert - original is completely unchanged
+        Assert.Multiple(() =>
+        {
+            // List modifications don't affect original
+            List<string> originalList = original.MutableList;
+            Assert.That(originalList.Count, Is.EqualTo(3), "Original list count unchanged");
+            Assert.That(originalList[0], Is.EqualTo("Item1"), "Original list items unchanged");
+            Assert.That(originalList.Contains("NewItem"), Is.False, "Original list doesn't have new item");
+            
+            // Dictionary modifications don't affect original
+            Dictionary<string, int> originalDictionary = original.MutableDict;
+            Assert.That(originalDictionary["Key1"], Is.EqualTo(1), "Original dict values unchanged");
+            Assert.That(originalDictionary.ContainsKey("NewKey"), Is.False, "Original dict doesn't have new key");
+            Assert.That(originalDictionary.Count, Is.EqualTo(2), "Original dict count unchanged");
+            
+            // Nested ExpandoObject modifications don't affect original
+            Assert.That((string)original.NestedExpando.Value, Is.EqualTo("OriginalValue"), 
+                "Original nested expando value unchanged");
+            
+            IDictionary<string, object?> originalNestedDict = original.NestedExpando;
+            Assert.That(originalNestedDict.ContainsKey("NewProp"), Is.False, 
+                "Original nested expando doesn't have new property");
+            
+            // Verify cloned values are actually modified
+            Assert.That(cloned.MutableList.Count, Is.EqualTo(4));
+            Assert.That(cloned.MutableDict["Key1"], Is.EqualTo(999));
+            Assert.That((string)cloned.NestedExpando.Value, Is.EqualTo("ModifiedValue"));
+        });
     }
 }

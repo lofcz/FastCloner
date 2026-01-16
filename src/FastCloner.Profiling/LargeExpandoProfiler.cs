@@ -49,13 +49,7 @@ public static class LargeExpandoProfiler
 
         if (interactive)
         {
-            Console.WriteLine(">>> ATTACH YOUR PROFILER NOW <<<");
-            Console.WriteLine("Suggested focus:");
-            Console.WriteLine("  - GenerateExpandoObjectCopyLoop");
-            Console.WriteLine("  - CloneClassInternal");
-            Console.WriteLine("  - IsTypeIgnoredMethodInfo calls");
-            Console.WriteLine("  - GetType() calls in the loop");
-            Console.WriteLine();
+            Console.WriteLine(">>> ATTACH PROFILER NOW <<<");
             Console.WriteLine("Press any key to start profiling...");
             Console.ReadKey(true);
             Console.WriteLine();
