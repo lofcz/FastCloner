@@ -491,10 +491,10 @@ internal static class TypeAnalyzer
         if (IsOrInheritsFrom(type, "System.Collections.Immutable.ImmutableStack`1") || 
             HasInterface(type, "System.Collections.Immutable.IImmutableStack`1")) return CollectionKind.ImmutableStack;
 
+        if (IsOrInheritsFrom(type, "System.Collections.Immutable.ImmutableSortedDictionary`2")) return CollectionKind.ImmutableSortedDictionary;
+
         if (IsOrInheritsFrom(type, "System.Collections.Immutable.ImmutableDictionary`2") || 
             HasInterface(type, "System.Collections.Immutable.IImmutableDictionary`2")) return CollectionKind.ImmutableDictionary;
-
-        if (IsOrInheritsFrom(type, "System.Collections.Immutable.ImmutableSortedDictionary`2")) return CollectionKind.ImmutableSortedDictionary;
         
         // Concurrent collections
         if (IsOrInheritsFrom(type, "System.Collections.Concurrent.ConcurrentQueue`1")) return CollectionKind.ConcurrentQueue;

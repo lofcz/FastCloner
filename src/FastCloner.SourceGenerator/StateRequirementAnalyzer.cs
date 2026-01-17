@@ -4,50 +4,58 @@ using Microsoft.CodeAnalysis;
 
 namespace FastCloner.SourceGenerator;
 
-internal static class CircularReferenceAnalyzer
+internal static class StateRequirementAnalyzer
 {
-    public static bool Analyze(INamedTypeSymbol rootType, Compilation compilation, List<string> log)
+    public readonly record struct AnalysisResult(
+        bool HasCircularRefs,
+        bool NeedsStateTracking
+    );
+    
+    public static AnalysisResult Analyze(INamedTypeSymbol rootType, Compilation compilation, List<string> log, bool? preserveIdentity = null)
     {
-        log.Add($"=== Analyzing circular references for {rootType.ToDisplayString()} ===");
+        log.Add($"=== Analyzing state requirements for {rootType.ToDisplayString()} ===");
+        log.Add($"  -> PreserveIdentity attribute: {preserveIdentity?.ToString() ?? "not set"}");
         
-        // Structs can't have circular references (value types)
         if (rootType.IsValueType)
         {
-            log.Add("  -> Type is a struct (value type), cannot have circular references");
-            return false;
+            log.Add("  -> Type is a struct (value type), no state needed");
+            return new AnalysisResult(false, false);
         }
         
-        // Build a set of all reference types that can be reached from this type's MEMBERS
-        HashSet<ITypeSymbol> reachableTypes = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
-        HashSet<ITypeSymbol> visited = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+        Dictionary<ITypeSymbol, int> typeOccurrences = new(SymbolEqualityComparer.Default);
+        HashSet<ITypeSymbol> visited = new(SymbolEqualityComparer.Default);
+        HashSet<ITypeSymbol> typesInCollections = new(SymbolEqualityComparer.Default);
         
         log.Add($"  -> Collecting reachable reference types from {rootType.Name} members...");
         
-        // First check if rootType has a direct self-reference
-        bool hasDirectSelfReference = HasDirectSelfReference(rootType, rootType, compilation, log);
+        bool hasDirectSelfReference = HasDirectSelfReference(rootType, rootType, log);
         
-        // Then collect types reachable from members
-        CollectReachableReferenceTypesFromMembers(rootType, reachableTypes, visited, compilation, log, rootType);
+        CollectReachableTypes(rootType, typeOccurrences, visited, typesInCollections, compilation, log, rootType);
         
-        log.Add($"  -> Found {reachableTypes.Count} reachable reference types:");
-        foreach (ITypeSymbol? type in reachableTypes)
+        log.Add($"  -> Found {typeOccurrences.Count} reachable reference types:");
+        foreach (KeyValuePair<ITypeSymbol, int> kvp in typeOccurrences)
         {
-            log.Add($"     - {type.ToDisplayString()}");
+            log.Add($"     - {kvp.Key.ToDisplayString()} (occurrences: {kvp.Value})");
         }
         
-        // Check if any of the reachable types can reference back to rootType
-        bool canReferenceBack = reachableTypes.Any(t => CanReferenceType(t, rootType, compilation, log));
+        bool canReferenceBack = typeOccurrences.Keys.Any(t => CanReferenceType(t, rootType, compilation, log));
+        bool hasCircularRefs = hasDirectSelfReference || canReferenceBack;
         
-        log.Add($"  -> Direct self-reference check: {hasDirectSelfReference}");
-        log.Add($"  -> Can reference back check: {canReferenceBack}");
+        log.Add($"  -> Direct self-reference: {hasDirectSelfReference}");
+        log.Add($"  -> Can reference back: {canReferenceBack}");
+        log.Add($"  -> Has circular refs: {hasCircularRefs}");
         
-        bool result = hasDirectSelfReference || canReferenceBack;
-        log.Add($"  -> Final result: {(result ? "CAN have circular references" : "CANNOT have circular references")}");
+        bool needsIdentityPreservation = preserveIdentity == true;
         
-        return result;
+        log.Add($"  -> Identity preservation requested: {needsIdentityPreservation}");
+        
+        bool needsStateTracking = hasCircularRefs || needsIdentityPreservation;
+        log.Add($"  -> Final result: NeedsStateTracking = {needsStateTracking}");
+        
+        return new AnalysisResult(hasCircularRefs, needsStateTracking);
     }
     
-    private static bool HasDirectSelfReference(INamedTypeSymbol type, INamedTypeSymbol rootType, Compilation compilation, List<string> log)
+    private static bool HasDirectSelfReference(INamedTypeSymbol type, INamedTypeSymbol rootType, List<string> log)
     {
         foreach (ISymbol? member in type.GetMembers())
         {
@@ -78,10 +86,11 @@ internal static class CircularReferenceAnalyzer
         return false;
     }
     
-    private static void CollectReachableReferenceTypesFromMembers(
+    private static void CollectReachableTypes(
         INamedTypeSymbol type,
-        HashSet<ITypeSymbol> reachableTypes,
+        Dictionary<ITypeSymbol, int> typeOccurrences,
         HashSet<ITypeSymbol> visited,
+        HashSet<ITypeSymbol> typesInCollections,
         Compilation compilation,
         List<string> log,
         INamedTypeSymbol rootType)
@@ -105,27 +114,24 @@ internal static class CircularReferenceAnalyzer
             
             if (memberType != null)
             {
-                CollectReachableReferenceTypes(memberType, reachableTypes, visited, compilation, log, rootType);
+                CollectType(memberType, typeOccurrences, visited, typesInCollections, compilation, log, rootType, isInCollection: false);
             }
         }
     }
     
-    private static void CollectReachableReferenceTypes(
+    private static void CollectType(
         ITypeSymbol type, 
-        HashSet<ITypeSymbol> reachableTypes, 
+        Dictionary<ITypeSymbol, int> typeOccurrences, 
         HashSet<ITypeSymbol> visited,
+        HashSet<ITypeSymbol> typesInCollections,
         Compilation compilation,
         List<string> log,
-        INamedTypeSymbol rootType)
+        INamedTypeSymbol rootType,
+        bool isInCollection)
     {
         string typeDisplayName = type.ToDisplayString();
-        if (!visited.Add(type))
-        {
-            log.Add($"     [SKIP] {typeDisplayName} (already visited)");
-            return;
-        }
         
-        if (type.IsValueType)
+        if (type.IsValueType && !TypeAnalyzer.IsCollectionType(type) && !TypeAnalyzer.IsDictionaryType(type))
         {
             log.Add($"     [SKIP] {typeDisplayName} (value type)");
             return;
@@ -138,50 +144,67 @@ internal static class CircularReferenceAnalyzer
         }
         
         ITypeSymbol underlyingType = type.WithNullableAnnotation(NullableAnnotation.None);
-        
-        if (underlyingType is INamedTypeSymbol namedType)
-        {
-            if (!SymbolEqualityComparer.Default.Equals(namedType, rootType))
-            {
-                log.Add($"     [ADD] {typeDisplayName}");
-                reachableTypes.Add(namedType);
-            }
-            else
-            {
-                log.Add($"     [SKIP] {typeDisplayName} (is root type)");
-            }
-            
-            if (TypeAnalyzer.HasClonableAttribute(namedType))
-            {
-                log.Add($"        -> Analyzing members of {typeDisplayName}...");
-                CollectReachableReferenceTypesFromMembers(namedType, reachableTypes, visited, compilation, log, rootType);
-            }
-        }
-        else if (TypeAnalyzer.IsCollectionType(type))
+
+        if (TypeAnalyzer.IsCollectionType(type))
         {
             ITypeSymbol? elementType = TypeAnalyzer.GetCollectionElementType(type, compilation);
             if (elementType != null)
             {
                 log.Add($"        -> Collection element type: {elementType.ToDisplayString()}");
-                CollectReachableReferenceTypes(elementType, reachableTypes, visited, compilation, log, rootType);
+                typesInCollections.Add(elementType.WithNullableAnnotation(NullableAnnotation.None));
+                CollectType(elementType, typeOccurrences, visited, typesInCollections, compilation, log, rootType, isInCollection: true);
             }
+            return;
         }
-        else if (TypeAnalyzer.IsDictionaryType(type))
+        
+        if (TypeAnalyzer.IsDictionaryType(type))
         {
             (ITypeSymbol KeyType, ITypeSymbol ValueType)? dictTypes = TypeAnalyzer.GetDictionaryTypes(type, compilation);
             if (dictTypes.HasValue)
             {
                 log.Add($"        -> Dictionary key type: {dictTypes.Value.KeyType.ToDisplayString()}");
-                CollectReachableReferenceTypes(dictTypes.Value.KeyType, reachableTypes, visited, compilation, log, rootType);
+                typesInCollections.Add(dictTypes.Value.KeyType.WithNullableAnnotation(NullableAnnotation.None));
+                CollectType(dictTypes.Value.KeyType, typeOccurrences, visited, typesInCollections, compilation, log, rootType, isInCollection: true);
+                
                 log.Add($"        -> Dictionary value type: {dictTypes.Value.ValueType.ToDisplayString()}");
-                CollectReachableReferenceTypes(dictTypes.Value.ValueType, reachableTypes, visited, compilation, log, rootType);
+                typesInCollections.Add(dictTypes.Value.ValueType.WithNullableAnnotation(NullableAnnotation.None));
+                CollectType(dictTypes.Value.ValueType, typeOccurrences, visited, typesInCollections, compilation, log, rootType, isInCollection: true);
             }
+            return;
         }
-        else if (type is IArrayTypeSymbol arrayType)
+        
+        if (type is IArrayTypeSymbol arrayType)
         {
             ITypeSymbol elementType = arrayType.ElementType;
             log.Add($"        -> Array element type: {elementType.ToDisplayString()}");
-            CollectReachableReferenceTypes(elementType, reachableTypes, visited, compilation, log, rootType);
+            typesInCollections.Add(elementType.WithNullableAnnotation(NullableAnnotation.None));
+            CollectType(elementType, typeOccurrences, visited, typesInCollections, compilation, log, rootType, isInCollection: true);
+            return;
+        }
+        
+        if (underlyingType is INamedTypeSymbol namedType)
+        {
+            if (typeOccurrences.TryGetValue(namedType, out int count))
+            {
+                typeOccurrences[namedType] = count + 1;
+                log.Add($"     [COUNT] {typeDisplayName} now has {count + 1} occurrences");
+            }
+            else
+            {
+                typeOccurrences[namedType] = 1;
+                log.Add($"     [ADD] {typeDisplayName}");
+            }
+            
+            if (isInCollection)
+            {
+                typesInCollections.Add(namedType);
+            }
+
+            if (visited.Add(namedType) && TypeAnalyzer.HasClonableAttribute(namedType))
+            {
+                log.Add($"        -> Analyzing members of {typeDisplayName}...");
+                CollectReachableTypes(namedType, typeOccurrences, visited, typesInCollections, compilation, log, rootType);
+            }
         }
     }
     

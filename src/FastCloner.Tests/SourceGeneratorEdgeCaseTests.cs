@@ -14,14 +14,14 @@ public class SourceGeneratorEdgeCaseTests
     #region Issue 1: Multi-dimensional Arrays
 
     [FastClonerClonable]
-    public partial class ClassWith2dArray
+    public class ClassWith2dArray
     {
         public int[,]? Matrix { get; set; }
         public string? Name { get; set; }
     }
 
     [FastClonerClonable]
-    public partial class ClassWith3dArray
+    public class ClassWith3dArray
     {
         public double[,,]? Cube { get; set; }
     }
@@ -85,7 +85,7 @@ public class SourceGeneratorEdgeCaseTests
     #region Issue 2: Fields in Object Initializers
 
     [FastClonerClonable]
-    public partial class ClassWithFields
+    public class ClassWithFields
     {
         public int IntField;
         public string? StringField;
@@ -93,7 +93,7 @@ public class SourceGeneratorEdgeCaseTests
     }
 
     [FastClonerClonable]
-    public partial class ClassWithMixedMembers
+    public class ClassWithMixedMembers
     {
         public int PropertyValue { get; set; }
         public int FieldValue;
@@ -160,7 +160,7 @@ public class SourceGeneratorEdgeCaseTests
     #region Issue 3: Init-Only Properties
 
     [FastClonerClonable]
-    public partial class ClassWithInitOnlyProps
+    public class ClassWithInitOnlyProps
     {
         public int Id { get; init; }
         public string? Name { get; init; }
@@ -168,7 +168,7 @@ public class SourceGeneratorEdgeCaseTests
     }
 
     [FastClonerClonable]
-    public partial record RecordWithInitProps
+    public record RecordWithInitProps
     {
         public int Id { get; init; }
         public string? Name { get; init; }
@@ -230,7 +230,7 @@ public class SourceGeneratorEdgeCaseTests
     // for the accessible properties.
 
     [FastClonerClonable]
-    public partial class ClassWithPrivateSetter
+    public class ClassWithPrivateSetter
     {
         public int PublicProperty { get; set; }
         public int PrivateSetterProperty { get; private set; }
@@ -266,7 +266,7 @@ public class SourceGeneratorEdgeCaseTests
     #region Issue 5: Delegate and Behavioral Types (Lazy, Func, Task)
 
     [FastClonerClonable]
-    public partial class ClassWithDelegates
+    public class ClassWithDelegates
     {
         public Func<int>? IntFunc { get; set; }
         public Action? SimpleAction { get; set; }
@@ -274,14 +274,14 @@ public class SourceGeneratorEdgeCaseTests
     }
 
     [FastClonerClonable]
-    public partial class ClassWithLazy
+    public class ClassWithLazy
     {
         public Lazy<string>? LazyValue { get; set; }
         public int RegularValue { get; set; }
     }
 
     [FastClonerClonable]
-    public partial class ClassWithWeakReference
+    public class ClassWithWeakReference
     {
         public WeakReference<object>? WeakRef { get; set; }
         public string? Name { get; set; }
@@ -378,7 +378,7 @@ public class SourceGeneratorEdgeCaseTests
     // Test combining multiple edge cases
 
     [FastClonerClonable]
-    public partial class ComplexEdgeCase
+    public class ComplexEdgeCase
     {
         public int[,]? Matrix { get; set; }
         public List<int>? ListField;
@@ -435,14 +435,14 @@ public class SourceGeneratorEdgeCaseTests
     #region Issue 6b: Multi-dimensional Arrays with Special Types
 
     [FastClonerClonable]
-    public partial class ClassWithHttpClientMatrix
+    public class ClassWithHttpClientMatrix
     {
         public HttpClient[,]? ClientMatrix { get; set; }
         public string? Name { get; set; }
     }
 
     [FastClonerClonable]
-    public partial class ClassWithHttpClient3dArray
+    public class ClassWithHttpClient3dArray
     {
         public HttpClient[,,]? ClientCube { get; set; }
     }
@@ -521,20 +521,20 @@ public class SourceGeneratorEdgeCaseTests
     #region Issue 7: Jagged Arrays
 
     [FastClonerClonable]
-    public partial class ClassWithJaggedArray
+    public class ClassWithJaggedArray
     {
         public int[][]? JaggedInts { get; set; }
         public string? Name { get; set; }
     }
 
     [FastClonerClonable]
-    public partial class ClassWith3LevelJaggedArray
+    public class ClassWith3LevelJaggedArray
     {
         public int[][][]? DeepJagged { get; set; }
     }
 
     [FastClonerClonable]
-    public partial class ClassWithJaggedArrayOfObjects
+    public class ClassWithJaggedArrayOfObjects
     {
         public SimpleItem[][]? Items { get; set; }
     }
@@ -712,7 +712,7 @@ public class SourceGeneratorEdgeCaseTests
     #region Additional Tests for Struct Fields
 
     [FastClonerClonable]
-    public partial struct StructWithFields
+    public struct StructWithFields
     {
         public int IntField;
         public string? StringProp { get; set; }
@@ -747,7 +747,7 @@ public class SourceGeneratorEdgeCaseTests
     #region Issue 8: Required Members (Runtime Fallback)
 
     [FastClonerClonable]
-    public partial class ClassWithRequiredMembers
+    public class ClassWithRequiredMembers
     {
         public required string RequiredName { get; set; }
         public required int RequiredId { get; set; }
@@ -782,7 +782,7 @@ public class SourceGeneratorEdgeCaseTests
     #region Issue 9: Init-Only Properties with Circular References (Runtime Fallback)
 
     [FastClonerClonable]
-    public partial class ClassWithInitAndCycle
+    public class ClassWithInitAndCycle
     {
         public string? Name { get; init; }
         public ClassWithInitAndCycle? Self { get; set; }
@@ -814,7 +814,7 @@ public class SourceGeneratorEdgeCaseTests
     #region Issue 10: Structs with Readonly Reference Fields (Runtime Fallback)
 
     [FastClonerClonable]
-    public partial struct StructWithReadonlyRefs
+    public struct StructWithReadonlyRefs
     {
         public readonly List<int> ReadonlyList;
         public int NormalField;
@@ -855,7 +855,7 @@ public class SourceGeneratorEdgeCaseTests
     // Test class for ObservableCollection with getter only - currently NOT supported
     // This represents the bug reported in GitHub Issue #19
     [FastClonerClonable]
-    public partial class ClassWithObservableCollectionGetterOnly
+    public class ClassWithObservableCollectionGetterOnly
     {
         public ObservableCollection<string> Items { get; } = new();
         public string? Name { get; set; }
@@ -863,7 +863,7 @@ public class SourceGeneratorEdgeCaseTests
 
     // Test class for ObservableCollection with getter and setter - should work
     [FastClonerClonable]
-    public partial class ClassWithObservableCollectionGetterSetter
+    public class ClassWithObservableCollectionGetterSetter
     {
         public ObservableCollection<string>? Items { get; set; }
         public string? Name { get; set; }
@@ -871,7 +871,7 @@ public class SourceGeneratorEdgeCaseTests
 
     // Test class for ObservableCollection with init - workaround from the issue
     [FastClonerClonable]
-    public partial class ClassWithObservableCollectionInit
+    public class ClassWithObservableCollectionInit
     {
         public ObservableCollection<string> Items { get; init; } = new();
         public string? Name { get; set; }

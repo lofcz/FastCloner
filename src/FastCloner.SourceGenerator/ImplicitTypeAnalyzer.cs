@@ -10,15 +10,13 @@ internal static class ImplicitTypeAnalyzer
         ITypeSymbol type,
         Compilation compilation,
         bool nullabilityEnabled,
+        TargetFramework targetFramework,
         Dictionary<ITypeSymbol, TypeModel?> cache,
         HashSet<ITypeSymbol> processingStack,
         out TypeModel? implicitModel)
     {
         implicitModel = null;
         
-        // If we are currently processing this type, assume it's valid (cycle)
-        // We return null model here because we can't construct it yet, but we return true for success.
-        // The Root call will eventually construct the model.
         if (processingStack.Contains(type))
             return true;
             
@@ -36,7 +34,6 @@ internal static class ImplicitTypeAnalyzer
             
         processingStack.Add(type);
         
-        // Analyze members
         List<MemberAnalysis> memberAnalyses = MemberCollector.GetMembers(namedType, compilation, nullabilityEnabled);
         List<MemberModel> finalImplicitMembers = [];
         List<TypeModel> childRelatedTypes = [];
@@ -53,12 +50,10 @@ internal static class ImplicitTypeAnalyzer
             {
                 hasUnsafeReferenceMember = true;
             }
-
-            // If member is safe or clonable, it's fine.
-            // If it requires FastCloner (Other) or is Implicit candidate, we must verify if it's implicit.
-            if (m.TypeKind == MemberTypeKind.Other || m.TypeKind == MemberTypeKind.Implicit)
+            
+            if (m.TypeKind is MemberTypeKind.Other or MemberTypeKind.Implicit)
             {
-                if (TryAnalyze(analysis.Type, compilation, nullabilityEnabled, cache, processingStack, out TypeModel? childModel))
+                if (TryAnalyze(analysis.Type, compilation, nullabilityEnabled, targetFramework, cache, processingStack, out TypeModel? childModel))
                 {
                     m = m with { TypeKind = MemberTypeKind.Implicit, RequiresFastCloner = false };
                     if (childModel != null) childRelatedTypes.Add(childModel);
@@ -69,15 +64,14 @@ internal static class ImplicitTypeAnalyzer
                     break;
                 }
             }
-            else if (m.RequiresFastCloner) // e.g. Array/Collection of unsafe
+            else if (m.RequiresFastCloner)
             {
                 bool handled = false;
-
-                // Helper to analyze a type and create a dummy member model for it
+                
                 bool TryHandleComponent(ITypeSymbol componentType, out MemberModel? componentMember)
                 {
                     componentMember = null;
-                    if (TryAnalyze(componentType, compilation, nullabilityEnabled, cache, processingStack, out TypeModel? compModel))
+                    if (TryAnalyze(componentType, compilation, nullabilityEnabled, targetFramework, cache, processingStack, out TypeModel? compModel))
                     {
                         if (compModel != null) childRelatedTypes.Add(compModel);
                         
@@ -111,7 +105,7 @@ internal static class ImplicitTypeAnalyzer
                     return false;
                 }
 
-                if (m.TypeKind == MemberTypeKind.Array || m.TypeKind == MemberTypeKind.Collection)
+                if (m.TypeKind is MemberTypeKind.Array or MemberTypeKind.Collection)
                 {
                     ITypeSymbol? elemType = (m.TypeKind == MemberTypeKind.Array) 
                         ? ((IArrayTypeSymbol)analysis.Type).ElementType 
@@ -172,7 +166,6 @@ internal static class ImplicitTypeAnalyzer
         
         if (success)
         {
-            // Gather all related types from children
             Dictionary<string, TypeModel> relatedTypesMap = new Dictionary<string, TypeModel>();
             foreach (TypeModel? child in childRelatedTypes)
             {
@@ -183,16 +176,9 @@ internal static class ImplicitTypeAnalyzer
                 }
             }
             
-            // Construct model
             (bool IsStruct, bool IsSealed, bool HasClonableBaseClass) flags = TypeAnalyzer.GetStructureFlags(namedType);
-            
-            // Can have circular references if any member is implicit (recursive) or clonable
             bool canHaveCircularRefs = hasUnsafeReferenceMember || flags.HasClonableBaseClass;
-            
-            // Check if type has a parameterless constructor (IsImplicitCandidate already validates this, but check explicitly)
             bool hasParameterlessConstructor = TypeAnalyzer.HasParameterlessConstructor(namedType);
-            
-            // Check trust nullability
             bool trustNullability = namedType.GetAttributes()
                 .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerTrustNullabilityAttribute");
 
@@ -206,18 +192,21 @@ internal static class ImplicitTypeAnalyzer
                 namedType.IsRecord,
                 flags.HasClonableBaseClass,
                 canHaveCircularRefs,
-                false, // FastCloner availability doesn't matter for implicit model (it uses generated helpers)
+                canHaveCircularRefs,
+                false,
                 new EquatableArray<MemberModel>(finalImplicitMembers.ToArray()),
                 new EquatableArray<string>(TypeAnalyzer.GetTypeParameters(namedType).ToArray()),
                 new EquatableArray<string>(TypeAnalyzer.GetTypeConstraints(namedType).ToArray()),
                 new EquatableArray<TypeModel>(relatedTypesMap.Values.ToArray()),
                 new EquatableArray<MemberModel>(implicitNestedMembers.Values.ToArray()),
-                EquatableArray<TypeModel>.Empty, // Implicit types don't track derived types
+                EquatableArray<TypeModel>.Empty,
                 nullabilityEnabled,
                 trustNullability,
+                PreserveIdentity: null,
                 IsRefLikeType: false,
                 hasParameterlessConstructor,
-                CodeAnalysisAvailable: compilation.GetTypeByMetadataName("System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute") != null);
+                CodeAnalysisAvailable: compilation.GetTypeByMetadataName("System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute") != null,
+                TargetFramework: targetFramework);
                 
             cache[type] = implicitModel;
             return true;

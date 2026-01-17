@@ -190,7 +190,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         public Dictionary<int, string>? DictIntString { get; set; }
     }
 
-    partial class IteratorInfo : System.ComponentModel.INotifyPropertyChanged
+    class IteratorInfo : System.ComponentModel.INotifyPropertyChanged
     {
         public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged = (_, _) => { };
         public bool HasPropertyChanged => PropertyChanged is not null;

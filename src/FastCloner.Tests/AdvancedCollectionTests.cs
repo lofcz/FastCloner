@@ -8,7 +8,7 @@ using NUnit.Framework;
 namespace FastCloner.Tests;
 
 [FastClonerClonable]
-public partial class AdvancedCollections
+public class AdvancedCollections
 {
     public ObservableCollection<int> Observable { get; set; }
     public ReadOnlyCollection<int> ReadOnly { get; set; }
@@ -55,32 +55,31 @@ public class AdvancedCollectionTests
 
         // Verify ImmutableList
         Assert.That(clone.ImmutableList, Is.Not.Null);
-        // Immutable collections might be same instance if contents are same? No, we created a new one via Builder/Range.
-        // Actually ImmutableList is reference type. 
-        // If we did `ImmutableList.CreateRange`, it creates a NEW list.
-        Assert.That(clone.ImmutableList, Is.Not.SameAs(original.ImmutableList));
+        // Optimization: Immutable collections with immutable elements return the same reference
+        // since there's nothing mutable to clone
+        Assert.That(clone.ImmutableList, Is.SameAs(original.ImmutableList));
         Assert.That(clone.ImmutableList, Is.EqualTo(original.ImmutableList));
 
         // Verify ImmutableArray (Struct)
         Assert.That(clone.ImmutableArray.IsDefault, Is.False);
         Assert.That(clone.ImmutableArray, Is.EqualTo(original.ImmutableArray));
-        // Can't check SameAs for struct, but can check internal array identity if we wanted, but equality is enough.
 
         // Verify ImmutableQueue
         Assert.That(clone.ImmutableQueue, Is.Not.Null);
-        Assert.That(clone.ImmutableQueue, Is.Not.SameAs(original.ImmutableQueue));
-        // Verify contents and order
+        // Optimization: Immutable collections with immutable elements return same reference
+        Assert.That(clone.ImmutableQueue, Is.SameAs(original.ImmutableQueue));
         Assert.That(clone.ImmutableQueue.ToArray(), Is.EqualTo(original.ImmutableQueue.ToArray()));
 
         // Verify ImmutableStack
         Assert.That(clone.ImmutableStack, Is.Not.Null);
-        Assert.That(clone.ImmutableStack, Is.Not.SameAs(original.ImmutableStack));
-        // Verify contents and order (Stack enumerates top-down)
+        // Optimization: Immutable collections with immutable elements return same reference
+        Assert.That(clone.ImmutableStack, Is.SameAs(original.ImmutableStack));
         Assert.That(clone.ImmutableStack.ToArray(), Is.EqualTo(original.ImmutableStack.ToArray()));
 
         // Verify ImmutableDict
         Assert.That(clone.ImmutableDict, Is.Not.Null);
-        Assert.That(clone.ImmutableDict, Is.Not.SameAs(original.ImmutableDict));
+        // Optimization: Immutable dictionary with immutable keys and values returns same reference
+        Assert.That(clone.ImmutableDict, Is.SameAs(original.ImmutableDict));
         Assert.That(clone.ImmutableDict[1], Is.EqualTo(100));
 
         // Verify ReadOnlyDict

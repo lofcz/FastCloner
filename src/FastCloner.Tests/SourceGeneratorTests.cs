@@ -10,7 +10,7 @@ namespace FastCloner.Tests;
 public class SourceGeneratorTests
 {
     [FastClonerClonable]
-    public partial class Person
+    public class Person
     {
         public string? Name { get; set; }
         public int Age { get; set; }
@@ -314,7 +314,7 @@ public class SourceGeneratorTests
     }
 
     [FastClonerClonable]
-    public partial class EnumerableSamples
+    public class EnumerableSamples
     {
         public List<int>? ListInts { get; set; }
         public int[]? ArrayInts { get; set; }
@@ -445,7 +445,7 @@ public class SourceGeneratorTests
 
     // Test classes without public parameterless constructors
     [FastClonerClonable]
-    public partial class ClassWithoutParameterlessCtor
+    public class ClassWithoutParameterlessCtor
     {
         // Read-only properties set in constructor - these won't be cloned
         // since FormatterServices.GetUninitializedObject() doesn't call the constructor
@@ -471,7 +471,7 @@ public class SourceGeneratorTests
     }
 
     [FastClonerClonable]
-    public partial class ClassWithCircularRefNoCtor
+    public class ClassWithCircularRefNoCtor
     {
         // Read-only property set in constructor - won't be cloned
         public string? Name { get; }
@@ -530,37 +530,37 @@ public class SourceGeneratorTests
 
     // Test classes for complex circular dependency testing
     [FastClonerClonable]
-    public partial class CircularNodeA
+    public class CircularNodeA
     {
         public CircularNodeB? B { get; set; }
     }
 
     [FastClonerClonable]
-    public partial class CircularNodeB
+    public class CircularNodeB
     {
         public CircularNodeA? A { get; set; }
     }
 
     [FastClonerClonable]
-    public partial class CircularNodeC
+    public class CircularNodeC
     {
         public CircularNodeC? Self { get; set; }
     }
 
     [FastClonerClonable]
-    public partial class CircularNodeD
+    public class CircularNodeD
     {
         public CircularNodeE? E { get; set; }
     }
 
     [FastClonerClonable]
-    public partial class CircularNodeE
+    public class CircularNodeE
     {
         public CircularNodeF? F { get; set; }
     }
 
     [FastClonerClonable]
-    public partial class CircularNodeF
+    public class CircularNodeF
     {
         public CircularNodeE? E { get; set; }
     }

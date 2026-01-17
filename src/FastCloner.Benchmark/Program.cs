@@ -12,7 +12,7 @@ class Program
         ManualConfig config = DefaultConfig.Instance
             .WithOptions(ConfigOptions.DisableOptimizationsValidator);
         
-        Summary summary = BenchmarkRunner.Run<BenchDynamic>(config);
+        Summary summary = BenchmarkRunner.Run<BenchClone>(config);
         Console.WriteLine(summary);
     }
 }

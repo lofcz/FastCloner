@@ -7,7 +7,7 @@ namespace FastCloner.SourceGenerator;
 
 internal static class IncludeAttributeCollector
 {
-    public static EquatableArray<GenericUsage> Collect(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
+    public static EquatableArray<GenericUsage> Collect(GeneratorAttributeSyntaxContext context, TargetFramework targetFramework, CancellationToken cancellationToken)
     {
         INamedTypeSymbol? symbol = context.TargetSymbol as INamedTypeSymbol;
         if (symbol == null || !symbol.IsGenericType)
@@ -37,7 +37,7 @@ internal static class IncludeAttributeCollector
                         {
                             if (typeConstant.Value is ITypeSymbol typeArg)
                             {
-                                GenericUsage? usage = GenericTypeAnalyzer.Analyze(symbol, typeArg, compilation, nullability);
+                                GenericUsage? usage = GenericTypeAnalyzer.Analyze(symbol, typeArg, compilation, nullability, targetFramework);
                                 if (usage.HasValue)
                                 {
                                     usages.Add(usage.Value);

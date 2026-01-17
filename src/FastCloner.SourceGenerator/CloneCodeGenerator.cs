@@ -2,13 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using Microsoft.CodeAnalysis;
 
 namespace FastCloner.SourceGenerator;
 
-/// <summary>
-/// Generates FastDeepClone() extension methods for types marked with [FastClonerClonable].
-/// </summary>
 internal sealed class CloneCodeGenerator
 {
     private readonly CloneGeneratorContext _context;
@@ -34,11 +30,8 @@ internal sealed class CloneCodeGenerator
 
     private void PreAnalyzeHelperUsages()
     {
-        // Analyze root members
         AnalyzeMembers(_context.Model.Members);
-
-        // Analyze related implicit types
-        // RelatedTypes includes all discovered implicit types that might be needed
+        
         if (_context.Model.RelatedTypes != null)
         {
             foreach (TypeModel? related in _context.Model.RelatedTypes)
@@ -108,17 +101,14 @@ internal sealed class CloneCodeGenerator
         sb.AppendLine("using System.Collections.Generic;");
         sb.AppendLine("using System.Reflection;");
         sb.AppendLine("using FastCloner.SourceGenerator.Shared;");
-
-        // Add FormatterServices if type doesn't have parameterless constructor
-        // Also check derived types for abstract classes
+        
         bool needsFormatterServices = ClassCloneBodyGenerator.NeedsFormatterServices(_context.Model) ||
                                       ClassCloneBodyGenerator.NeedsFormatterServices(_context.Model.DerivedTypes);
         if (needsFormatterServices)
         {
             sb.AppendLine("using System.Runtime.Serialization;");
         }
-
-        // Only add FastCloner using if the library is available
+        
         if (_context.IsFastClonerAvailable)
         {
             sb.AppendLine("using FastCloner;");
@@ -139,33 +129,21 @@ internal sealed class CloneCodeGenerator
 
     private void WriteExtensionClass()
     {
-        // Use the fully qualified name from TypeModel
         string typeName = _context.Model.FullyQualifiedName;
         string fullTypeName = _context.Model.FullyQualifiedName;
         StringBuilder sb = _context.Source;
-
-        // FcGeneratedCloneState is now in FastCloner.SourceGenerator.Shared - no need to generate it
-
+        
         sb.AppendLine("    /// <summary>");
         sb.AppendLine($"    /// Extension methods for cloning {_context.Model.Name}.");
         sb.AppendLine("    /// </summary>");
         sb.AppendLine($"    public static partial class {_context.Model.Name}FastDeepCloneExtensions");
         sb.AppendLine("    {");
-
-        // Generate public FastDeepClone() without state parameter
+        
         WritePublicFastDeepCloneMethod(typeName, fullTypeName);
-
-        // Always generate InternalFastDeepClone for Clonable types, even if they don't detect circular references
         WritePrivateFastDeepCloneMethod(typeName, fullTypeName);
-
-        // Generate helper methods for derived types (for abstract classes)
         WriteDerivedTypeHelpers();
-
-        // Generate Cloner<T> helper class (private nested class)
-        // Must be generated before helpers to register its dependencies
         WriteClonerClass();
-
-        // Generate helper methods for nested types
+        
         CollectionHelperGenerator.GenerateHelpers(_context);
 
         sb.AppendLine("    }");
@@ -181,57 +159,39 @@ internal sealed class CloneCodeGenerator
 
         string typeParams = GetTypeParametersString();
         string constraints = GetTypeConstraintsString();
-
-        // For structs (value types), use non-nullable signatures since structs can't be null
-        // If TrustNullability is enabled, we assume the input is not null if the type is not nullable
         bool isStruct = _context.Model.IsStruct;
         bool trustNullability = _context.Model.TrustNullability;
         string returnTypeSuffix = isStruct ? "" : "?";
         string paramTypeSuffix = (isStruct || trustNullability) ? "" : "?";
-
-        // Add NotNullIfNotNull attribute for reference types (improves nullability flow analysis)
         string notNullAttr = CloneGeneratorContext.NotNullIfNotNullAttr(_context.Model.CodeAnalysisAvailable && !isStruct);
         if (!string.IsNullOrEmpty(notNullAttr))
             sb.AppendLine($"        {notNullAttr}");
         sb.AppendLine($"        public static {typeName}{returnTypeSuffix} FastDeepClone{typeParams}(this {typeName}{paramTypeSuffix} source){constraints}");
         sb.AppendLine("        {");
-
-        // Check for complex scenarios that require runtime fallback
-        // 1. Init-only members with cycle tracking (cannot be set via statements)
-        // 2. Structs with readonly reference fields (cannot be set via statements, require runtime tricks)
+        
         bool hasInitOnlyWithCycles = _context.CanHaveCircularReferences && _context.Model.Members.Any(m => m.IsInitOnly);
         bool structWithReadonlyRefs = _context.Model.IsStruct && _context.Model.Members.Any(m => m is { IsValueType: false, IsReadOnly: true });
 
-        // Cannot use runtime fallback for ref structs (cannot be generic arguments)
         if (!_context.Model.IsRefLikeType && _context.IsFastClonerAvailable && (hasInitOnlyWithCycles || structWithReadonlyRefs))
         {
-             sb.AppendLine("            // Fallback to runtime cloning due to complex language features:");
-             if (hasInitOnlyWithCycles) sb.AppendLine("            // - Init-only members with circular reference tracking");
-             if (structWithReadonlyRefs) sb.AppendLine("            // - Struct with readonly reference fields");
              sb.AppendLine($"            return {CloneGeneratorContext.FastClonerDeepCloneCall("source")};");
              sb.AppendLine("        }");
              sb.AppendLine();
              return;
         }
-
-        // For abstract classes, always use the internal method with state (for potential circular refs)
+        
         if (_context.Model.IsAbstract)
         {
             sb.AppendLine("            return InternalFastDeepClone(source, null);");
         }
-        // Optimization: When no circular references are possible, inline the clone logic directly
-        // instead of calling through InternalFastDeepClone (saves a method call)
-        else if (!_context.CanHaveCircularReferences)
+        else if (!_context.NeedsStateTracking)
         {
-            // For structs (value types), no null check needed - just clone directly
             if (isStruct)
             {
-                // For structs, source is already non-nullable, use it directly
                 WriteStructCloneBodyDirect(typeName);
             }
             else
             {
-                // Only generate null check if not trusting nullability
                 if (!trustNullability)
                 {
                     sb.AppendLine("            if (source == null) return null;");
@@ -259,22 +219,18 @@ internal sealed class CloneCodeGenerator
 
         string typeParams = GetTypeParametersString();
         string constraints = GetTypeConstraintsString();
-
-        // For structs (value types), use non-nullable signatures since structs can't be null
+        
         bool isStruct = _context.Model.IsStruct;
         bool trustNullability = _context.Model.TrustNullability;
         string returnTypeSuffix = isStruct ? "" : "?";
         string paramTypeSuffix = (isStruct || trustNullability) ? "" : "?";
 
-        sb.AppendLine($"        internal static {typeName}{returnTypeSuffix} InternalFastDeepClone{typeParams}(this {typeName}{paramTypeSuffix} source, object? state){constraints}");
+        sb.AppendLine($"        internal static {typeName}{returnTypeSuffix} InternalFastDeepClone{typeParams}(this {typeName}{paramTypeSuffix} source, FcGeneratedCloneState? state){constraints}");
         sb.AppendLine("        {");
-
-        // Check for complex scenarios that require runtime fallback
-        // Same logic as Public method - if we can't generate valid code, delegate to runtime
+        
         bool hasInitOnlyWithCycles = _context.CanHaveCircularReferences && _context.Model.Members.Any(m => m.IsInitOnly);
         bool structWithReadonlyRefs = _context.Model.IsStruct && _context.Model.Members.Any(m => m is { IsValueType: false, IsReadOnly: true });
-
-        // Cannot use runtime fallback for ref structs (cannot be generic arguments)
+        
         if (!_context.Model.IsRefLikeType && _context.IsFastClonerAvailable && (hasInitOnlyWithCycles || structWithReadonlyRefs))
         {
              sb.AppendLine("            // Fallback to runtime cloning due to complex language features.");
@@ -285,37 +241,40 @@ internal sealed class CloneCodeGenerator
              return;
         }
         
-        // For structs (value types), no null check needed
         if (!isStruct && !trustNullability)
         {
             sb.AppendLine("            if (source == null) return null;");
         }
-
-        // For abstract classes, generate a type dispatcher
+        
         if (_context.Model.IsAbstract)
         {
             WriteAbstractTypeDispatcher(typeName);
         }
-        // Only use state if circular references are possible
-        else if (_context.CanHaveCircularReferences)
+        else if (_context.NeedsStateTracking)
         {
             _context.NeedsStateClass = true;
-            // Cast state to local type or create new one - allows sharing state across different extension classes
-            sb.AppendLine("            var localState = (state as FcGeneratedCloneState) ?? new FcGeneratedCloneState();");
+            sb.AppendLine("            var localState = state ?? new FcGeneratedCloneState();");
 
             if (!_context.Model.IsStruct)
             {
                 sb.AppendLine("            var known = localState.GetKnownRef(source);");
                 sb.AppendLine($"            if (known != null) return ({typeName})known;");
             }
-
-            // Use localState in WriteCloneBody - need to pass it as a variable name
+            
             WriteCloneBody(typeName, fullTypeName, true, "localState");
         }
         else
         {
-            // If circular references aren't possible, state can remain null and won't be used
-            WriteCloneBody(typeName, fullTypeName, false);
+            _context.NeedsStateClass = true;
+            sb.AppendLine("            if (state != null)");
+            sb.AppendLine("            {");
+            if (!_context.Model.IsStruct)
+            {
+                sb.AppendLine("                var known = state.GetKnownRef(source);");
+                sb.AppendLine($"                if (known != null) return ({typeName})known;");
+            }
+            sb.AppendLine("            }");
+            WriteCloneBody(typeName, fullTypeName, true, "state");
         }
 
         sb.AppendLine("        }");
@@ -336,11 +295,8 @@ internal sealed class CloneCodeGenerator
         {
             string derivedTypeName = derivedType.FullyQualifiedName;
             
-            // Check if the derived type has its own [FastClonerClonable] attribute
-            // If so, use its generated extension method; otherwise use our helper
             if (derivedType.Members.Count == 0)
             {
-                // Minimal model - has its own [FastClonerClonable], use its extension
                 string extensionClassName = $"{derivedType.Namespace}.{derivedType.Name}FastDeepCloneExtensions";
                 if (string.IsNullOrEmpty(derivedType.Namespace))
                 {
@@ -352,7 +308,6 @@ internal sealed class CloneCodeGenerator
             }
             else
             {
-                // Full model - auto-generated, use our helper method
                 string helperName = $"Clone{GetSafeTypeName(derivedType.Name)}";
                 _context.RegisterDerivedTypeHelper(derivedType, helperName);
                 
@@ -361,16 +316,13 @@ internal sealed class CloneCodeGenerator
             }
             sb.AppendLine();
         }
-
-        // Fallback for unknown derived types
+        
         if (_context.IsFastClonerAvailable)
         {
-            sb.AppendLine("            // Fallback for unknown derived types - use runtime cloner");
             sb.AppendLine($"            return ({typeName}){CloneGeneratorContext.FastClonerDeepCloneCall("source")};");
         }
         else
         {
-            sb.AppendLine("            // No runtime cloner available - throw for unknown derived types");
             sb.AppendLine($"            throw new InvalidOperationException($\"Cannot clone unknown derived type {{runtimeType.FullName}} of {_context.Model.Name}. \" +");
             sb.AppendLine("                \"Either add the derived type to this assembly, use [FastClonerInclude] to register it, \" +");
             sb.AppendLine("                \"or install the FastCloner NuGet package for runtime fallback.\");");
@@ -403,16 +355,13 @@ internal sealed class CloneCodeGenerator
             sb.AppendLine($"        /// <summary>");
             sb.AppendLine($"        /// Clones a {derivedModel.Name} instance (auto-generated for abstract base class).");
             sb.AppendLine($"        /// </summary>");
-            sb.AppendLine($"        private static {derivedModel.FullyQualifiedName} {methodName}({derivedModel.FullyQualifiedName} source, object? state)");
+            sb.AppendLine($"        private static {derivedModel.FullyQualifiedName} {methodName}({derivedModel.FullyQualifiedName} source, FcGeneratedCloneState? state)");
             sb.AppendLine("        {");
-
-            // Create a temporary context for this derived type
-            DerivedTypeCloneContext derivedContext = new DerivedTypeCloneContext(_context, derivedModel);
             
-            if (derivedModel.CanHaveCircularReferences)
+            if (derivedModel.NeedsStateTracking)
             {
                 _context.NeedsStateClass = true;
-                sb.AppendLine("            var localState = (state as FcGeneratedCloneState) ?? new FcGeneratedCloneState();");
+                sb.AppendLine("            var localState = state ?? new FcGeneratedCloneState();");
                 sb.AppendLine("            var known = localState.GetKnownRef(source);");
                 sb.AppendLine($"            if (known != null) return ({derivedModel.FullyQualifiedName})known;");
                 sb.AppendLine();
@@ -451,7 +400,6 @@ internal sealed class CloneCodeGenerator
             {
                 if (useState)
                 {
-                    // Check for required members
                     List<string> requiredMembers = [];
                     foreach (MemberModel member in derivedModel.Members)
                     {
@@ -531,31 +479,9 @@ internal sealed class CloneCodeGenerator
         }
     }
 
-    /// <summary>
-    /// Helper class for generating clone code for derived types within the abstract class context.
-    /// </summary>
-    private class DerivedTypeCloneContext
-    {
-        private readonly CloneGeneratorContext _parentContext;
-        private readonly TypeModel _derivedModel;
-
-        public DerivedTypeCloneContext(CloneGeneratorContext parentContext, TypeModel derivedModel)
-        {
-            _parentContext = parentContext;
-            _derivedModel = derivedModel;
-        }
-
-        public TypeModel Model => _derivedModel;
-        public StringBuilder Source => _parentContext.Source;
-        public bool IsFastClonerAvailable => _parentContext.IsFastClonerAvailable;
-    }
-
     private string GetTypeParametersString()
     {
-        if (_context.Model.TypeParameters.Count == 0)
-            return string.Empty;
-
-        return $"<{string.Join(", ", _context.Model.TypeParameters)}>";
+        return _context.Model.TypeParameters.Count == 0 ? string.Empty : $"<{string.Join(", ", _context.Model.TypeParameters)}>";
     }
 
     private string GetTypeConstraintsString()
@@ -568,14 +494,12 @@ internal sealed class CloneCodeGenerator
 
     private void WriteCloneBody(string typeName, string fullTypeName, bool useState, string? stateVarName = null)
     {
-        // Record structs should use 'with' expression like record classes
         if (_context.Model is { IsStruct: true, IsRecord: false })
         {
             WriteStructCloneBody(typeName, stateVarName ?? "state");
         }
         else
         {
-            // Classes and record structs both use this path
             WriteClassCloneBody(typeName, fullTypeName, useState, stateVarName);
         }
     }
@@ -583,7 +507,6 @@ internal sealed class CloneCodeGenerator
     private void WriteStructCloneBody(string typeName, string stateVarName = "state")
     {
         StringBuilder sb = _context.Source;
-        // For structs, 'source' is non-nullable (no extraction needed)
         sb.AppendLine($"            var result = source;");
         sb.AppendLine();
 
@@ -594,18 +517,13 @@ internal sealed class CloneCodeGenerator
 
         sb.AppendLine("            return result;");
     }
-
-    /// <summary>
-    /// Writes struct clone body using 'source' directly (for non-nullable struct signatures).
-    /// </summary>
+    
     private void WriteStructCloneBodyDirect(string typeName)
     {
         StringBuilder sb = _context.Source;
         
-        // For record structs, use 'with' expression
         if (_context.Model.IsRecord)
         {
-            // Collect members that need deep cloning
             List<string> deepCloneAssignments = [];
             foreach (MemberModel member in _context.Model.Members)
             {
@@ -635,7 +553,6 @@ internal sealed class CloneCodeGenerator
         }
         else
         {
-            // Regular structs: copy and modify
             sb.AppendLine($"            var result = source;");
             sb.AppendLine();
 
@@ -650,12 +567,9 @@ internal sealed class CloneCodeGenerator
 
     private void WriteClassCloneBody(string typeName, string fullTypeName, bool useState, string? stateVarName = null)
     {
-        // Use null-conditional operator for CloneCodeGenerator since state might be null
-        // For structs, source is non-nullable (no extraction needed)
         ClassCloneBodyGenerator.WriteClassCloneBody(_context, typeName, useState, stateVarName, useNullConditional: true, sourceVarName: "source");
     }
-
-
+    
     private void WriteClonerClass()
     {
         if (!_context.NeedsClonerClass)
@@ -666,44 +580,34 @@ internal sealed class CloneCodeGenerator
         sb.AppendLine("        /// <summary>");
         sb.AppendLine("        /// Helper class for cloning generic types.");
         sb.AppendLine("        /// </summary>");
-        
-        // Determine the type parameter name and string
-        // If parent type has type parameters, we use the first one as the Cloner's parameter
-        // (since they're in scope within the extension class)
-        // If parent has no type parameters, we need to define our own 'T'
+
         string typeParams = GetTypeParametersString();
         string constraints = GetTypeConstraintsString();
         
-        // For non-generic types, Cloner needs its own T parameter
-        // For generic types, reuse the parent's type parameters
         string[]? typeParamsArray = _context.Model.TypeParameters.GetArray();
         if (typeParamsArray == null || typeParamsArray.Length == 0)
         {
             sb.AppendLine($"        private static class Cloner<T>");
             sb.AppendLine("        {");
-            sb.AppendLine("            public static T Clone(T source, object? state)");
+            sb.AppendLine("            public static T Clone(T source, FcGeneratedCloneState? state)");
         }
         else
         {
-            // Use parent's type parameters 
             sb.AppendLine($"        private static class Cloner{typeParams}{constraints}");
             sb.AppendLine("        {");
-            // Use the first type parameter as the clone target type
+
             string firstTypeParam = typeParamsArray[0];
-            sb.AppendLine($"            public static {firstTypeParam} Clone({firstTypeParam} source, object? state)");
+            sb.AppendLine($"            public static {firstTypeParam} Clone({firstTypeParam} source, FcGeneratedCloneState? state)");
         }
         
         sb.AppendLine("            {");
         sb.AppendLine("                if (source == null) return default;");
         
-        // Generate dispatch for known usages (Available even without FastCloner runtime)
         foreach (GenericUsage usage in _usages)
         {
-            // Filter usages relevant to THIS generic type definition
             if (usage.GenericTypeMetadataName != _context.Model.FullyQualifiedName)
                 continue;
-
-            // Register dependencies
+            
             foreach (MemberModel nested in usage.NestedHelpers)
             {
                 _context.GetOrCreateHelperMethodName(nested);
@@ -715,9 +619,7 @@ internal sealed class CloneCodeGenerator
             }
                 
             string argType = usage.ArgumentTypeMetadataName;
-            
-            // Use the appropriate type parameter for cast operations
-            string castTypeParam = (typeParamsArray == null || typeParamsArray.Length == 0)
+            string castTypeParam = typeParamsArray == null || typeParamsArray.Length == 0
                 ? "T" 
                 : typeParamsArray[0];
             
@@ -727,21 +629,17 @@ internal sealed class CloneCodeGenerator
             }
             else if (usage.IsClonable && !string.IsNullOrEmpty(usage.ExtensionClassFQN))
             {
-                // Generate dispatch to concrete FastDeepClone
                 sb.AppendLine($"                if (typeof({castTypeParam}) == typeof({argType}))");
                 sb.AppendLine($"                    return ({castTypeParam})(object)({usage.ExtensionClassFQN}.FastDeepClone(({argType})(object)source)!);");
             }
             else if (usage.CollectionModel != null)
             {
-                // Get helper name for the collection type
                 MemberModel collectionModel = usage.CollectionModel.Value;
                 string helperName = _context.GetOrCreateHelperMethodName(collectionModel);
-                
-                // Determine if helper needs state
                 bool needsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(_context, collectionModel);
                 
                 string callArgs = needsState 
-                    ? $"(({argType})(object)source, state as FcGeneratedCloneState)" 
+                    ? $"(({argType})(object)source, state)" 
                     : $"(({argType})(object)source)";
 
                 sb.AppendLine($"                if (typeof({castTypeParam}) == typeof({argType}))");
@@ -749,14 +647,12 @@ internal sealed class CloneCodeGenerator
             }
             else
             {
-                // Check if it is an implicit type itself
                 if (_context.TryGetImplicitTypeModel(argType, out TypeModel implicitModel))
                 {
-                     // Generate dispatch to implicit helper
                      string helperName = _context.GetOrCreateHelperMethodName(argType);
-                     bool needsState = implicitModel.CanHaveCircularReferences && _context.CanHaveCircularReferences;
+                     bool needsState = implicitModel.NeedsStateTracking && _context.NeedsStateTracking;
                      string callArgs = needsState 
-                        ? $"(({argType})(object)source, state as FcGeneratedCloneState)" 
+                        ? $"(({argType})(object)source, state)" 
                         : $"(({argType})(object)source)";
 
                      sb.AppendLine($"                if (typeof({castTypeParam}) == typeof({argType}))");
@@ -765,22 +661,16 @@ internal sealed class CloneCodeGenerator
             }
         }
         
-        // Use the appropriate type parameter for the fallback cast
         string fallbackCastTypeParam = (typeParamsArray == null || typeParamsArray.Length == 0)
             ? "T" 
             : typeParamsArray[0];
         
         if (_context.IsFastClonerAvailable)
         {
-            sb.AppendLine("                // If FastCloner is available, delegate to it for deep cloning");
             sb.AppendLine($"                return ({fallbackCastTypeParam}){CloneGeneratorContext.FastClonerDeepCloneCall("source")};");
         }
         else
         {
-            sb.AppendLine("                // Fallback: If FastCloner is not available, we can only safely clone");
-            sb.AppendLine("                // types that are effectively safe (value types, strings, etc.) by returning them.");
-            sb.AppendLine("                // For other types, this results in a shallow copy/identity return,");
-            sb.AppendLine("                // which is the best we can do without the runtime library.");
             sb.AppendLine("                return source;");
         }
         sb.AppendLine("            }");

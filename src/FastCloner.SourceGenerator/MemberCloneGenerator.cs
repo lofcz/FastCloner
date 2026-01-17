@@ -12,13 +12,10 @@ internal static class MemberCloneGenerator
 
         switch (member)
         {
-            // Skip read-only fields (can't assign)
             case { IsProperty: false, IsReadOnly: true }:
-            // Skip getter-only properties in object initializers - they need statement-based population
             case { IsProperty: true, HasGetter: true, HasSetter: false, IsInitOnly: false }:
                 return string.Empty;
             default:
-                // Handle shallow clone - direct reference copy (before checking TypeKind)
                 if (member.IsShallowClone)
                 {
                     return $"{memberName} = {sourceVar}.{memberName}";
@@ -28,37 +25,25 @@ internal static class MemberCloneGenerator
                 {
                     case MemberTypeKind.Safe:
                     {
-                        // Direct assignment for safe types (primitives, strings, etc.)
-                        // Both properties and fields can use object initializer syntax
                         return $"{memberName} = {sourceVar}.{memberName}";
                     }
                     case MemberTypeKind.Clonable:
                     {
-                        // Always use InternalFastDeepClone for Clonable types to support circular references
-                        // Clonable types might have circular references even if the current type doesn't detect them
-                        // (e.g., CircularNodeD -> CircularNodeE, where E has circular refs with F)
                         string extensionClassName = GetExtensionClassName(member.TypeFullName, context.Model.Namespace);
-                
-                        // If we don't have state, create a new one to ensure circular reference tracking works
-                        string actualStateVar = stateVar;
-                        if (stateVar == "null")
-                        {
-                            // Create a new state variable for this cloning operation
-                            // This ensures circular references in the member type are tracked
-                            actualStateVar = "new FcGeneratedCloneState()";
-                        }
-                
-                        // Both properties and fields can use object initializer syntax
-                        return $"{memberName} = {extensionClassName}.InternalFastDeepClone({sourceVar}.{memberName}, {actualStateVar})";
+                        bool hasStateFromCaller = stateVar != "null";
+                        bool memberNeedsState = hasStateFromCaller || MemberNeedsCircularRefTracking(context, member);
+                        
+                        return memberNeedsState ? 
+                            $"{memberName} = {extensionClassName}.InternalFastDeepClone({sourceVar}.{memberName}, {stateVar})" : 
+                            $"{memberName} = {sourceVar}.{memberName}?.FastDeepClone()";
                     }
                     case MemberTypeKind.Implicit:
                     {
-                        // Optimally inline if used only once
                         if (context.ShouldInline(member.TypeFullName) && 
                             context.TryGetImplicitTypeModel(member.TypeFullName, out var implicitModel))
                         {
-                            bool inlineModelDefault = implicitModel.CanHaveCircularReferences;
-                            bool inlineMemberNeedsState = context.NeedsCircularState(member.TypeFullName, inlineModelDefault) && context.CanHaveCircularReferences;
+                            bool inlineModelDefault = implicitModel.NeedsStateTracking;
+                            bool inlineMemberNeedsState = context.NeedsCircularState(member.TypeFullName, inlineModelDefault) && context.NeedsStateTracking;
                             bool inlineShouldPassState = inlineMemberNeedsState || (stateVar != "null");
                             string inlineActualStateVar = inlineShouldPassState ? stateVar : "null";
 
@@ -66,21 +51,14 @@ internal static class MemberCloneGenerator
                         }
 
                         string helperMethodName = context.GetOrCreateHelperMethodName(member);
-                        // Re-fetch model if needed (though we checked it above for inlining, we might not have it if not inlining check skipped)
                         context.TryGetImplicitTypeModel(member.TypeFullName, out implicitModel);
-                
-                        // Assume implicitModel exists if TypeKind is Implicit, but handle safely
-                        bool modelDefault = implicitModel?.CanHaveCircularReferences ?? false;
-                        bool memberNeedsState = context.NeedsCircularState(member.TypeFullName, modelDefault) && context.CanHaveCircularReferences;
-                
-                        // If this is a registered type (method name is "Clone") and we're in a state-tracking context,
-                        // always pass state to use the private overload, even if the member type doesn't need state itself.
-                        // This is critical for circular reference tracking to work correctly.
+
+                        bool modelDefault = implicitModel?.NeedsStateTracking ?? false;
+                        bool memberNeedsState = context.NeedsCircularState(member.TypeFullName, modelDefault) && context.NeedsStateTracking;
                         bool isRegisteredType = helperMethodName == "Clone";
                         bool shouldPassState = memberNeedsState || (isRegisteredType && stateVar != "null");
                         string actualStateVar = shouldPassState ? stateVar : "null";
 
-                        // Both properties and fields can use object initializer syntax
                         return $"{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", shouldPassState, actualStateVar)}";
                     }
                     case MemberTypeKind.Collection:
@@ -97,10 +75,7 @@ internal static class MemberCloneGenerator
                     case MemberTypeKind.Object:
                     case MemberTypeKind.Other:
                     default:
-                        // Use Cloner<T> helper for generic/object/unknown types
-                        // This handles both FastCloner availability and safe type fallbacks
                         context.NeedsClonerClass = true;
-
                         return $"{memberName} = Cloner<{member.TypeFullName}>.Clone({sourceVar}.{memberName}, {stateVar})";
                 }
         }
@@ -113,18 +88,13 @@ internal static class MemberCloneGenerator
 
         switch (member)
         {
-            // Skip read-only fields (can't assign in struct cloning)
             case { IsProperty: false, IsReadOnly: true }:
-            // Skip init-only properties when using statement-based assignment
-            // Init-only properties can only be assigned in object initializers, not individual statements
             case { IsProperty: true, IsInitOnly: true }:
                 return;
-            // Handle getter-only collection properties - populate instead of replace
             case { IsProperty: true, HasGetter: true, HasSetter: false, IsInitOnly: false }:
                 WriteGetterOnlyCollectionPopulation(context, member, resultVar, sourceVar, stateVar);
                 return;
             default:
-                // Handle shallow clone - direct reference copy (before checking TypeKind)
                 if (member.IsShallowClone)
                 {
                     sb.AppendLine($"            {resultVar}.{memberName} = {sourceVar}.{memberName};");
@@ -140,14 +110,17 @@ internal static class MemberCloneGenerator
                     case MemberTypeKind.Clonable:
                     {
                         string extensionClassName = GetExtensionClassName(member.TypeFullName, context.Model.Namespace);
-                
-                        string actualStateVar = stateVar;
-                        if (stateVar == "null")
+                        bool hasStateFromCaller = stateVar != "null";
+                        bool memberNeedsState = hasStateFromCaller || MemberNeedsCircularRefTracking(context, member);
+                        
+                        if (memberNeedsState)
                         {
-                            actualStateVar = "new FcGeneratedCloneState()";
+                            sb.AppendLine($"            {resultVar}.{memberName} = {extensionClassName}.InternalFastDeepClone({sourceVar}.{memberName}, {stateVar});");
                         }
-                
-                        sb.AppendLine($"            {resultVar}.{memberName} = {extensionClassName}.InternalFastDeepClone({sourceVar}.{memberName}, {actualStateVar});");
+                        else
+                        {
+                            sb.AppendLine($"            {resultVar}.{memberName} = {sourceVar}.{memberName}?.FastDeepClone();");
+                        }
                     }
                         break;
 
@@ -156,8 +129,8 @@ internal static class MemberCloneGenerator
                         if (context.ShouldInline(member.TypeFullName) && 
                             context.TryGetImplicitTypeModel(member.TypeFullName, out var implicitModel))
                         {
-                            bool inlineModelDefault = implicitModel.CanHaveCircularReferences;
-                            bool inlineMemberNeedsState = context.NeedsCircularState(member.TypeFullName, inlineModelDefault) && context.CanHaveCircularReferences;
+                            bool inlineModelDefault = implicitModel.NeedsStateTracking;
+                            bool inlineMemberNeedsState = context.NeedsCircularState(member.TypeFullName, inlineModelDefault) && context.NeedsStateTracking;
                             bool inlineShouldPassState = inlineMemberNeedsState || (stateVar != "null");
                             string inlineActualStateVar = inlineShouldPassState ? stateVar : "null";
 
@@ -167,8 +140,8 @@ internal static class MemberCloneGenerator
 
                         string helperMethodName = context.GetOrCreateHelperMethodName(member);
                         context.TryGetImplicitTypeModel(member.TypeFullName, out implicitModel);
-                        bool modelDefault = implicitModel?.CanHaveCircularReferences ?? false;
-                        bool memberNeedsState = context.NeedsCircularState(member.TypeFullName, modelDefault) && context.CanHaveCircularReferences;
+                        bool modelDefault = implicitModel?.NeedsStateTracking ?? false;
+                        bool memberNeedsState = context.NeedsCircularState(member.TypeFullName, modelDefault) && context.NeedsStateTracking;
                         bool isRegisteredType = helperMethodName == "Clone";
                         bool shouldPassState = memberNeedsState || (isRegisteredType && stateVar != "null");
                         string actualStateVar = shouldPassState ? stateVar : "null";
@@ -182,7 +155,6 @@ internal static class MemberCloneGenerator
                     case MemberTypeKind.Array:
                     case MemberTypeKind.MultiDimArray:
                     {
-                        // All collection types (including multi-dimensional arrays) use helper methods
                         string helperMethodName = context.GetOrCreateHelperMethodName(member);
                         bool memberNeedsState = MemberNeedsCircularRefTracking(context, member);
                         string actualStateVar = memberNeedsState ? stateVar : "null";
@@ -193,7 +165,6 @@ internal static class MemberCloneGenerator
                     case MemberTypeKind.Object:
                     case MemberTypeKind.Other:
                     default:
-                        // Use Cloner<T> helper for generic/object/unknown types
                         context.NeedsClonerClass = true;
                         sb.AppendLine($"            {resultVar}.{memberName} = Cloner<{member.TypeFullName}>.Clone({sourceVar}.{memberName}, {stateVar});");
                         break;
@@ -208,23 +179,17 @@ internal static class MemberCloneGenerator
         StringBuilder sb = context.Source;
         string memberName = member.Name;
         
-        // Only handle Collection and Dictionary types - these are the only populatable types
         if (member.TypeKind != MemberTypeKind.Collection && member.TypeKind != MemberTypeKind.Dictionary)
             return;
-        
-        // Check if source collection is null
+
         sb.AppendLine($"            if ({sourceVar}.{memberName} != null)");
         sb.AppendLine("            {");
-        
-        // Clear target collection first
         sb.AppendLine($"                {resultVar}.{memberName}.Clear();");
         
-        // When [FastClonerShallow] is applied to getter-only collection, shallow clone items (just copy references)
         if (member.IsShallowClone)
         {
             if (member.TypeKind == MemberTypeKind.Dictionary)
             {
-                // For dictionaries, copy key-value pairs directly (shallow)
                 sb.AppendLine($"                foreach (var kvp in {sourceVar}.{memberName})");
                 sb.AppendLine("                {");
                 sb.AppendLine($"                    {resultVar}.{memberName}[kvp.Key] = kvp.Value;");
@@ -232,7 +197,6 @@ internal static class MemberCloneGenerator
             }
             else
             {
-                // For collections, add items directly (shallow)
                 string addMethod = GetAddMethodForCollection(member.CollectionKind);
                 sb.AppendLine($"                foreach (var item in {sourceVar}.{memberName})");
                 sb.AppendLine("                {");
@@ -242,15 +206,10 @@ internal static class MemberCloneGenerator
         }
         else
         {
-            // Deep clone: Get the helper method that clones this collection type
             string helperMethodName = context.GetOrCreateHelperMethodName(member);
             bool memberNeedsState = MemberNeedsCircularRefTracking(context, member);
             string actualStateVar = memberNeedsState ? stateVar : "null";
-            
-            // Generate unique variable name for the cloned collection
             string clonedVar = $"cloned_{context.GetNextVariableId()}";
-            
-            // Clone the source collection using the existing helper (handles all the complexity)
             string helperCall = GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", memberNeedsState, actualStateVar);
             sb.AppendLine($"                var {clonedVar} = {helperCall};");
             sb.AppendLine($"                if ({clonedVar} != null)");
@@ -258,16 +217,13 @@ internal static class MemberCloneGenerator
             
             if (member.TypeKind == MemberTypeKind.Dictionary)
             {
-                // For dictionaries, copy key-value pairs
                 sb.AppendLine($"                    foreach (var kvp in {clonedVar})");
                 sb.AppendLine("                    {");
-                // Use indexer - works for all dictionary types including ConcurrentDictionary
                 sb.AppendLine($"                        {resultVar}.{memberName}[kvp.Key] = kvp.Value;");
                 sb.AppendLine("                    }");
             }
             else
             {
-                // For collections, use the appropriate add method based on collection kind
                 string addMethod = GetAddMethodForCollection(member.CollectionKind);
                 sb.AppendLine($"                    foreach (var item in {clonedVar})");
                 sb.AppendLine("                    {");
@@ -281,9 +237,6 @@ internal static class MemberCloneGenerator
         sb.AppendLine("            }");
     }
     
-    /// <summary>
-    /// Gets the appropriate Add method name for a collection kind.
-    /// </summary>
     private static string GetAddMethodForCollection(CollectionKind kind)
     {
         return kind switch
@@ -294,41 +247,35 @@ internal static class MemberCloneGenerator
             _ => "Add"
         };
     }
-
-    /// <summary>
-    /// Checks if a member needs circular reference tracking based on pre-analyzed metadata.
-    /// If the root type analysis determined no circular references are possible, this always returns false.
-    /// </summary>
+    
     public static bool MemberNeedsCircularRefTracking(CloneGeneratorContext context, MemberModel member)
     {
-        // If the root type can't have circular references, nothing needs tracking
-        if (!context.CanHaveCircularReferences)
+        if (member.PreserveIdentity is not null)
+        {
+            return member.PreserveIdentity.Value;
+        }
+        
+        if (!context.NeedsStateTracking)
             return false;
 
         switch (member.TypeKind)
         {
-            // Safe types don't need tracking
             case MemberTypeKind.Safe:
                 return false;
-            // Types with FastClonerClonable attribute might have circular refs
             case MemberTypeKind.Clonable:
                 return true;
-            // For collections/arrays, check element metadata
             case MemberTypeKind.Collection:
             case MemberTypeKind.Array:
             case MemberTypeKind.MultiDimArray:
             {
-                // If element is safe, no tracking needed
                 if (member.ElementIsSafe)
                     return false;
-                // If element has clonable attribute, tracking needed
                 if (member.ElementHasClonableAttr)
                     return true;
                 break;
             }
         }
-
-        // For other types, assume they might need tracking if not safe
+        
         return true;
     }
 
@@ -337,11 +284,9 @@ internal static class MemberCloneGenerator
         StringBuilder sb = new StringBuilder();
         string sourceProp = $"{sourceVar}.{memberName}";
         string safeName = $"l_{memberName}_{context.GetNextVariableId()}";
-        
-        // 1. Capture local variable
+
         sb.AppendLine($"            var {safeName} = {sourceProp};");
-        
-        // 2. Check for null (unless struct or trusted non-nullable)
+
         bool skipNullCheck = context.Model.TrustNullability && !isMemberNullable;
 
         if (!implicitModel.IsStruct && !skipNullCheck)
@@ -349,8 +294,7 @@ internal static class MemberCloneGenerator
             sb.AppendLine($"            if ({safeName} != null)");
             sb.AppendLine("            {");
         }
-        
-        // 3. Create instance
+
         string typeName = implicitModel.FullyQualifiedName;
         string assignmentIndent = !implicitModel.IsStruct && !skipNullCheck ? "                    " : "                ";
         
@@ -490,11 +434,7 @@ internal static class MemberCloneGenerator
         }
         return fullName;
     }
-
-    /// <summary>
-    /// Gets the extension class name for a type. Extension classes are generated in the same namespace as the type.
-    /// For nested types, the namespace is the containing namespace (not including containing types).
-    /// </summary>
+    
     private static string GetExtensionClassName(string typeFullName, string currentNamespace)
     {
         string typeName = GetTypeNameFromFullName(typeFullName);
@@ -502,5 +442,13 @@ internal static class MemberCloneGenerator
         return string.IsNullOrEmpty(currentNamespace) ?
             $"{typeName}FastDeepCloneExtensions" : 
             $"global::{currentNamespace}.{typeName}FastDeepCloneExtensions";
+    }
+
+    public static string GetExtensionClassNameForType(string typeFullName, string contextNamespace)
+    {
+        string typeName = GetTypeNameFromFullName(typeFullName);
+        return string.IsNullOrEmpty(contextNamespace) ?
+            $"{typeName}FastDeepCloneExtensions" : 
+            $"global::{contextNamespace}.{typeName}FastDeepCloneExtensions";
     }
 }

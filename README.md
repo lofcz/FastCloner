@@ -269,6 +269,57 @@ public struct MyHandle
 
 This is the default behavior for system types like `System.Net.Http.Headers.HeaderDescriptor` to prevent breaking internal framework logic. Use this attribute if your custom structs behave similarly.
 
+### Identity Preservation
+
+By default, FastCloner prioritizes performance by not tracking object identity during cloning. This means if the same object instance appears multiple times in your graph, each reference becomes a separate clone.
+
+For scenarios where you need to preserve object identity (e.g., shared references should remain shared in the clone), use `[FastClonerPreserveIdentity]`:
+
+```csharp
+[FastClonerClonable]
+[FastClonerPreserveIdentity] // Enable identity tracking for this type
+public class Document
+{
+    public User Author { get; set; }
+    public User LastEditor { get; set; } // May reference the same User as Author
+}
+
+var doc = new Document { Author = user, LastEditor = user };
+var clone = doc.FastDeepClone();
+// clone.Author == clone.LastEditor (same cloned instance)
+```
+
+The attribute can be applied at type level or member level:
+
+```csharp
+[FastClonerClonable]
+public class Container
+{
+    // Only this member tracks identity
+    [FastClonerPreserveIdentity]
+    public List<Node> Nodes { get; set; }
+    
+    // This member clones without identity tracking (faster)
+    public List<Item> Items { get; set; }
+}
+```
+
+You can also explicitly disable identity preservation for a member when the type has it enabled:
+
+```csharp
+[FastClonerClonable]
+[FastClonerPreserveIdentity]
+public class Graph
+{
+    public Node Root { get; set; }
+    
+    [FastClonerPreserveIdentity(false)] // Opt out for this member
+    public List<string> Labels { get; set; }
+}
+```
+
+> **Note**: Identity preservation adds overhead for tracking seen objects. Circular references are always detected regardless of this setting.
+
 ## Limitations
 
 - Cloning unmanaged resources, such as `IntPtr`s may result in side-effects, as there is no metadata for the length of buffers such pointers often point to.
@@ -314,7 +365,7 @@ FastCloner's source generator is carefully engineered for zero impact on IDE res
 
 ## Contributing
 
-If you are looking to add new functionality, please open an issue first to verify your intent is aligned with the scope of the project. The library is covered by over [600 tests](https://github.com/lofcz/FastCloner/tree/next/src/FastCloner.Tests), please run them against your work before proposing changes. When reporting issues, providing a minimal reproduction we can plug in as a new test greatly reduces turnaround time.
+If you are looking to add new functionality, please open an issue first to verify your intent is aligned with the scope of the project. The library is covered by over [700 tests](https://github.com/lofcz/FastCloner/tree/next/src/FastCloner.Tests), please run them against your work before proposing changes. When reporting issues, providing a minimal reproduction we can plug in as a new test greatly reduces turnaround time.
 
 ## License
 

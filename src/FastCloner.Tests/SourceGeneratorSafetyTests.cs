@@ -7,7 +7,7 @@ namespace FastCloner.Tests.SourceGenerator
 {
     // Define a class that uses the Source Generator
     [FastClonerClonable]
-    public partial class SafetyTestClass
+    public class SafetyTestClass
     {
         public CancellationTokenSource? Cts { get; set; }
         public WeakReference<string>? WeakRef { get; set; }

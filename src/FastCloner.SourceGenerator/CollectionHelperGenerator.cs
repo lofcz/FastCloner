@@ -58,7 +58,7 @@ internal static class CollectionHelperGenerator
         // If Root can't have circular refs, then we don't pass state down (it's null).
         // If Root CAN, then we check if ImplicitModel CAN.
         // If ImplicitModel CAN, we accept state.
-        bool needsState = implicitModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
+        bool needsState = implicitModel.NeedsStateTracking && context.NeedsStateTracking;
         StringBuilder sb = context.Source;
 
         if (needsState)
@@ -230,8 +230,6 @@ internal static class CollectionHelperGenerator
                 sb.AppendLine("            state?.AddKnownRef(source, result);");
                 sb.AppendLine();
             }
-
-            // For Stack, we need to take care to preserve the order:
             
             if (isStack)
             {
@@ -240,7 +238,7 @@ internal static class CollectionHelperGenerator
                 sb.AppendLine("            var temp = new global::System.Collections.Generic.List<object?>(source.Count);");
                 sb.AppendLine("            foreach (var item in source)");
                 sb.AppendLine("            {");
-                // Clone item first
+
                 string itemExpr = GetItemCloneExpression(context, member, "item", isSafe, hasClonableAttr, needsState);
                 sb.AppendLine($"                temp.Add({itemExpr});");
                 sb.AppendLine("            }");
@@ -248,6 +246,27 @@ internal static class CollectionHelperGenerator
                 sb.AppendLine("            {");
                 sb.AppendLine($"                result.Push(({member.ElementTypeName})temp[i]!);");
                 sb.AppendLine("            }");
+            }
+            else if (kind == CollectionKind.List)
+            {
+                if (context.TargetFramework >= TargetFramework.Net5)
+                {
+                    sb.AppendLine("            global::System.Runtime.InteropServices.CollectionsMarshal.SetCount(result, source.Count);");
+                    sb.AppendLine("            var span = global::System.Runtime.InteropServices.CollectionsMarshal.AsSpan(result);");
+                    sb.AppendLine("            for (int i = 0; i < source.Count; i++)");
+                    sb.AppendLine("            {");
+                    string itemExpr = GetItemCloneExpression(context, member, "source[i]", isSafe, hasClonableAttr, needsState);
+                    sb.AppendLine($"                span[i] = {itemExpr};");
+                    sb.AppendLine("            }");
+                }
+                else
+                {
+                    sb.AppendLine("            for (int i = 0; i < source.Count; i++)");
+                    sb.AppendLine("            {");
+                    string itemExpr = GetItemCloneExpression(context, member, "source[i]", isSafe, hasClonableAttr, needsState);
+                    sb.AppendLine($"                result.Add({itemExpr});");
+                    sb.AppendLine("            }");
+                }
             }
             else
             {
@@ -285,6 +304,14 @@ internal static class CollectionHelperGenerator
             sb.AppendLine("            if (source == null) return null;");
         }
         
+        if (isSafe && !needsState)
+        {
+            sb.AppendLine("            return source;");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+            return;
+        }
+        
         if (needsState)
         {
             sb.AppendLine("            if (state != null)");
@@ -294,25 +321,20 @@ internal static class CollectionHelperGenerator
             sb.AppendLine("            }");
             sb.AppendLine();
         }
-
-        // Logic: Create a temporary List, clone items into it, then create Immutable collection
-        sb.AppendLine($"            var temp = new global::System.Collections.Generic.List<{member.ElementTypeName}>();");
         
-        // Loop and clone
+        sb.AppendLine($"            var temp = new global::System.Collections.Generic.List<{member.ElementTypeName}>();");
+
         sb.AppendLine("            foreach (var item in source)");
         sb.AppendLine("            {");
         string itemExpr = GetItemCloneExpression(context, member, "item", isSafe, hasClonableAttr, needsState);
         sb.AppendLine($"                temp.Add({itemExpr});");
         sb.AppendLine("            }");
-
-        // Handle Stack reversal
+        
         if (kind == CollectionKind.ImmutableStack)
         {
             sb.AppendLine("            temp.Reverse();"); 
         }
-
-        // Create immutable from temp
-        // Map kind to factory method
+        
         string factoryMethod = kind switch
         {
             CollectionKind.ImmutableList => "global::System.Collections.Immutable.ImmutableList.CreateRange(temp)",
@@ -363,7 +385,6 @@ internal static class CollectionHelperGenerator
             sb.AppendLine();
         }
 
-        // Logic: Create a temporary List, clone items into it, then create ReadOnlyCollection
         sb.AppendLine($"            var temp = new global::System.Collections.Generic.List<{member.ElementTypeName}>(source.Count);");
         
         sb.AppendLine("            foreach (var item in source)");
@@ -393,12 +414,17 @@ internal static class CollectionHelperGenerator
 
         if (hasClonableAttr)
         {
+            if (parentNeedsState)
+            {
+                string extensionClassName = MemberCloneGenerator.GetExtensionClassNameForType(member.ElementTypeName!, context.Model.Namespace);
+                return $"{extensionClassName}.InternalFastDeepClone({itemVar}, state)";
+            }
+            
             return $"{itemVar}?.FastDeepClone()";
         }
 
         if (context.TryGetMemberModel(member.ElementTypeName!, out MemberModel nestedModel))
         {
-            // Use helper for nested collection/dictionary
             string helperName = context.GetOrCreateHelperMethodName(nestedModel);
             bool elementNeedsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(context, nestedModel);
             string actualStateVar = parentNeedsState ? "state" : "null";
@@ -409,29 +435,19 @@ internal static class CollectionHelperGenerator
         {
             if (context.ShouldInline(implicitModel.FullyQualifiedName))
             {
-                bool elementNeedsStateInline = implicitModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
                 string actualStateVarInline = parentNeedsState ? "state" : "null";
-                // For collection items, we assume they are nullable (safe default) unless we know otherwise.
-                // Since we don't have per-item nullability info easily here without updating MemberModel more deeply,
-                // we default to isMemberNullable=true to be safe (keep null checks).
                 return MemberCloneGenerator.GetImplicitCloneExpression(context, implicitModel, itemVar, actualStateVarInline, "                ", true);
             }
-
-            // Use helper for implicit type
+            
             string helperName = context.GetOrCreateHelperMethodName(implicitModel.FullyQualifiedName);
-            bool elementNeedsState = implicitModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
+            bool elementNeedsState = implicitModel.NeedsStateTracking && context.NeedsStateTracking;
             string actualStateVar = parentNeedsState ? "state" : "null";
             return GetHelperMethodCall(context, helperName, itemVar, elementNeedsState, actualStateVar);
         }
 
-        if (context.IsFastClonerAvailable)
-        {
-            // Use runtime FastCloner for elements that require it (e.g. generics, unclonable types)
-            return $"({member.ElementTypeName}?){CloneGeneratorContext.FastClonerDeepCloneCall(itemVar)}";
-        }
-
-        // Fallback to shallow copy (should be caught by diagnostics if it was required)
-        return itemVar;
+        return context.IsFastClonerAvailable ?
+            $"({member.ElementTypeName}?){CloneGeneratorContext.FastClonerDeepCloneCall(itemVar)}" :
+            itemVar;
     }
 
     private static void WriteDictionaryCloneMethod(CloneGeneratorContext context, MemberModel member)
@@ -443,8 +459,7 @@ internal static class CollectionHelperGenerator
         CollectionKind kind = member.CollectionKind;
         bool needsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(context, member);
         bool isValueType = member.IsValueType;
-
-        // Handle special dictionaries
+        
         if (kind.ToString().StartsWith("Immutable"))
         {
             WriteImmutableDictionaryCloneMethod(context, member, typeName, methodName, kind, needsState, isValueType);
@@ -458,18 +473,11 @@ internal static class CollectionHelperGenerator
         }
 
         StringBuilder sb = context.Source;
-
-        // Use pre-computed concrete type and kind
         string concreteType = member.ConcreteTypeFullName ?? typeName;
-
-        // SortedDictionary and ConcurrentDictionary don't take capacity in constructor (or not just capacity)
-        // SortedList DOES take capacity. Standard Dictionary DOES take capacity.
-        bool supportsCapacity = kind == CollectionKind.Dictionary || 
-                                kind == CollectionKind.SortedList ||
-                                kind == CollectionKind.List || 
-                                kind == CollectionKind.None;
-
+        bool supportsCapacity = kind is CollectionKind.Dictionary or CollectionKind.SortedList or CollectionKind.List or CollectionKind.None;
         bool isConcurrent = kind == CollectionKind.ConcurrentDictionary;
+        bool keysAreSafe = member.KeyIsSafe;
+        bool valuesAreSafe = member.ValueIsSafe;
 
         if (needsState)
         {
@@ -483,6 +491,14 @@ internal static class CollectionHelperGenerator
         {
             sb.AppendLine("            if (source == null) return null;");
         }
+        
+        if (keysAreSafe && valuesAreSafe && !needsState && kind == CollectionKind.Dictionary)
+        {
+            sb.AppendLine($"            return new {concreteType}(source);");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+            return;
+        }
 
         if (needsState)
         {
@@ -493,8 +509,7 @@ internal static class CollectionHelperGenerator
             sb.AppendLine("            }");
             sb.AppendLine();
         }
-
-        // Pre-allocate capacity for Dictionary
+        
         if (supportsCapacity)
         {
             sb.AppendLine($"            var result = new {concreteType}(source.Count);");
@@ -513,7 +528,6 @@ internal static class CollectionHelperGenerator
         sb.AppendLine("            foreach (var kvp in source)");
         sb.AppendLine("            {");
         
-        // Determine Key and Value expressions
         (string keyExpr, string valExpr) = GetKeyValueExpressions(context, member, needsState);
 
         if (isConcurrent)
@@ -535,6 +549,9 @@ internal static class CollectionHelperGenerator
     private static void WriteImmutableDictionaryCloneMethod(CloneGeneratorContext context, MemberModel member, string typeName, string methodName, CollectionKind kind, bool needsState, bool isValueType)
     {
         StringBuilder sb = context.Source;
+        bool keysAreSafe = member.KeyIsSafe;
+        bool valuesAreSafe = member.ValueIsSafe;
+        
         if (needsState) context.NeedsStateClass = true;
 
         WriteHelperMethodSignature(context, typeName, methodName, needsState, isValueType);
@@ -543,6 +560,14 @@ internal static class CollectionHelperGenerator
         if (!isValueType)
         {
             sb.AppendLine("            if (source == null) return null;");
+        }
+        
+        if (keysAreSafe && valuesAreSafe && !needsState)
+        {
+            sb.AppendLine("            return source;");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+            return;
         }
         
         if (needsState)
@@ -554,8 +579,7 @@ internal static class CollectionHelperGenerator
             sb.AppendLine("            }");
             sb.AppendLine();
         }
-
-        // Logic: Create a temporary Dictionary, clone items into it, then create Immutable collection
+        
         sb.AppendLine($"            var temp = new global::System.Collections.Generic.Dictionary<{member.KeyTypeName}, {member.ValueTypeName}>(source.Count);");
         
         sb.AppendLine("            foreach (var kvp in source)");
@@ -602,8 +626,7 @@ internal static class CollectionHelperGenerator
             sb.AppendLine("            }");
             sb.AppendLine();
         }
-
-        // Logic: Create a temporary Dictionary, clone items into it, then create ReadOnlyDictionary
+        
         sb.AppendLine($"            var temp = new global::System.Collections.Generic.Dictionary<{member.KeyTypeName}, {member.ValueTypeName}>(source.Count);");
         
         sb.AppendLine("            foreach (var kvp in source)");
@@ -644,15 +667,13 @@ internal static class CollectionHelperGenerator
             {
                 if (context.ShouldInline(implicitKeyModel.FullyQualifiedName))
                 {
-                    bool keyNeedsState = implicitKeyModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
                     string actualStateVar = needsState ? "state" : "null";
-                    // Dictionary keys are generally not null, but safe default is true
                     keyExpr = MemberCloneGenerator.GetImplicitCloneExpression(context, implicitKeyModel, "kvp.Key", actualStateVar, "                ", true);
                 }
                 else
                 {
                     string helperName = context.GetOrCreateHelperMethodName(implicitKeyModel.FullyQualifiedName);
-                    bool keyNeedsState = implicitKeyModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
+                    bool keyNeedsState = implicitKeyModel.NeedsStateTracking && context.NeedsStateTracking;
                     string actualStateVar = needsState ? "state" : "null";
                     keyExpr = GetHelperMethodCall(context, helperName, "kvp.Key", keyNeedsState, actualStateVar);
                 }
@@ -681,15 +702,13 @@ internal static class CollectionHelperGenerator
             {
                 if (context.ShouldInline(implicitValModel.FullyQualifiedName))
                 {
-                    bool valNeedsState = implicitValModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
                     string actualStateVar = needsState ? "state" : "null";
-                    // Dictionary values might be null
                     valExpr = MemberCloneGenerator.GetImplicitCloneExpression(context, implicitValModel, "kvp.Value", actualStateVar, "                ", true);
                 }
                 else
                 {
                     string helperName = context.GetOrCreateHelperMethodName(implicitValModel.FullyQualifiedName);
-                    bool valNeedsState = implicitValModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
+                    bool valNeedsState = implicitValModel.NeedsStateTracking && context.NeedsStateTracking;
                     string actualStateVar = needsState ? "state" : "null";
                     valExpr = GetHelperMethodCall(context, helperName, "kvp.Value", valNeedsState, actualStateVar);
                 }
@@ -718,8 +737,7 @@ internal static class CollectionHelperGenerator
         {
             context.NeedsStateClass = true;
         }
-
-        // Arrays are always reference types
+        
         WriteHelperMethodSignature(context, typeName, methodName, needsState, false);
         sb.AppendLine("        {");
         sb.AppendLine("            if (source == null) return null;");
@@ -734,9 +752,6 @@ internal static class CollectionHelperGenerator
             sb.AppendLine();
         }
 
-        // Create array - handle jagged arrays properly
-        // For jagged arrays like int[][], the element type is int[] 
-        // We need to create: new int[source.Length][]  (not new int[][source.Length])
         string arrayCreationExpr = GetArrayCreationExpression(member.ElementTypeName, "source.Length");
         sb.AppendLine($"            var result = {arrayCreationExpr};");
 
@@ -746,57 +761,55 @@ internal static class CollectionHelperGenerator
             sb.AppendLine();
         }
 
-        // Arrays use indexing, not Add()
-        sb.AppendLine("            for (int i = 0; i < source.Length; i++)");
-        sb.AppendLine("            {");
-
-        string itemExpr;
-        
         if (isSafe)
         {
-            itemExpr = "source[i]";
-        }
-        else if (hasClonableAttr)
-        {
-            itemExpr = "source[i]?.FastDeepClone()";
-        }
-        else if (context.TryGetMemberModel(member.ElementTypeName!, out MemberModel nestedModel))
-        {
-            string helperName = context.GetOrCreateHelperMethodName(nestedModel);
-            bool elementNeedsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(context, nestedModel);
-            string actualStateVar = needsState ? "state" : "null";
-            itemExpr = GetHelperMethodCall(context, helperName, "source[i]", elementNeedsState, actualStateVar);
-        }
-        else if (context.TryGetImplicitTypeModel(member.ElementTypeName!, out TypeModel implicitModel))
-        {
-            if (context.ShouldInline(implicitModel.FullyQualifiedName))
-            {
-                bool elementNeedsState = implicitModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
-                string actualStateVar = needsState ? "state" : "null";
-                // Array elements might be null
-                itemExpr = MemberCloneGenerator.GetImplicitCloneExpression(context, implicitModel, "source[i]", actualStateVar, "                ", true);
-            }
-            else
-            {
-                string helperName = context.GetOrCreateHelperMethodName(implicitModel.FullyQualifiedName);
-                bool elementNeedsState = implicitModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
-                string actualStateVar = needsState ? "state" : "null";
-                itemExpr = GetHelperMethodCall(context, helperName, "source[i]", elementNeedsState, actualStateVar);
-            }
-        }
-        else if (context.IsFastClonerAvailable)
-        {
-            // Use runtime FastCloner for elements that require it
-            itemExpr = $"({member.ElementTypeName}){CloneGeneratorContext.FastClonerDeepCloneCall("source[i]")}";
+            sb.AppendLine("            global::System.Array.Copy(source, result, source.Length);");
         }
         else
         {
-            // Fallback to shallow copy
-            itemExpr = "source[i]";
-        }
+            sb.AppendLine("            for (int i = 0; i < source.Length; i++)");
+            sb.AppendLine("            {");
 
-        sb.AppendLine($"                result[i] = {itemExpr};");
-        sb.AppendLine("            }");
+            string itemExpr;
+            
+            if (hasClonableAttr)
+            {
+                itemExpr = "source[i]?.FastDeepClone()";
+            }
+            else if (context.TryGetMemberModel(member.ElementTypeName!, out MemberModel nestedModel))
+            {
+                string helperName = context.GetOrCreateHelperMethodName(nestedModel);
+                bool elementNeedsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(context, nestedModel);
+                string actualStateVar = needsState ? "state" : "null";
+                itemExpr = GetHelperMethodCall(context, helperName, "source[i]", elementNeedsState, actualStateVar);
+            }
+            else if (context.TryGetImplicitTypeModel(member.ElementTypeName!, out TypeModel implicitModel))
+            {
+                if (context.ShouldInline(implicitModel.FullyQualifiedName))
+                {
+                    string actualStateVar = needsState ? "state" : "null";
+                    itemExpr = MemberCloneGenerator.GetImplicitCloneExpression(context, implicitModel, "source[i]", actualStateVar, "                ", true);
+                }
+                else
+                {
+                    string helperName = context.GetOrCreateHelperMethodName(implicitModel.FullyQualifiedName);
+                    bool elementNeedsState = implicitModel.NeedsStateTracking && context.NeedsStateTracking;
+                    string actualStateVar = needsState ? "state" : "null";
+                    itemExpr = GetHelperMethodCall(context, helperName, "source[i]", elementNeedsState, actualStateVar);
+                }
+            }
+            else if (context.IsFastClonerAvailable)
+            {
+                itemExpr = $"({member.ElementTypeName}){CloneGeneratorContext.FastClonerDeepCloneCall("source[i]")}";
+            }
+            else
+            {
+                itemExpr = "source[i]";
+            }
+
+            sb.AppendLine($"                result[i] = {itemExpr};");
+            sb.AppendLine("            }");
+        }
         sb.AppendLine();
         sb.AppendLine("            return result;");
         sb.AppendLine("        }");
@@ -820,7 +833,6 @@ internal static class CollectionHelperGenerator
             context.NeedsStateClass = true;
         }
 
-        // Arrays are always reference types
         WriteHelperMethodSignature(context, typeName, methodName, needsState, false);
         sb.AppendLine("        {");
         sb.AppendLine("            if (source == null) return null;");
@@ -834,16 +846,13 @@ internal static class CollectionHelperGenerator
             sb.AppendLine("            }");
             sb.AppendLine();
         }
-
-        // Generate dimension length variables: len0, len1, len2, ...
+        
         for (int d = 0; d < rank; d++)
         {
             sb.AppendLine($"            int len{d} = source.GetLength({d});");
         }
         sb.AppendLine();
-
-        // Create the result array with the same dimensions
-        // e.g., new T[len0, len1, len2]
+        
         string dimList = string.Join(", ", Enumerable.Range(0, rank).Select(d => $"len{d}"));
         sb.AppendLine($"            var result = new {member.ElementTypeName}[{dimList}];");
 
@@ -852,21 +861,13 @@ internal static class CollectionHelperGenerator
             sb.AppendLine("            state?.AddKnownRef(source, result);");
         }
         sb.AppendLine();
-
-        // Optimization: if element type is safe, use Array.Copy
+        
         if (isSafe)
         {
-            sb.AppendLine("            // Element type is safe, use fast Array.Copy");
             sb.AppendLine("            global::System.Array.Copy(source, result, source.Length);");
         }
         else
         {
-            // Generate nested loops for each dimension
-            // for (int i0 = 0; i0 < len0; i0++)
-            //     for (int i1 = 0; i1 < len1; i1++)
-            //         ...
-            //             result[i0, i1, ...] = Clone(source[i0, i1, ...]);
-
             for (int d = 0; d < rank; d++)
             {
                 string indent = new string(' ', 12 + d * 4);
@@ -875,8 +876,7 @@ internal static class CollectionHelperGenerator
 
             string innerIndent = new string(' ', 12 + rank * 4);
             string indexList = string.Join(", ", Enumerable.Range(0, rank).Select(d => $"i{d}"));
-
-            // Determine how to clone each element
+            
             string itemExpr;
             if (hasClonableAttr)
             {
@@ -893,27 +893,23 @@ internal static class CollectionHelperGenerator
             {
                 if (context.ShouldInline(implicitModel.FullyQualifiedName))
                 {
-                    bool elementNeedsState = implicitModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
                     string actualStateVar = needsState ? "state" : "null";
-                    // Multi-dim array elements might be null
                     itemExpr = MemberCloneGenerator.GetImplicitCloneExpression(context, implicitModel, $"source[{indexList}]", actualStateVar, "                ", true);
                 }
                 else
                 {
                     string helperName = context.GetOrCreateHelperMethodName(implicitModel.FullyQualifiedName);
-                    bool elementNeedsState = implicitModel.CanHaveCircularReferences && context.CanHaveCircularReferences;
+                    bool elementNeedsState = implicitModel.NeedsStateTracking && context.NeedsStateTracking;
                     string actualStateVar = needsState ? "state" : "null";
                     itemExpr = GetHelperMethodCall(context, helperName, $"source[{indexList}]", elementNeedsState, actualStateVar);
                 }
             }
             else if (context.IsFastClonerAvailable)
             {
-                // Use runtime FastCloner for elements that require it
                 itemExpr = $"({member.ElementTypeName}){CloneGeneratorContext.FastClonerDeepCloneCall($"source[{indexList}]")}";
             }
             else
             {
-                // Fallback to shallow copy
                 itemExpr = $"source[{indexList}]";
             }
 
@@ -925,37 +921,19 @@ internal static class CollectionHelperGenerator
         sb.AppendLine("        }");
         sb.AppendLine();
     }
-
-    /// <summary>
-    /// Creates the correct array instantiation expression for both regular and jagged arrays.
-    /// For regular arrays like int[], creates: new int[size]
-    /// For jagged arrays like int[][], creates: new int[size][] (not new int[][size] which is invalid)
-    /// </summary>
+    
     private static string GetArrayCreationExpression(string elementTypeName, string sizeExpression)
     {
-        // Check if the element type is itself an array (jagged array scenario)
-        // e.g., for int[][], elementTypeName is "int[]"
         int bracketIndex = elementTypeName.IndexOf('[');
         
         if (bracketIndex >= 0)
         {
-            // Jagged array: element type contains brackets
-            // Split into base type and trailing brackets
-            // int[] → baseType="int", trailingBrackets="[]"
-            // int[][] → baseType="int", trailingBrackets="[][]"
             string baseType = elementTypeName.Substring(0, bracketIndex);
             string trailingBrackets = elementTypeName.Substring(bracketIndex);
-            
-            // Create: new baseType[size]trailingBrackets
-            // e.g., new int[source.Length][] for int[][] array
             return $"new {baseType}[{sizeExpression}]{trailingBrackets}";
         }
-        else
-        {
-            // Regular array: element type has no brackets
-            // Create: new elementTypeName[size]
-            return $"new {elementTypeName}[{sizeExpression}]";
-        }
+        
+        return $"new {elementTypeName}[{sizeExpression}]";
     }
 
     private static void WriteHelperMethodSignature(CloneGeneratorContext context, string typeName, string methodName, bool needsState, bool isValueType)
@@ -967,12 +945,11 @@ internal static class CollectionHelperGenerator
         string typeSuffix = "?";
         if (isValueType)
         {
-            typeSuffix = ""; // Value types are strict. If nullable, typeName has it.
+            typeSuffix = "";
         }
         else
         {
-            // Reference types.
-            if (typeName.EndsWith("?")) typeSuffix = ""; // Already has it
+            if (typeName.EndsWith("?")) typeSuffix = "";
         }
 
         string staticMod = context.UseStaticMethods ? "static " : "";
@@ -1001,10 +978,7 @@ internal static class CollectionHelperGenerator
 
     private static string GetTypeParametersString(TypeModel model)
     {
-        if (model.TypeParameters.Count == 0)
-            return string.Empty;
-
-        return $"<{string.Join(", ", model.TypeParameters)}>";
+        return model.TypeParameters.Count == 0 ? string.Empty : $"<{string.Join(", ", model.TypeParameters)}>";
     }
 
     private static string GetTypeConstraintsString(TypeModel model)

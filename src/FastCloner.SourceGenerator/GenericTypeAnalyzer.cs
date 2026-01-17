@@ -10,7 +10,8 @@ internal static class GenericTypeAnalyzer
         INamedTypeSymbol targetSymbol,
         ITypeSymbol typeArg,
         Compilation compilation,
-        bool nullability)
+        bool nullability,
+        TargetFramework targetFramework)
     {
         if (typeArg.TypeKind == TypeKind.TypeParameter)
             return null;
@@ -41,7 +42,7 @@ internal static class GenericTypeAnalyzer
                 return;
 
             // Check if this type is a candidate for implicit cloning
-            if (ImplicitTypeAnalyzer.TryAnalyze(t, compilation, nullability, implicitCache, processingStack, out TypeModel? implicitModel))
+            if (ImplicitTypeAnalyzer.TryAnalyze(t, compilation, nullability, targetFramework, implicitCache, processingStack, out TypeModel? implicitModel))
             {
                 if (implicitModel != null && !implicitTypes.ContainsKey(implicitModel.FullyQualifiedName))
                 {

@@ -3,9 +3,6 @@ using System.Text;
 
 namespace FastCloner.SourceGenerator;
 
-/// <summary>
-/// Maintains state during the code generation process.
-/// </summary>
 internal sealed class CloneGeneratorContext
 {
     public TypeModel Model { get; }
@@ -24,15 +21,29 @@ internal sealed class CloneGeneratorContext
     public bool UseStaticMethods { get; set; } = true;
     
     public bool CanHaveCircularReferences { get; set; }
+    public bool NeedsStateTracking { get; set; }
     public bool IsFastClonerAvailable { get; }
+    public TargetFramework TargetFramework { get; }
     
-    private readonly Dictionary<string, bool> _circularReferenceOverrides = new();
+    private readonly Dictionary<string, bool> _circularReferenceOverrides = new Dictionary<string, bool>();
 
     public CloneGeneratorContext(TypeModel model, Dictionary<string, string>? sharedMethodNames = null, HashSet<string>? sharedNeededHelpers = null)
     {
         Model = model;
         CanHaveCircularReferences = model.CanHaveCircularReferences;
         IsFastClonerAvailable = model.IsFastClonerAvailable;
+        TargetFramework = model.TargetFramework;
+        
+        bool anyMemberNeedsIdentity = false;
+        foreach (MemberModel m in model.Members)
+        {
+            if (m.PreserveIdentity == true)
+            {
+                anyMemberNeedsIdentity = true;
+                break;
+            }
+        }
+        NeedsStateTracking = model.NeedsStateTracking || anyMemberNeedsIdentity;
         
         _typeNameToMethodName = sharedMethodNames ?? new Dictionary<string, string>();
         _neededHelperMethods = sharedNeededHelpers ?? [];
@@ -91,26 +102,19 @@ internal sealed class CloneGeneratorContext
             _implicitTypeModels[model.FullyQualifiedName] = model;
         }
     }
-
-    /// <summary>
-    /// Registers a method name for a type without marking it for generation (assumes it exists elsewhere).
-    /// </summary>
+    
     public void RegisterExternalMethod(string typeFullName, string methodName)
     {
         _typeNameToMethodName[typeFullName] = methodName;
     }
-
-    /// <summary>
-    /// Gets or creates a helper method name for a type (implicit), tracking it for generation.
-    /// </summary>
+    
     public string GetOrCreateHelperMethodName(string typeFullName)
     {
         if (_typeNameToMethodName.TryGetValue(typeFullName, out string? existingMethod))
         {
             return existingMethod;
         }
-
-        // Generate a unique helper method name based on the type
+        
         string methodName = $"FastClonerSgClone{GetCleanTypeName(typeFullName)}";
         _typeNameToMethodName[typeFullName] = methodName;
 
@@ -122,9 +126,6 @@ internal sealed class CloneGeneratorContext
         return methodName;
     }
     
-    /// <summary>
-    /// Gets or creates a helper method name for a member, tracking it for generation.
-    /// </summary>
     public string GetOrCreateHelperMethodName(MemberModel member)
     {
         string typeKey = member.TypeFullName;
@@ -133,8 +134,7 @@ internal sealed class CloneGeneratorContext
         {
             return existingMethod;
         }
-
-        // Generate a unique helper method name based on the type
+        
         string methodName = $"FastClonerSgClone{GetCleanTypeName(member.TypeFullName)}";
         _typeNameToMethodName[typeKey] = methodName;
 
@@ -142,8 +142,7 @@ internal sealed class CloneGeneratorContext
         {
             _pendingHelperMethods.Enqueue(typeKey);
         }
-
-        // Store the member model for later use when generating helper methods
+        
         if (!_typeNameToMemberModel.ContainsKey(typeKey))
         {
             _typeNameToMemberModel[typeKey] = member;
@@ -151,10 +150,7 @@ internal sealed class CloneGeneratorContext
 
         return methodName;
     }
-
-    /// <summary>
-    /// Cleans a type name string for use in method names by replacing special characters.
-    /// </summary>
+    
     private static string GetCleanTypeName(string typeName)
     {
         return typeName
@@ -169,10 +165,7 @@ internal sealed class CloneGeneratorContext
             .Replace('?', '_')
             .Replace(':', '_');
     }
-
-    /// <summary>
-    /// Registers a derived type helper for generation.
-    /// </summary>
+    
     public void RegisterDerivedTypeHelper(TypeModel derivedType, string methodName)
     {
         if (!_derivedTypeHelpers.ContainsKey(derivedType.FullyQualifiedName))
@@ -181,10 +174,7 @@ internal sealed class CloneGeneratorContext
             _typeNameToMethodName[derivedType.FullyQualifiedName] = methodName;
         }
     }
-
-    /// <summary>
-    /// Gets all derived type helpers that need to be generated.
-    /// </summary>
+    
     public IEnumerable<(TypeModel Model, string MethodName)> GetDerivedTypeHelpers()
     {
         foreach (KeyValuePair<string, TypeModel> kvp in _derivedTypeHelpers)
@@ -192,10 +182,7 @@ internal sealed class CloneGeneratorContext
             yield return (kvp.Value, _typeNameToMethodName[kvp.Key]);
         }
     }
-
-    /// <summary>
-    /// Gets whether there are any derived type helpers to generate.
-    /// </summary>
+    
     public bool HasDerivedTypeHelpers => _derivedTypeHelpers.Count > 0;
 
     public void IncrementHelperUsage(string typeFullName)
@@ -217,22 +204,14 @@ internal sealed class CloneGeneratorContext
 
     public bool ShouldInline(string typeFullName)
     {
-        // Only inline if used exactly once
         return GetHelperUsageCount(typeFullName) == 1;
     }
 
     private int _variableCounter = 0;
     public int GetNextVariableId() => System.Threading.Interlocked.Increment(ref _variableCounter);
     
-    /// <summary>
-    /// Gets the fully-qualified call to FastCloner.DeepClone for use in generated code.
-    /// Uses global:: prefix to avoid namespace/class ambiguity (both are named "FastCloner").
-    /// </summary>
     public static string FastClonerDeepCloneCall(string expression) => $"global::FastCloner.FastCloner.DeepClone({expression})";
     
-    /// <summary>
-    /// Gets the NotNullIfNotNull attribute string for generated methods, or empty if unavailable.
-    /// </summary>
     public static string NotNullIfNotNullAttr(bool isAvailable, string paramName = "source") 
         => isAvailable 
             ? $"[return: global::System.Diagnostics.CodeAnalysis.NotNullIfNotNull(\"{paramName}\")]" 

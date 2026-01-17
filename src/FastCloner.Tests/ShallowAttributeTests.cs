@@ -90,7 +90,7 @@ public class ShallowAttributeTests
     /// AOT parent class referenced by children.
     /// </summary>
     [FastClonerClonable]
-    public partial class AotParentObject
+    public class AotParentObject
     {
         public string Name { get; set; } = string.Empty;
         public int Id { get; set; }
@@ -100,7 +100,7 @@ public class ShallowAttributeTests
     /// AOT child class with shallow-cloned parent reference.
     /// </summary>
     [FastClonerClonable]
-    public partial class AotChildWithShallowParent
+    public class AotChildWithShallowParent
     {
         [FastClonerShallow]
         public AotParentObject? Parent { get; set; }
@@ -113,7 +113,7 @@ public class ShallowAttributeTests
     /// AOT class with mix of shallow and deep cloned members.
     /// </summary>
     [FastClonerClonable]
-    public partial class AotMixedCloneClass
+    public class AotMixedCloneClass
     {
         [FastClonerShallow]
         public AotSharedState? SharedData { get; set; }
@@ -124,14 +124,14 @@ public class ShallowAttributeTests
     }
 
     [FastClonerClonable]
-    public partial class AotSharedState
+    public class AotSharedState
     {
         public string ConfigValue { get; set; } = string.Empty;
         public int Version { get; set; }
     }
 
     [FastClonerClonable]
-    public partial class AotOwnedData
+    public class AotOwnedData
     {
         public string Value { get; set; } = string.Empty;
         public int Count { get; set; }
@@ -141,7 +141,7 @@ public class ShallowAttributeTests
     /// AOT class with shallow-cloned field.
     /// </summary>
     [FastClonerClonable]
-    public partial class AotClassWithShallowField
+    public class AotClassWithShallowField
     {
         [FastClonerShallow]
         public AotSharedState? SharedField;
@@ -153,7 +153,7 @@ public class ShallowAttributeTests
     /// AOT class with shallow-cloned collection.
     /// </summary>
     [FastClonerClonable]
-    public partial class AotClassWithShallowCollection
+    public class AotClassWithShallowCollection
     {
         [FastClonerShallow]
         public List<int>? SharedList { get; set; }
@@ -974,26 +974,26 @@ public class ShallowAttributeTests
     #region Additional AOT Test Classes
 
     [FastClonerClonable]
-    public partial class AotDeepNestedObject
+    public class AotDeepNestedObject
     {
         public AotLevel1Object? Level1 { get; set; }
     }
 
     [FastClonerClonable]
-    public partial class AotLevel1Object
+    public class AotLevel1Object
     {
         public string Value { get; set; } = string.Empty;
         public AotLevel2Object? Level2 { get; set; }
     }
 
     [FastClonerClonable]
-    public partial class AotLevel2Object
+    public class AotLevel2Object
     {
         public string Value { get; set; } = string.Empty;
     }
 
     [FastClonerClonable]
-    public partial class AotClassWithShallowNestedObject
+    public class AotClassWithShallowNestedObject
     {
         [FastClonerShallow]
         public AotDeepNestedObject? ShallowNested { get; set; }
@@ -1002,7 +1002,7 @@ public class ShallowAttributeTests
     }
 
     [FastClonerClonable]
-    public partial class AotBaseClassWithShallowMember
+    public class AotBaseClassWithShallowMember
     {
         [FastClonerShallow]
         public AotSharedState? SharedData { get; set; }
@@ -1011,13 +1011,13 @@ public class ShallowAttributeTests
     }
 
     [FastClonerClonable]
-    public partial class AotDerivedClassWithShallowMember : AotBaseClassWithShallowMember
+    public class AotDerivedClassWithShallowMember : AotBaseClassWithShallowMember
     {
         public string DerivedValue { get; set; } = string.Empty;
     }
 
     [FastClonerClonable]
-    public partial class AotClassWithMultipleShallowMembers
+    public class AotClassWithMultipleShallowMembers
     {
         [FastClonerShallow]
         public AotSharedState? SharedState1 { get; set; }
@@ -1033,7 +1033,7 @@ public class ShallowAttributeTests
     /// The semantics should be: shallow clone the items (just copy references, don't deep clone).
     /// </summary>
     [FastClonerClonable]
-    public partial class AotClassWithShallowGetterOnlyCollection
+    public class AotClassWithShallowGetterOnlyCollection
     {
         [FastClonerShallow]
         public System.Collections.ObjectModel.ObservableCollection<AotOwnedData> Items { get; } = [];
@@ -1046,7 +1046,7 @@ public class ShallowAttributeTests
     /// The semantics should be: deep clone the items (the default behavior).
     /// </summary>
     [FastClonerClonable]
-    public partial class AotClassWithDeepGetterOnlyCollection
+    public class AotClassWithDeepGetterOnlyCollection
     {
         public System.Collections.ObjectModel.ObservableCollection<AotOwnedData> Items { get; } = [];
         

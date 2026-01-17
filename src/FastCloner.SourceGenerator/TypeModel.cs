@@ -17,6 +17,7 @@ internal sealed record TypeModel(
     bool IsRecord,
     bool HasClonableBaseClass,
     bool CanHaveCircularReferences,
+    bool NeedsStateTracking, // True if state needed for cycles OR identity preservation
     bool IsFastClonerAvailable,
     EquatableArray<MemberModel> Members,
     EquatableArray<string> TypeParameters,
@@ -26,7 +27,9 @@ internal sealed record TypeModel(
     EquatableArray<TypeModel> DerivedTypes, // Concrete derived types for abstract class dispatch
     bool NullabilityEnabled,
     bool TrustNullability, // Whether to trust nullability annotations and skip null checks
+    bool? PreserveIdentity = null, // null=default (off), true=preserve identity in subgraph, false=explicitly disabled
     bool IsRefLikeType = false, // Whether the type is a ref struct (cannot be boxed/used as generic)
     bool HasParameterlessConstructor = true, // Whether the type has a public parameterless constructor (defaults to true for safety)
     bool CodeAnalysisAvailable = false, // Whether System.Diagnostics.CodeAnalysis attributes are available
+    TargetFramework TargetFramework = TargetFramework.NetStandard20, // Detected target framework for TFM-specific optimizations
     EquatableArray<string> CircularAnalysisLog = default) : IEquatable<TypeModel>;

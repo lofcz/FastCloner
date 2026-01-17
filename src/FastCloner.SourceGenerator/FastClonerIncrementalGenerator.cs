@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -19,12 +19,23 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
         // 3. Do NOT combine with CompilationProvider - it breaks caching
         // 4. Use EquatableArray for collections, not ImmutableArray
         
-        IncrementalValuesProvider<Result<TypeModel>> pipeline = context.SyntaxProvider.ForAttributeWithMetadataName<Result<TypeModel>>(
-            fullyQualifiedMetadataName: "FastCloner.SourceGenerator.Shared.FastClonerClonableAttribute",
-            predicate: static (node, cancellationToken) => 
-                node is ClassDeclarationSyntax || node is StructDeclarationSyntax || node is RecordDeclarationSyntax,
-            transform: static (ctx, cancellationToken) =>
+        IncrementalValueProvider<TargetFramework> targetFrameworkProvider = context.AnalyzerConfigOptionsProvider
+            .Select(static (provider, _) => TargetFrameworkDetector.Detect(provider));
+        
+        IncrementalValuesProvider<(GeneratorAttributeSyntaxContext Ctx, TargetFramework Tfm)> attributeProvider = 
+            context.SyntaxProvider.ForAttributeWithMetadataName(
+                fullyQualifiedMetadataName: "FastCloner.SourceGenerator.Shared.FastClonerClonableAttribute",
+                predicate: static (node, cancellationToken) => 
+                    node is ClassDeclarationSyntax or StructDeclarationSyntax or RecordDeclarationSyntax,
+                transform: static (ctx, cancellationToken) => ctx)
+            .Combine(targetFrameworkProvider)
+            .Select(static (pair, _) => (pair.Left, pair.Right));
+        
+        IncrementalValuesProvider<Result<TypeModel>> pipeline = attributeProvider
+            .Select(static (pair, cancellationToken) =>
             {
+                (GeneratorAttributeSyntaxContext ctx, TargetFramework tfm) = pair;
+                
                 ISymbol? symbol = ctx.SemanticModel.GetDeclaredSymbol(ctx.TargetNode);
                 if (symbol is INamedTypeSymbol namedTypeSymbol)
                 {
@@ -33,7 +44,7 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
                     
                     Compilation compilation = ctx.SemanticModel.Compilation;
                     
-                    return TypeModelFactory.TryCreate(namedTypeSymbol, nullabilityEnabled, compilation, out TypeModel? model, out Diagnostic? error) ? 
+                    return TypeModelFactory.TryCreate(namedTypeSymbol, nullabilityEnabled, compilation, tfm, out TypeModel? model, out Diagnostic? error) ? 
                         Result<TypeModel>.Success(model!) : 
                         Result<TypeModel>.Error(error!);
                 }
@@ -53,13 +64,17 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
         // Secondary pipeline: Collect usages of generic types to optimize dispatch
         IncrementalValuesProvider<EquatableArray<GenericUsage>> explicitUsages = context.SyntaxProvider.CreateSyntaxProvider(
             predicate: GenericUsageCollector.IsCandidate,
-            transform: GenericUsageCollector.Collect)
+            transform: static (ctx, _) => ctx)
+            .Combine(targetFrameworkProvider)
+            .Select(static (pair, cancellationToken) => GenericUsageCollector.Collect(pair.Left, pair.Right, cancellationToken))
             .Where(x => x.Count > 0);
 
-        IncrementalValuesProvider<EquatableArray<GenericUsage>> includedUsages = context.SyntaxProvider.ForAttributeWithMetadataName<EquatableArray<GenericUsage>>(
+        IncrementalValuesProvider<EquatableArray<GenericUsage>> includedUsages = context.SyntaxProvider.ForAttributeWithMetadataName(
             fullyQualifiedMetadataName: "FastCloner.SourceGenerator.Shared.FastClonerIncludeAttribute",
             predicate: static (node, _) => node is ClassDeclarationSyntax || node is StructDeclarationSyntax,
-            transform: IncludeAttributeCollector.Collect)
+            transform: static (ctx, _) => ctx)
+            .Combine(targetFrameworkProvider)
+            .Select(static (pair, cancellationToken) => IncludeAttributeCollector.Collect(pair.Left, pair.Right, cancellationToken))
             .Where(x => x.Count > 0);
 
         IncrementalValueProvider<EquatableArray<GenericUsage>> usagePipeline = explicitUsages.Collect().Combine(includedUsages.Collect())
@@ -97,7 +112,7 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
                         // but ideally the user should install FastCloner or fix the type.
                         if (!model.IsFastClonerAvailable)
                         {
-                            bool hasInitOnlyWithCycles = model.CanHaveCircularReferences && model.Members.Any(m => m.IsInitOnly);
+                            bool hasInitOnlyWithCycles = model.NeedsStateTracking && model.Members.Any(m => m.IsInitOnly);
                             bool structWithReadonlyRefs = model.IsStruct && model.Members.Any(m => m is { IsValueType: false, IsReadOnly: true });
                             
                             if (hasInitOnlyWithCycles)
@@ -167,10 +182,16 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
         });
 
         // FastClonerContext Pipeline
-        IncrementalValuesProvider<Result<ContextModel>> contextPipeline = context.SyntaxProvider.ForAttributeWithMetadataName<Result<ContextModel>>(
-            fullyQualifiedMetadataName: "FastCloner.SourceGenerator.Shared.FastClonerRegisterAttribute",
-            predicate: static (node, _) => node is ClassDeclarationSyntax,
-            transform: ContextCollector.Collect);
+        IncrementalValuesProvider<(GeneratorAttributeSyntaxContext Ctx, TargetFramework Tfm)> contextAttributeProvider = 
+            context.SyntaxProvider.ForAttributeWithMetadataName(
+                fullyQualifiedMetadataName: "FastCloner.SourceGenerator.Shared.FastClonerRegisterAttribute",
+                predicate: static (node, _) => node is ClassDeclarationSyntax,
+                transform: static (ctx, _) => ctx)
+            .Combine(targetFrameworkProvider)
+            .Select(static (pair, _) => (pair.Left, pair.Right));
+        
+        IncrementalValuesProvider<Result<ContextModel>> contextPipeline = contextAttributeProvider
+            .Select(static (pair, cancellationToken) => ContextCollector.Collect(pair.Ctx, pair.Tfm, cancellationToken));
 
         // Deduplicate pipeline results
         IncrementalValuesProvider<Result<ContextModel>> dedupedContextPipeline = contextPipeline.Collect().SelectMany((results, _) => 

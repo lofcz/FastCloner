@@ -1,2 +1,5 @@
 <Project>
+    <ItemGroup>
+        <CompilerVisibleProperty Include="TargetFramework" />
+    </ItemGroup>
 </Project>

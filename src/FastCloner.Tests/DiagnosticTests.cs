@@ -221,7 +221,7 @@ public class GenericClass<T>
 
     // Test for List<T> where T is generic - should use FastCloner
     [FastClonerClonable]
-    public partial class GenericListClass<T>
+    public class GenericListClass<T>
     {
         public List<T> Items { get; set; }
     }

@@ -11,24 +11,19 @@ internal static class TypeModelFactory
         INamedTypeSymbol symbol,
         bool nullabilityEnabled,
         Compilation compilation,
+        TargetFramework targetFramework,
         out TypeModel? model,
         out Diagnostic? error)
     {
         model = null;
         error = null;
-
-        // Check if FastCloner library is available
-        bool isFastClonerAvailable = compilation.GetTypeByMetadataName("FastCloner.FastCloner") != null;
         
-        // Check if type has SimulateNoRuntime attribute (for testing)
+        bool isFastClonerAvailable = compilation.GetTypeByMetadataName("FastCloner.FastCloner") != null;
         bool hasSimulateNoRuntime = symbol.GetAttributes()
             .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerSimulateNoRuntimeAttribute");
-        
-        // Check if type has FastClonerTrustNullability attribute
         bool trustNullability = symbol.GetAttributes()
             .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerTrustNullabilityAttribute");
-        
-        // Check if System.Diagnostics.CodeAnalysis attributes are available (for nullability flow analysis)
+        bool? preserveIdentity = GetPreserveIdentityFromType(symbol);
         bool codeAnalysisAvailable = compilation.GetTypeByMetadataName("System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute") != null;
         
         if (hasSimulateNoRuntime)
@@ -37,13 +32,9 @@ internal static class TypeModelFactory
         }
 
         List<MemberAnalysis> memberAnalyses = MemberCollector.GetMembers(symbol, compilation, nullabilityEnabled);
-        
-        // Analyze implicit types recursively
         Dictionary<string, TypeModel> relatedTypes = new Dictionary<string, TypeModel>(); // Use FQN as key to avoid dupes
         Dictionary<ITypeSymbol, TypeModel?> implicitCache = new Dictionary<ITypeSymbol, TypeModel?>(SymbolEqualityComparer.Default);
         HashSet<ITypeSymbol> processingStack = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
-        
-        // Refine members based on implicit analysis
         List<MemberModel> finalMembers = [];
         Dictionary<string, MemberModel> nestedTypes = new Dictionary<string, MemberModel>();
         
@@ -52,12 +43,10 @@ internal static class TypeModelFactory
             MemberModel memberModel = analysis.Model;
             ITypeSymbol memberType = analysis.Type;
             
-            // If member is 'Other' or 'Implicit' candidate, try to analyze if it's implicitly clonable
-            if (memberModel.TypeKind == MemberTypeKind.Other || memberModel.TypeKind == MemberTypeKind.Implicit)
+            if (memberModel.TypeKind is MemberTypeKind.Other or MemberTypeKind.Implicit)
             {
-                if (ImplicitTypeAnalyzer.TryAnalyze(memberType, compilation, nullabilityEnabled, implicitCache, processingStack, out TypeModel? implicitModel))
+                if (ImplicitTypeAnalyzer.TryAnalyze(memberType, compilation, nullabilityEnabled, targetFramework, implicitCache, processingStack, out TypeModel? implicitModel))
                 {
-                    // It is implicit! Update member kind (ensure it is set to Implicit)
                     memberModel = memberModel with 
                     { 
                         TypeKind = MemberTypeKind.Implicit, 
@@ -67,13 +56,13 @@ internal static class TypeModelFactory
                     if (implicitModel != null && !relatedTypes.ContainsKey(implicitModel.FullyQualifiedName))
                     {
                         relatedTypes[implicitModel.FullyQualifiedName] = implicitModel;
-                        // Add recursive related types
+                        
                         foreach (TypeModel? rel in implicitModel.RelatedTypes)
                         {
                             if (!relatedTypes.ContainsKey(rel.FullyQualifiedName))
                                 relatedTypes[rel.FullyQualifiedName] = rel;
                         }
-                        // Add recursive nested types
+                        
                         foreach (MemberModel nested in implicitModel.NestedTypes)
                         {
                             if (!nestedTypes.ContainsKey(nested.TypeFullName))
@@ -83,7 +72,6 @@ internal static class TypeModelFactory
                 }
                 else
                 {
-                    // If implicit analysis failed, revert to Other (fallback to runtime cloning)
                     if (memberModel.TypeKind == MemberTypeKind.Implicit)
                     {
                         memberModel = memberModel with 
@@ -97,12 +85,9 @@ internal static class TypeModelFactory
             
             if (memberModel.TypeKind != MemberTypeKind.Implicit)
             {
-                // Analyze nested types for collections/dictionaries (only if not handled as implicit)
                 NestedTypeCollector.Collect(memberType, compilation, nullabilityEnabled, nestedTypes);
-
-                // Also check if elements of collections/dictionaries are implicit types
-                if (memberModel.TypeKind == MemberTypeKind.Collection || 
-                    memberModel.TypeKind == MemberTypeKind.Array)
+                
+                if (memberModel.TypeKind is MemberTypeKind.Collection or MemberTypeKind.Array)
                 {
                     ITypeSymbol? elemType = (memberModel.TypeKind == MemberTypeKind.Array) 
                         ? ((IArrayTypeSymbol)memberType).ElementType 
@@ -110,7 +95,7 @@ internal static class TypeModelFactory
 
                     if (elemType != null && memberModel is { ElementIsSafe: false, ElementHasClonableAttr: false })
                     {
-                        if (ImplicitTypeAnalyzer.TryAnalyze(elemType, compilation, nullabilityEnabled, implicitCache, processingStack, out TypeModel? implicitModel))
+                        if (ImplicitTypeAnalyzer.TryAnalyze(elemType, compilation, nullabilityEnabled, targetFramework, implicitCache, processingStack, out TypeModel? implicitModel))
                         {
                             if (implicitModel != null)
                             {
@@ -133,10 +118,9 @@ internal static class TypeModelFactory
                     (ITypeSymbol KeyType, ITypeSymbol ValueType)? dictTypes = TypeAnalyzer.GetDictionaryTypes(memberType, compilation);
                     if (dictTypes.HasValue)
                     {
-                        // Check Key
                         if (memberModel is { KeyIsSafe: false, KeyIsClonable: false })
                         {
-                            if (ImplicitTypeAnalyzer.TryAnalyze(dictTypes.Value.KeyType, compilation, nullabilityEnabled, implicitCache, processingStack, out TypeModel? implicitKey))
+                            if (ImplicitTypeAnalyzer.TryAnalyze(dictTypes.Value.KeyType, compilation, nullabilityEnabled, targetFramework, implicitCache, processingStack, out TypeModel? implicitKey))
                             {
                                 if (implicitKey != null)
                                 {
@@ -153,11 +137,10 @@ internal static class TypeModelFactory
                                 }
                             }
                         }
-
-                        // Check Value
+                        
                         if (memberModel is { ValueIsSafe: false, ValueIsClonable: false })
                         {
-                            if (ImplicitTypeAnalyzer.TryAnalyze(dictTypes.Value.ValueType, compilation, nullabilityEnabled, implicitCache, processingStack, out TypeModel? implicitVal))
+                            if (ImplicitTypeAnalyzer.TryAnalyze(dictTypes.Value.ValueType, compilation, nullabilityEnabled, targetFramework, implicitCache, processingStack, out TypeModel? implicitVal))
                             {
                                 if (implicitVal != null)
                                 {
@@ -185,7 +168,6 @@ internal static class TypeModelFactory
         List<string> typeConstraints = TypeAnalyzer.GetTypeConstraints(symbol);
         (bool IsStruct, bool IsSealed, bool HasClonableBaseClass) flags = TypeAnalyzer.GetStructureFlags(symbol);
         
-        // Check for members that require FastCloner when it's not available
         if (!isFastClonerAvailable)
         {
             List<string> unclonableMembers = finalMembers
@@ -195,12 +177,10 @@ internal static class TypeModelFactory
             
             if (unclonableMembers.Count > 0)
             {
-                // Use warning severity for FastCloner test assemblies, error for production code
                 string assemblyName = compilation.AssemblyName ?? string.Empty;
                 bool isFastClonerAssembly = assemblyName.StartsWith("FastCloner", StringComparison.OrdinalIgnoreCase);
                 DiagnosticSeverity severity = isFastClonerAssembly ? DiagnosticSeverity.Error : DiagnosticSeverity.Error;
                 
-                // Format member list with line breaks for readability
                 string membersList = string.Join("\n  - ", unclonableMembers);
                 
                 error = Diagnostic.Create(
@@ -218,31 +198,24 @@ internal static class TypeModelFactory
                     symbol.Locations.FirstOrDefault() ?? Location.None,
                     symbol.Name,
                     membersList);
-                    
-                // Only prevent code generation if it's an error (production code)
+                
                 return isFastClonerAssembly;
             }
         }
 
-        // Analyze circular references at compile-time (we have the symbol here)
         List<string> circRefLog = [];
-        bool canHaveCircularRefs = CircularReferenceAnalyzer.Analyze(symbol, compilation, circRefLog);
-        
-            // Check if type has a parameterless constructor
+        StateRequirementAnalyzer.AnalysisResult stateAnalysis = StateRequirementAnalyzer.Analyze(symbol, compilation, circRefLog, preserveIdentity);
+        bool canHaveCircularRefs = stateAnalysis.HasCircularRefs;
+        bool needsStateTracking = stateAnalysis.NeedsStateTracking;
         bool hasParameterlessConstructor = TypeAnalyzer.HasParameterlessConstructor(symbol);
-        
-        // Check if type is ref struct
         bool isRefLikeType = TypeAnalyzer.IsRefStructType(symbol);
-        
-        // Collect derived types for abstract classes
         EquatableArray<TypeModel> derivedTypes = EquatableArray<TypeModel>.Empty;
+        
         if (symbol.IsAbstract)
         {
-            List<TypeModel> derivedTypesList = DerivedTypeCollector.Collect(symbol, compilation, nullabilityEnabled);
+            List<TypeModel> derivedTypesList = DerivedTypeCollector.Collect(symbol, compilation, nullabilityEnabled, targetFramework);
             derivedTypes = new EquatableArray<TypeModel>(derivedTypesList.ToArray());
             
-            // For abstract classes, we need runtime fallback if no derived types are found
-            // and FastCloner runtime is not available
             if (derivedTypesList.Count == 0 && !isFastClonerAvailable)
             {
                 error = Diagnostic.Create(
@@ -257,7 +230,6 @@ internal static class TypeModelFactory
                         isEnabledByDefault: true),
                     symbol.Locations.FirstOrDefault() ?? Location.None,
                     symbol.ToDisplayString());
-                // Still generate - the warning is informational
             }
         }
         
@@ -271,6 +243,7 @@ internal static class TypeModelFactory
             symbol.IsRecord,
             flags.HasClonableBaseClass,
             canHaveCircularRefs,
+            needsStateTracking,
             isFastClonerAvailable,
             new EquatableArray<MemberModel>(finalMembers.ToArray()),
             new EquatableArray<string>(typeParameters.ToArray()),
@@ -280,11 +253,34 @@ internal static class TypeModelFactory
             derivedTypes,
             nullabilityEnabled,
             trustNullability,
+            preserveIdentity,
             isRefLikeType,
             hasParameterlessConstructor,
             codeAnalysisAvailable,
+            targetFramework,
             new EquatableArray<string>(circRefLog.ToArray()));
 
         return true;
+    }
+    
+    private static bool? GetPreserveIdentityFromType(INamedTypeSymbol symbol)
+    {
+        foreach (AttributeData attr in symbol.GetAttributes())
+        {
+            if (attr.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerPreserveIdentityAttribute")
+            {
+                foreach (KeyValuePair<string, TypedConstant> namedArg in attr.NamedArguments)
+                {
+                    if (namedArg is { Key: "Enabled", Value.Value: bool namedEnabled })
+                        return namedEnabled;
+                }
+                
+                if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is bool enabled)
+                    return enabled;
+
+                return true;
+            }
+        }
+        return null;
     }
 }

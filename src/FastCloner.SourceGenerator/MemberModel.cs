@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.CodeAnalysis;
 
 namespace FastCloner.SourceGenerator;
@@ -83,7 +84,8 @@ internal readonly record struct MemberModel(
     bool HasGetter,                  // Whether the property has a getter
     bool HasSetter,                  // Whether the property has a setter (regular, not init-only)
     bool SetterIsAccessible,         // Whether the setter is publicly accessible (not private/protected)
-    MemberCloneBehavior MemberBehavior  // The clone behavior for this member (Clone, Reference, Shallow, Ignore)
+    MemberCloneBehavior MemberBehavior,  // The clone behavior for this member (Clone, Reference, Shallow, Ignore)
+    bool? PreserveIdentity = null    // null=inherit from type, true=preserve identity for this member's subgraph, false=disabled
 ) : IEquatable<MemberModel>
 {
     /// <summary>
@@ -114,6 +116,9 @@ internal readonly record struct MemberModel(
         // Check nullability
         bool isNullable = property.NullableAnnotation == NullableAnnotation.Annotated;
         
+        // Check for PreserveIdentity attribute
+        bool? preserveIdentity = GetPreserveIdentityFromAttributes(property.GetAttributes());
+        
         return new MemberModel(
             property.Name,
             property.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
@@ -141,7 +146,8 @@ internal readonly record struct MemberModel(
             hasGetter,
             hasSetter,
             setterIsAccessible,
-            memberBehavior);
+            memberBehavior,
+            preserveIdentity);
     }
 
     public static MemberModel Create(IFieldSymbol field, bool nullabilityEnabled, Compilation compilation, MemberCloneBehavior memberBehavior = MemberCloneBehavior.Clone)
@@ -156,6 +162,9 @@ internal readonly record struct MemberModel(
         bool hasGetter = true;
         bool hasSetter = !field.IsReadOnly;
         bool setterIsAccessible = !field.IsReadOnly; // If not readonly, it's accessible (we only collect public fields)
+        
+        // Check for PreserveIdentity attribute
+        bool? preserveIdentity = GetPreserveIdentityFromAttributes(field.GetAttributes());
         
         return new MemberModel(
             field.Name,
@@ -184,7 +193,35 @@ internal readonly record struct MemberModel(
             hasGetter,
             hasSetter,
             setterIsAccessible,
-            memberBehavior);
+            memberBehavior,
+            preserveIdentity);
+    }
+    
+    /// <summary>
+    /// Extracts PreserveIdentity value from attributes if present.
+    /// </summary>
+    private static bool? GetPreserveIdentityFromAttributes(System.Collections.Immutable.ImmutableArray<AttributeData> attributes)
+    {
+        foreach (AttributeData attr in attributes)
+        {
+            if (attr.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerPreserveIdentityAttribute")
+            {
+                // Check named argument first (Enabled = true/false)
+                foreach (KeyValuePair<string, TypedConstant> namedArg in attr.NamedArguments)
+                {
+                    if (namedArg.Key == "Enabled" && namedArg.Value.Value is bool namedEnabled)
+                        return namedEnabled;
+                }
+                
+                // Check constructor argument [FastClonerPreserveIdentity(true/false)]
+                if (attr.ConstructorArguments.Length > 0 && attr.ConstructorArguments[0].Value is bool enabled)
+                    return enabled;
+                
+                // Default value is true when attribute is present with no arguments
+                return true;
+            }
+        }
+        return null; // No attribute found
     }
     
     private static (MemberTypeKind kind, string? elem, string? key, string? val, bool elemSafe, bool elemClon, bool keySafe, bool keyClon, bool valSafe, bool valClon, bool requiresFastCloner, CollectionKind collKind, string? concreteType, int arrayRank) 
