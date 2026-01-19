@@ -7,6 +7,14 @@
         <LangVersion>preview</LangVersion>
         <SignAssembly>true</SignAssembly>
         <AssemblyOriginatorKeyFile>..\FastCloner.snk</AssemblyOriginatorKeyFile>
+        <Deterministic>true</Deterministic>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <DebugType>portable</DebugType>
+        <DebugSymbols>true</DebugSymbols>
+        <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
         <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
         <Title>Special types support for FastCloner</Title>
         <Description>Extends FastCloner with support for certain special types.</Description>
