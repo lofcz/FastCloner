@@ -29,13 +29,7 @@ internal sealed class ContextCodeGenerator
         _sb.AppendLine("using System;");
         _sb.AppendLine("using System.Collections.Generic;");
         _sb.AppendLine("using System.Reflection;");
-        
-        // Check if any registered type needs FormatterServices (for types without parameterless constructors)
-        if (ClassCloneBodyGenerator.NeedsFormatterServices(_model.RegisteredTypes))
-        {
-            _sb.AppendLine("using System.Runtime.Serialization;");
-        }
-        
+ 
         if (_model.IsFastClonerAvailable)
         {
             _sb.AppendLine("using FastCloner;");

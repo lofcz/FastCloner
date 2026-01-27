@@ -102,13 +102,6 @@ internal sealed class CloneCodeGenerator
         sb.AppendLine("using System.Reflection;");
         sb.AppendLine("using FastCloner.SourceGenerator.Shared;");
         
-        bool needsFormatterServices = ClassCloneBodyGenerator.NeedsFormatterServices(_context.Model) ||
-                                      ClassCloneBodyGenerator.NeedsFormatterServices(_context.Model.DerivedTypes);
-        if (needsFormatterServices)
-        {
-            sb.AppendLine("using System.Runtime.Serialization;");
-        }
-        
         if (_context.IsFastClonerAvailable)
         {
             sb.AppendLine("using FastCloner;");
@@ -459,7 +452,7 @@ internal sealed class CloneCodeGenerator
             }
             else
             {
-                sb.AppendLine($"            var result = ({typeName})FormatterServices.GetUninitializedObject(typeof({typeName}));");
+                ClassCloneBodyGenerator.WriteGetUninitializedObject(sb, typeName);
                 
                 if (useState)
                 {
