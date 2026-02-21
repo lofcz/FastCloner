@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Runtime.CompilerServices;
 
 namespace FastCloner.Code;
 
@@ -60,17 +59,6 @@ internal static class FastClonerGenerator
                 }
 
                 break;
-            }
-            case Delegate del:
-            {
-                Type? targetType = del.Target?.GetType();
-            
-                if (targetType?.GetCustomAttribute<CompilerGeneratedAttribute>() is not null)
-                {
-                    return (T?)CloneClassRoot(obj);
-                }
-            
-                return obj;
             }
         }
 

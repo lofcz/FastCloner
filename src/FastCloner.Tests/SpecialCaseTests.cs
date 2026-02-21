@@ -1398,13 +1398,14 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
             Assert.That(cloned.Age, Is.EqualTo(30), "Property should be copied");
 
             cloned.Name = "Jane";
-            Assert.That(propertyChanges, Is.Empty, "Cloned object should not trigger original events");
+            Assert.That(propertyChanges, Has.Count.EqualTo(1), "Cloned object should trigger original events due to shallow copy of delegates");
+            Assert.That(propertyChanges[0], Is.EqualTo("Name"));
 
             List<string> clonedChanges = [];
             cloned.PropertyChanged += (object sender, PropertyChangedEventArgs args) => clonedChanges.Add(args.PropertyName);
             cloned.Age = 31;
             Assert.That(clonedChanges, Has.Count.EqualTo(1), "Cloned object should trigger its own events");
-            Assert.That(clonedChanges[0], Is.EqualTo(nameof(NotifyingPerson.Age)));
+            Assert.That(propertyChanges, Has.Count.EqualTo(2), "Original event handler also receives the second change");
         });
     }
 
@@ -1432,13 +1433,14 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
             Assert.That(cloned.Address.City, Is.EqualTo("New York"), "Nested property should be copied");
 
             cloned.Address.Street = "Broadway";
-            Assert.That(addressChanges, Is.Empty, "Cloned nested object should not trigger original events");
+            Assert.That(addressChanges, Has.Count.EqualTo(1), "Delegates are shallow-copied, so cloned nested object triggers original handler");
+            Assert.That(addressChanges[0], Is.EqualTo(nameof(NotifyingAddress.Street)));
 
             List<string> clonedAddressChanges = [];
             cloned.Address.PropertyChanged += (object sender, PropertyChangedEventArgs args) => clonedAddressChanges.Add(args.PropertyName);
             cloned.Address.City = "Boston";
             Assert.That(clonedAddressChanges, Has.Count.EqualTo(1), "Cloned nested object should trigger its own events");
-            Assert.That(clonedAddressChanges[0], Is.EqualTo(nameof(NotifyingAddress.City)));
+            Assert.That(addressChanges, Has.Count.EqualTo(2), "Original handler also receives the second change");
         });
     }
 
@@ -1469,13 +1471,13 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
             Assert.That(cloned.Children, Has.Count.EqualTo(2), "Collection should have same number of items");
             Assert.That(cloned.Children[0].Name, Is.EqualTo("Child1"), "Collection items should be copied");
 
-            cloned.Children.Add(new NotifyingPerson { Name = "Child3" });
-            Assert.That(collectionChanges, Is.EqualTo(0), "Cloned collection should not trigger original events");
-
             int clonedChanges = 0;
             cloned.Children.CollectionChanged += (object sender, NotifyCollectionChangedEventArgs args) => clonedChanges++;
-            cloned.Children.RemoveAt(0);
+            cloned.Children.Add(new NotifyingPerson { Name = "Child3" });
             Assert.That(clonedChanges, Is.EqualTo(1), "Cloned collection should trigger its own events");
+
+            cloned.Children.RemoveAt(0);
+            Assert.That(clonedChanges, Is.EqualTo(2), "Cloned collection should continue triggering its own events");
         });
     }
 
@@ -1681,9 +1683,121 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         b.Prop = "B changed";
         b.Prop = "B changed again";
 
-        // Assert
-        Assert.That(output, Has.Count.EqualTo(1));
+        // Assert - delegates are shallow-copied, so the clone shares the original handler
+        Assert.That(output, Has.Count.EqualTo(3));
         Assert.That(output[0], Is.EqualTo("A changed"));
+        Assert.That(output[1], Is.EqualTo("B changed"));
+        Assert.That(output[2], Is.EqualTo("B changed again"));
+    }
+
+    /// <summary>
+    /// issue #27
+    /// </summary>
+    public class MvvmEntity : INotifyPropertyChanged, INotifyPropertyChanging
+    {
+        private string name;
+        private int value;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        public event PropertyChangingEventHandler? PropertyChanging;
+
+        public string Name
+        {
+            get => name;
+            set
+            {
+                PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(nameof(Name)));
+                name = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
+            }
+        }
+
+        public int Value
+        {
+            get => value;
+            set
+            {
+                PropertyChanging?.Invoke(this, new PropertyChangingEventArgs(nameof(Value)));
+                this.value = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Value)));
+            }
+        }
+
+        public bool HasPropertyChangedHandler => PropertyChanged is not null;
+        public bool HasPropertyChangingHandler => PropertyChanging is not null;
+    }
+
+    [Test]
+    public void Issue27_Clone_Entity_With_EventHandlers_Does_Not_Deep_Clone_Delegates()
+    {
+        // Arrange - simulate WPF-like scenario: entity with MVVM event handlers
+        MvvmEntity original = new MvvmEntity { Name = "Test", Value = 42 };
+
+        List<string> changedProps = [];
+        List<string> changingProps = [];
+        original.PropertyChanged += (sender, args) => changedProps.Add(args.PropertyName!);
+        original.PropertyChanging += (sender, args) => changingProps.Add(args.PropertyName!);
+
+        // Act - clone the entity (previously would deep-clone delegate targets, hitting COM objects)
+        MvvmEntity clone = original.DeepClone();
+
+        // Assert - clone should work without exceptions
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone, Is.Not.SameAs(original));
+        Assert.That(clone.Name, Is.EqualTo("Test"));
+        Assert.That(clone.Value, Is.EqualTo(42));
+
+        // Delegates are shallow-copied: handlers are preserved as references
+        Assert.That(clone.HasPropertyChangedHandler, Is.True);
+        Assert.That(clone.HasPropertyChangingHandler, Is.True);
+
+        // Mutating the clone triggers the original handlers (shared delegate reference)
+        clone.Name = "Modified";
+        Assert.That(changedProps, Has.Count.EqualTo(1));
+        Assert.That(changingProps, Has.Count.EqualTo(1));
+        Assert.That(changedProps[0], Is.EqualTo("Name"));
+        Assert.That(changingProps[0], Is.EqualTo("Name"));
+
+        for (int i = 0; i < 100; i++)
+        {
+            MvvmEntity rapidClone = original.DeepClone();
+            Assert.That(rapidClone.Name, Is.EqualTo("Test"));
+            Assert.That(rapidClone.HasPropertyChangedHandler, Is.True);
+        }
+    }
+
+    [Test]
+    public void Issue27_Clone_Entity_With_Ignored_EventHandlers_Nulls_Delegates()
+    {
+        // Arrange - user opts to ignore event handler types (OP's preferred workaround)
+        FastCloner.SetTypeBehavior<PropertyChangedEventHandler>(CloneBehavior.Ignore);
+        FastCloner.SetTypeBehavior<PropertyChangingEventHandler>(CloneBehavior.Ignore);
+
+        try
+        {
+            MvvmEntity original = new MvvmEntity { Name = "Test", Value = 42 };
+            original.PropertyChanged += (sender, args) => { };
+            original.PropertyChanging += (sender, args) => { };
+
+            // Act
+            MvvmEntity clone = original.DeepClone();
+
+            // Assert - handlers should be null on the clone
+            Assert.That(clone, Is.Not.Null);
+            Assert.That(clone.Name, Is.EqualTo("Test"));
+            Assert.That(clone.Value, Is.EqualTo(42));
+            Assert.That(clone.HasPropertyChangedHandler, Is.False, "Ignored delegate types should be null on clone");
+            Assert.That(clone.HasPropertyChangingHandler, Is.False, "Ignored delegate types should be null on clone");
+
+            // Original should still have its handlers
+            Assert.That(original.HasPropertyChangedHandler, Is.True);
+            Assert.That(original.HasPropertyChangingHandler, Is.True);
+        }
+        finally
+        {
+            FastCloner.ClearTypeBehavior<PropertyChangedEventHandler>();
+            FastCloner.ClearTypeBehavior<PropertyChangingEventHandler>();
+        }
     }
 
     public class NotifyingPerson : INotifyPropertyChanged
@@ -1781,22 +1895,22 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         {
             Assert.That(cloned.Name, Is.EqualTo("Test"), "String property should be copied");
 
-            // Original delegate increments the original counter
+            // Original delegate increments the shared counter
             int originalResult = original.Increment();
             Assert.That(originalResult, Is.EqualTo(1), "Original delegate should increment counter");
-            Assert.That(counter, Is.EqualTo(1), "Original counter should be 1");
+            Assert.That(counter, Is.EqualTo(1), "Counter should be 1");
 
-            // Cloned delegate has its own cloned closure with independent counter
+            // Delegates are shallow-copied, so cloned delegate shares the same closure
             int clonedResult = cloned.Increment();
-            Assert.That(clonedResult, Is.EqualTo(1), "Cloned delegate has independent counter starting at 0");
-            Assert.That(counter, Is.EqualTo(1), "Original counter unchanged by cloned delegate");
+            Assert.That(clonedResult, Is.EqualTo(2), "Cloned delegate shares the same counter");
+            Assert.That(counter, Is.EqualTo(2), "Counter affected by both delegates");
 
-            // Both continue independently
+            // Both continue on the same counter
             originalResult = original.Increment();
             clonedResult = cloned.Increment();
-            Assert.That(originalResult, Is.EqualTo(2), "Original delegate continues counting");
-            Assert.That(clonedResult, Is.EqualTo(2), "Cloned delegate continues independently");
-            Assert.That(counter, Is.EqualTo(2), "Original counter only affected by original delegate");
+            Assert.That(originalResult, Is.EqualTo(3), "Original delegate continues counting");
+            Assert.That(clonedResult, Is.EqualTo(4), "Cloned delegate continues on same counter");
+            Assert.That(counter, Is.EqualTo(4), "Counter affected by both delegates");
         });
     }
 
@@ -2881,9 +2995,10 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         int a = 0;
         Func<int> f = () => ++a;
         Func<int> fCopy = f.DeepClone();
+        // delegates are shallow-copied, so both share the same closure
         Assert.That(f(), Is.EqualTo(1));
-        Assert.That(fCopy(), Is.EqualTo(1));
-        Assert.That(a, Is.EqualTo(1));
+        Assert.That(fCopy(), Is.EqualTo(2));
+        Assert.That(a, Is.EqualTo(2));
     }
 
     private class TestComparer : Comparer<int>

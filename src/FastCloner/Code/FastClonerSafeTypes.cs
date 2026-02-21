@@ -212,8 +212,8 @@ internal static class FastClonerSafeTypes
 
         if (typeof(Delegate).IsAssignableFrom(type))
         {
-            knownTypes.TryAdd(type, false);
-            return false;
+            knownTypes.TryAdd(type, true);
+            return true;
         }
         
         string? fullName = type.FullName;

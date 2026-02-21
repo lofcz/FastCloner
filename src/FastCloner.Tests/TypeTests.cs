@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using Microsoft.Win32.SafeHandles;
 using System.Globalization;
 using System.Reflection;
@@ -71,8 +71,8 @@ public class TypeTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDept
         Assert.Multiple(() =>
         {
             Assert.That(f(3), Is.EqualTo("xxx3"));
-            // we clone delegate together with a closure
-            Assert.That(df(3), Is.EqualTo("1233"));
+            // delegates are shallow-copied by default, sharing the same closure
+            Assert.That(df(3), Is.EqualTo("xxx3"));
             Assert.That(cf(3), Is.EqualTo("xxx3"));
         });
     }
@@ -106,16 +106,17 @@ public class TypeTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDept
         Assert.That(summ[0], Is.EqualTo(2));
         EventHandlerTest1 clone = eht.DeepClone();
         clone.Call(1);
-        // do not call
-        Assert.That(summ[0], Is.EqualTo(2));
+        // delegates are shallow-copied, so the clone shares the same handlers
+        Assert.That(summ[0], Is.EqualTo(4));
         eht.Event -= a1;
         eht.Event -= a2;
         
         Assert.Multiple(() =>
         {
-            Assert.That(eht.Call(1), Is.EqualTo(0)); // 0
-            Assert.That(summ[0], Is.EqualTo(2)); // nothing to increment
+            Assert.That(eht.Call(1), Is.EqualTo(0));
+            Assert.That(summ[0], Is.EqualTo(4));
             Assert.That(clone.Call(1), Is.EqualTo(2));
+            Assert.That(summ[0], Is.EqualTo(6));
         });
     }
 
