@@ -140,13 +140,13 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
 
         // Act
         FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Ignore);
-        var behaviorIgnore = FastCloner.GetTypeBehavior<SimpleClass>();
+        CloneBehavior? behaviorIgnore = FastCloner.GetTypeBehavior<SimpleClass>();
         
         FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Reference);
-        var behaviorReference = FastCloner.GetTypeBehavior<SimpleClass>();
+        CloneBehavior? behaviorReference = FastCloner.GetTypeBehavior<SimpleClass>();
 
         FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Clone);
-        var behaviorDeep = FastCloner.GetTypeBehavior<SimpleClass>();
+        CloneBehavior? behaviorDeep = FastCloner.GetTypeBehavior<SimpleClass>();
 
         // Assert
         Assert.That(behaviorIgnore, Is.EqualTo(CloneBehavior.Ignore));

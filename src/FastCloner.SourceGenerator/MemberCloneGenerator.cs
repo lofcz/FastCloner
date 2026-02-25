@@ -29,13 +29,8 @@ internal static class MemberCloneGenerator
                     }
                     case MemberTypeKind.Clonable:
                     {
-                        string extensionClassName = GetExtensionClassName(member.TypeFullName, context.Model.Namespace);
-                        bool hasStateFromCaller = stateVar != "null";
-                        bool memberNeedsState = hasStateFromCaller || MemberNeedsCircularRefTracking(context, member);
-                        
-                        return memberNeedsState ? 
-                            $"{memberName} = {extensionClassName}.InternalFastDeepClone({sourceVar}.{memberName}, {stateVar})" : 
-                            $"{memberName} = {sourceVar}.{memberName}?.FastDeepClone()";
+                        string extensionClassName = GetExtensionClassName(member);
+                        return $"{memberName} = {extensionClassName}.InternalFastDeepClone({sourceVar}.{memberName}, {stateVar})";
                     }
                     case MemberTypeKind.Implicit:
                     {
@@ -109,18 +104,8 @@ internal static class MemberCloneGenerator
 
                     case MemberTypeKind.Clonable:
                     {
-                        string extensionClassName = GetExtensionClassName(member.TypeFullName, context.Model.Namespace);
-                        bool hasStateFromCaller = stateVar != "null";
-                        bool memberNeedsState = hasStateFromCaller || MemberNeedsCircularRefTracking(context, member);
-                        
-                        if (memberNeedsState)
-                        {
-                            sb.AppendLine($"            {resultVar}.{memberName} = {extensionClassName}.InternalFastDeepClone({sourceVar}.{memberName}, {stateVar});");
-                        }
-                        else
-                        {
-                            sb.AppendLine($"            {resultVar}.{memberName} = {sourceVar}.{memberName}?.FastDeepClone();");
-                        }
+                        string extensionClassName = GetExtensionClassName(member);
+                        sb.AppendLine($"            {resultVar}.{memberName} = {extensionClassName}.InternalFastDeepClone({sourceVar}.{memberName}, {stateVar});");
                     }
                         break;
 
@@ -434,21 +419,20 @@ internal static class MemberCloneGenerator
         }
         return fullName;
     }
-    
-    private static string GetExtensionClassName(string typeFullName, string currentNamespace)
+
+    /// <summary>
+    /// Returns the precomputed extension class FQN for a clonable member type.
+    /// </summary>
+    private static string GetExtensionClassName(MemberModel member)
     {
-        string typeName = GetTypeNameFromFullName(typeFullName);
-        
-        return string.IsNullOrEmpty(currentNamespace) ?
-            $"{typeName}FastDeepCloneExtensions" : 
-            $"global::{currentNamespace}.{typeName}FastDeepCloneExtensions";
+        return member.ClonableExtensionClass!;
     }
 
-    public static string GetExtensionClassNameForType(string typeFullName, string contextNamespace)
+    /// <summary>
+    /// Returns the precomputed extension class FQN for a clonable collection element type.
+    /// </summary>
+    public static string GetExtensionClassNameForType(MemberModel member)
     {
-        string typeName = GetTypeNameFromFullName(typeFullName);
-        return string.IsNullOrEmpty(contextNamespace) ?
-            $"{typeName}FastDeepCloneExtensions" : 
-            $"global::{contextNamespace}.{typeName}FastDeepCloneExtensions";
+        return member.ElementClonableExtensionClass!;
     }
 }

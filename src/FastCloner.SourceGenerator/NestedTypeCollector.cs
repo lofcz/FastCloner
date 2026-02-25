@@ -124,6 +124,7 @@ internal static class NestedTypeCollector
 
                  bool collHasCount = kind == MemberTypeKind.Collection && TypeAnalyzer.CollectionHasCountProperty(type);
                  bool collHasIndexer = kind == MemberTypeKind.Collection && TypeAnalyzer.CollectionHasIndexer(type);
+                 string? elemClonableExtClass = elemClon ? TypeAnalyzer.ComputeExtensionClassFqn(elemType) : null;
 
                  MemberModel model = new MemberModel(
                     "NestedHelper",
@@ -148,7 +149,8 @@ internal static class NestedTypeCollector
                     MemberCloneBehavior.Clone, // MemberBehavior - helper methods use default cloning
                     null,  // PreserveIdentity
                     collHasCount,
-                    collHasIndexer
+                    collHasIndexer,
+                    ElementClonableExtensionClass: elemClonableExtClass
                  );
 
                  if (!nestedTypes.ContainsKey(model.TypeFullName))

@@ -79,10 +79,10 @@ public class RecordTests
     public void SimpleRecord_Should_Clone()
     {
         // Arrange
-        var record = new SimpleRecord("Alice", 30);
+        SimpleRecord record = new SimpleRecord("Alice", 30);
         
         // Act
-        var clone = record.FastDeepClone();
+        SimpleRecord clone = record.FastDeepClone();
         
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -96,11 +96,11 @@ public class RecordTests
     public void SimpleRecord_Clone_Should_Be_Independent()
     {
         // Arrange
-        var record = new SimpleRecord("Bob", 25);
+        SimpleRecord record = new SimpleRecord("Bob", 25);
         
         // Act
-        var clone = record.FastDeepClone();
-        var modified = record with { Name = "Charlie" };
+        SimpleRecord clone = record.FastDeepClone();
+        SimpleRecord modified = record with { Name = "Charlie" };
         
         // Assert - clone should be unaffected by modifications to original
         Assert.That(clone!.Name, Is.EqualTo("Bob"));
@@ -116,7 +116,7 @@ public class RecordTests
     public void RecordWithCollection_Should_DeepClone()
     {
         // Arrange
-        var record = new RecordWithCollection
+        RecordWithCollection record = new RecordWithCollection
         {
             Name = "Test",
             Tags = ["tag1", "tag2", "tag3"],
@@ -124,7 +124,7 @@ public class RecordTests
         };
         
         // Act
-        var clone = record.FastDeepClone();
+        RecordWithCollection clone = record.FastDeepClone();
         
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -141,7 +141,7 @@ public class RecordTests
     public void RecordWithCollection_Clone_Should_Be_Independent()
     {
         // Arrange
-        var record = new RecordWithCollection
+        RecordWithCollection record = new RecordWithCollection
         {
             Name = "Test",
             Tags = ["a", "b"],
@@ -149,7 +149,7 @@ public class RecordTests
         };
         
         // Act
-        var clone = record.FastDeepClone();
+        RecordWithCollection clone = record.FastDeepClone();
         record.Tags!.Add("c");
         
         // Assert - clone's list should be unchanged
@@ -167,7 +167,7 @@ public class RecordTests
     public void PersonRecord_Should_DeepClone_Nested()
     {
         // Arrange
-        var person = new PersonRecord
+        PersonRecord person = new PersonRecord
         {
             FirstName = "John",
             LastName = "Doe",
@@ -181,7 +181,7 @@ public class RecordTests
         };
         
         // Act
-        var clone = person.FastDeepClone();
+        PersonRecord clone = person.FastDeepClone();
         
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -206,10 +206,10 @@ public class RecordTests
     public void PointRecord_Struct_Should_Clone()
     {
         // Arrange
-        var point = new PointRecord(10.5, 20.5);
+        PointRecord point = new PointRecord(10.5, 20.5);
         
         // Act
-        var clone = point.FastDeepClone();
+        PointRecord clone = point.FastDeepClone();
         
         // Assert
         Assert.That(clone.X, Is.EqualTo(10.5));
@@ -221,14 +221,14 @@ public class RecordTests
     public void RecordStructWithCollection_Should_DeepClone()
     {
         // Arrange
-        var record = new RecordStructWithCollection
+        RecordStructWithCollection record = new RecordStructWithCollection
         {
             Label = "Data",
             Values = [1, 2, 3, 4, 5]
         };
         
         // Act
-        var clone = record.FastDeepClone();
+        RecordStructWithCollection clone = record.FastDeepClone();
         record.Values!.Add(6);
         
         // Assert - clone's list should be independent
@@ -246,7 +246,7 @@ public class RecordTests
     public void RecordWithDictionary_Should_DeepClone()
     {
         // Arrange
-        var record = new RecordWithDictionary
+        RecordWithDictionary record = new RecordWithDictionary
         {
             Name = "Scores",
             Scores = new Dictionary<string, int>
@@ -258,7 +258,7 @@ public class RecordTests
         };
         
         // Act
-        var clone = record.FastDeepClone();
+        RecordWithDictionary clone = record.FastDeepClone();
         record.Scores!["Alice"] = 50;
         record.Scores["Diana"] = 92;
         
@@ -283,7 +283,7 @@ public class RecordTests
         SimpleRecord? record = null;
         
         // Act
-        var clone = record.FastDeepClone();
+        SimpleRecord? clone = record.FastDeepClone();
         
         // Assert
         Assert.That(clone, Is.Null);
@@ -294,7 +294,7 @@ public class RecordTests
     public void Record_With_Null_Properties_Should_Clone()
     {
         // Arrange
-        var record = new RecordWithCollection
+        RecordWithCollection record = new RecordWithCollection
         {
             Name = null,
             Tags = null,
@@ -302,7 +302,7 @@ public class RecordTests
         };
         
         // Act
-        var clone = record.FastDeepClone();
+        RecordWithCollection clone = record.FastDeepClone();
         
         // Assert
         Assert.That(clone, Is.Not.Null);

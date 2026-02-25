@@ -378,6 +378,18 @@ internal static class TypeAnalyzer
             : symbol.ContainingNamespace.ToDisplayString();
     }
 
+    /// <summary>
+    /// Computes the fully qualified extension class name for a clonable type.
+    /// </summary>
+    public static string? ComputeExtensionClassFqn(ITypeSymbol type)
+    {
+        if (type is not INamedTypeSymbol named) return null;
+        string ns = GetNamespace(named);
+        return string.IsNullOrEmpty(ns)
+            ? $"{named.Name}FastDeepCloneExtensions"
+            : $"global::{ns}.{named.Name}FastDeepCloneExtensions";
+    }
+
     public static List<string> GetTypeParameters(INamedTypeSymbol symbol)
     {
         return symbol.TypeParameters.Select(tp => tp.Name).ToList();

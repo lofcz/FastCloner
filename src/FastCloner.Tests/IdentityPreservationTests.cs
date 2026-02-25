@@ -22,13 +22,13 @@ public class IdentityPreservationTests
     [Test]
     public void SimpleTree_ClonesCorrectly_NoStateNeeded()
     {
-        var original = new SimpleTreeRoot
+        SimpleTreeRoot original = new SimpleTreeRoot
         {
             Name = "Root",
             Child = new SimpleTreeChild { Value = 42 }
         };
         
-        var clone = original.FastDeepClone();
+        SimpleTreeRoot clone = original.FastDeepClone();
         
         Assert.That(clone, Is.Not.SameAs(original));
         Assert.That(clone.Name, Is.EqualTo("Root"));
@@ -70,8 +70,8 @@ public class IdentityPreservationTests
     [Test]
     public void MultiplePaths_PreservesIdentity_WhenSameInstanceShared()
     {
-        var sharedNode = new SharedNode { Value = 100 };
-        var original = new MultiPathRoot
+        SharedNode sharedNode = new SharedNode { Value = 100 };
+        MultiPathRoot original = new MultiPathRoot
         {
             Name = "MultiPath",
             PathA = new PathA { Shared = sharedNode },
@@ -81,7 +81,7 @@ public class IdentityPreservationTests
         // Verify original has shared identity
         Assert.That(original.PathA.Shared, Is.SameAs(original.PathB.Shared));
         
-        var clone = original.FastDeepClone();
+        MultiPathRoot clone = original.FastDeepClone();
         
         Assert.That(clone, Is.Not.SameAs(original));
         Assert.That(clone.PathA.Shared, Is.Not.SameAs(original.PathA.Shared));
@@ -96,7 +96,7 @@ public class IdentityPreservationTests
     [Test]
     public void MultiplePaths_CreatesSeparateClones_WhenDifferentInstances()
     {
-        var original = new MultiPathRoot
+        MultiPathRoot original = new MultiPathRoot
         {
             Name = "MultiPath",
             PathA = new PathA { Shared = new SharedNode { Value = 1 } },
@@ -106,7 +106,7 @@ public class IdentityPreservationTests
         // Verify original has different instances
         Assert.That(original.PathA.Shared, Is.Not.SameAs(original.PathB.Shared));
         
-        var clone = original.FastDeepClone();
+        MultiPathRoot clone = original.FastDeepClone();
         
         // Clone should also have different instances
         Assert.That(clone.PathA.Shared, Is.Not.SameAs(clone.PathB.Shared));
@@ -137,8 +137,8 @@ public class IdentityPreservationTests
     [Test]
     public void DuplicateProperties_PreservesIdentity_WhenSameInstance()
     {
-        var sharedChild = new DuplicateChild { Id = 1, Data = "Shared" };
-        var original = new DuplicatePropsRoot
+        DuplicateChild sharedChild = new DuplicateChild { Id = 1, Data = "Shared" };
+        DuplicatePropsRoot original = new DuplicatePropsRoot
         {
             Name = "DuplicateProps",
             Child1 = sharedChild,
@@ -148,7 +148,7 @@ public class IdentityPreservationTests
         // Verify original has shared identity
         Assert.That(original.Child1, Is.SameAs(original.Child2));
         
-        var clone = original.FastDeepClone();
+        DuplicatePropsRoot clone = original.FastDeepClone();
         
         Assert.That(clone, Is.Not.SameAs(original));
         Assert.That(clone.Child1, Is.Not.SameAs(original.Child1));
@@ -182,8 +182,8 @@ public class IdentityPreservationTests
     [Test]
     public void Collection_PreservesIdentity_WhenSameInstanceAppearsTwice()
     {
-        var sharedItem = new CollectionItem { Id = 1, Description = "Shared" };
-        var original = new CollectionRoot
+        CollectionItem sharedItem = new CollectionItem { Id = 1, Description = "Shared" };
+        CollectionRoot original = new CollectionRoot
         {
             Name = "CollectionTest",
             Items = new List<CollectionItem> { sharedItem, new CollectionItem { Id = 2 }, sharedItem }
@@ -193,7 +193,7 @@ public class IdentityPreservationTests
         Assert.That(original.Items[0], Is.SameAs(original.Items[2]));
         Assert.That(original.Items[0], Is.Not.SameAs(original.Items[1]));
         
-        var clone = original.FastDeepClone();
+        CollectionRoot clone = original.FastDeepClone();
         
         Assert.That(clone.Items.Count, Is.EqualTo(3));
         Assert.That(clone.Items[0], Is.Not.SameAs(original.Items[0]));
@@ -220,14 +220,14 @@ public class IdentityPreservationTests
     [Test]
     public void CircularReference_HandlesCorrectly()
     {
-        var node1 = new CircularNode { Id = 1, Name = "First" };
-        var node2 = new CircularNode { Id = 2, Name = "Second" };
+        CircularNode node1 = new CircularNode { Id = 1, Name = "First" };
+        CircularNode node2 = new CircularNode { Id = 2, Name = "Second" };
         
         // Create a cycle: node1 -> node2 -> node1
         node1.Next = node2;
         node2.Next = node1;
         
-        var clone = node1.FastDeepClone();
+        CircularNode clone = node1.FastDeepClone();
         
         Assert.That(clone, Is.Not.SameAs(node1));
         Assert.That(clone.Id, Is.EqualTo(1));
@@ -242,10 +242,10 @@ public class IdentityPreservationTests
     [Test]
     public void SelfReference_HandlesCorrectly()
     {
-        var node = new CircularNode { Id = 1, Name = "Self" };
+        CircularNode node = new CircularNode { Id = 1, Name = "Self" };
         node.Next = node; // Self-reference
         
-        var clone = node.FastDeepClone();
+        CircularNode clone = node.FastDeepClone();
         
         Assert.That(clone, Is.Not.SameAs(node));
         Assert.That(clone.Id, Is.EqualTo(1));
@@ -284,10 +284,10 @@ public class IdentityPreservationTests
     [Test]
     public void DeepGraph_PreservesIdentity_AtMultipleLevels()
     {
-        var sharedLeaf = new DeepGraphLeaf { Data = "SharedLeaf" };
-        var sharedLevel1 = new DeepGraphLevel1 { Value = 10, Leaf = sharedLeaf };
+        DeepGraphLeaf sharedLeaf = new DeepGraphLeaf { Data = "SharedLeaf" };
+        DeepGraphLevel1 sharedLevel1 = new DeepGraphLevel1 { Value = 10, Leaf = sharedLeaf };
         
-        var original = new DeepGraphRoot
+        DeepGraphRoot original = new DeepGraphRoot
         {
             Name = "DeepGraph",
             Level1A = sharedLevel1,
@@ -298,7 +298,7 @@ public class IdentityPreservationTests
         Assert.That(original.Level1A, Is.SameAs(original.Level1B));
         Assert.That(original.Level1A.Leaf, Is.SameAs(original.Level1B.Leaf));
         
-        var clone = original.FastDeepClone();
+        DeepGraphRoot clone = original.FastDeepClone();
         
         Assert.That(clone, Is.Not.SameAs(original));
         Assert.That(clone.Level1A, Is.Not.SameAs(original.Level1A));
@@ -336,8 +336,8 @@ public class IdentityPreservationTests
     [Test]
     public void TypeWithPreserveIdentity_PreservesIdentity()
     {
-        var shared = new SharedItem { Id = 42 };
-        var original = new TypeWithPreserveIdentity
+        SharedItem shared = new SharedItem { Id = 42 };
+        TypeWithPreserveIdentity original = new TypeWithPreserveIdentity
         {
             Name = "Test",
             Item1 = shared,
@@ -346,7 +346,7 @@ public class IdentityPreservationTests
         
         Assert.That(original.Item1, Is.SameAs(original.Item2));
         
-        var clone = original.FastDeepClone();
+        TypeWithPreserveIdentity clone = original.FastDeepClone();
         
         Assert.That(clone.Item1, Is.Not.SameAs(original.Item1));
         Assert.That(clone.Item1, Is.SameAs(clone.Item2),
@@ -375,8 +375,8 @@ public class IdentityPreservationTests
     [Test]
     public void MemberWithPreserveIdentity_PreservesIdentityInCollection()
     {
-        var shared = new MemberItem { Value = 100 };
-        var original = new TypeWithMemberPreserveIdentity
+        MemberItem shared = new MemberItem { Value = 100 };
+        TypeWithMemberPreserveIdentity original = new TypeWithMemberPreserveIdentity
         {
             Name = "Test",
             Items = new List<MemberItem> { shared, new MemberItem { Value = 200 }, shared }
@@ -384,7 +384,7 @@ public class IdentityPreservationTests
         
         Assert.That(original.Items[0], Is.SameAs(original.Items[2]));
         
-        var clone = original.FastDeepClone();
+        TypeWithMemberPreserveIdentity clone = original.FastDeepClone();
         
         Assert.That(clone.Items[0], Is.Not.SameAs(original.Items[0]));
         Assert.That(clone.Items[0], Is.SameAs(clone.Items[2]),
@@ -412,8 +412,8 @@ public class IdentityPreservationTests
     [Test]
     public void TypeWithoutPreserveIdentity_DoesNotPreserveIdentity()
     {
-        var shared = new NoIdentityItem { Id = 42 };
-        var original = new TypeWithoutPreserveIdentity
+        NoIdentityItem shared = new NoIdentityItem { Id = 42 };
+        TypeWithoutPreserveIdentity original = new TypeWithoutPreserveIdentity
         {
             Name = "Test",
             Item1 = shared,
@@ -422,7 +422,7 @@ public class IdentityPreservationTests
         
         Assert.That(original.Item1, Is.SameAs(original.Item2));
         
-        var clone = original.FastDeepClone();
+        TypeWithoutPreserveIdentity clone = original.FastDeepClone();
         
         // Without PreserveIdentity, both items are cloned separately (faster, but loses identity)
         // This is the expected behavior for performance - users opt-in to identity preservation

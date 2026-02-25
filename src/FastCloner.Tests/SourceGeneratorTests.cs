@@ -131,7 +131,7 @@ public class SourceGeneratorTests
     public void ComplexClass_DeepClone_Should_Create_Independent_Copy()
     {
         // Arrange - create a complex object with nested objects, arrays, and lists
-        var original = new ComplexClass
+        ComplexClass original = new ComplexClass
         {
             SimpleClass2 = new SimpleClass3
             {
@@ -190,7 +190,7 @@ public class SourceGeneratorTests
         };
 
         // Act - deep clone the object
-        var clone = original.FastDeepClone();
+        ComplexClass clone = original.FastDeepClone();
 
         // Assert - verify the clone is not null
         Assert.That(clone, Is.Not.Null);
@@ -242,7 +242,7 @@ public class SourceGeneratorTests
     public void Dictionary_DeepClone_Should_Clone_Keys_And_Values()
     {
         // Arrange
-        var original = new DictionaryContainer
+        DictionaryContainer original = new DictionaryContainer
         {
             Dict = new Dictionary<string, SimpleClass3>
             {
@@ -252,7 +252,7 @@ public class SourceGeneratorTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        DictionaryContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -277,7 +277,7 @@ public class SourceGeneratorTests
     public void RecursiveCollection_Should_Be_DeepCloned()
     {
         // Arrange
-        var original = new RecursiveCollectionContainer
+        RecursiveCollectionContainer original = new RecursiveCollectionContainer
         {
             NestedList = [ [1, 2], [3, 4] ],
             NestedDict = new Dictionary<string, Dictionary<string, string>>
@@ -288,7 +288,7 @@ public class SourceGeneratorTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        RecursiveCollectionContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -350,7 +350,7 @@ public class SourceGeneratorTests
     public void EnumerableSamples_Should_Be_DeepCloned()
     {
         // Arrange
-        var original = new EnumerableSamples
+        EnumerableSamples original = new EnumerableSamples
         {
             ListInts = new List<int> { 1, 2, 3 },
             ArrayInts = new int[] { 4, 5, 6 },
@@ -371,7 +371,7 @@ public class SourceGeneratorTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        EnumerableSamples clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -492,12 +492,12 @@ public class SourceGeneratorTests
         // Note: Read-only properties set in constructor (Name, Value) won't be cloned since
         // FormatterServices.GetUninitializedObject() doesn't call the constructor.
         // Only writable properties set after construction will be cloned.
-        var original = ClassWithoutParameterlessCtor.Create("TestName", 42);
+        ClassWithoutParameterlessCtor original = ClassWithoutParameterlessCtor.Create("TestName", 42);
         original.Description = "Test Description";
         original.AdditionalData = "Extra Data";
         
         // Act - Should use FormatterServices.GetUninitializedObject internally
-        var clone = original.FastDeepClone();
+        ClassWithoutParameterlessCtor clone = original.FastDeepClone();
         
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -515,11 +515,11 @@ public class SourceGeneratorTests
     public void Class_Without_Parameterless_Constructor_With_Circular_References_Should_Be_Cloned()
     {
         // Arrange - Test that circular reference tracking works with FormatterServices
-        var original = new ClassWithCircularRefNoCtor("Initial");
+        ClassWithCircularRefNoCtor original = new ClassWithCircularRefNoCtor("Initial");
         original.Self = original; // Create circular reference
         
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithCircularRefNoCtor clone = original.FastDeepClone();
         
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -570,35 +570,35 @@ public class SourceGeneratorTests
     public void FastDeepClone_Should_Handle_Complex_Circular_Dependencies()
     {
         // 1. Direct Cycle A <-> B
-        var a = new CircularNodeA();
-        var b = new CircularNodeB();
+        CircularNodeA a = new CircularNodeA();
+        CircularNodeB b = new CircularNodeB();
         a.B = b;
         b.A = a;
         
-        var cloneA = a.FastDeepClone();
+        CircularNodeA cloneA = a.FastDeepClone();
         Assert.That(cloneA, Is.Not.Null);
         Assert.That(cloneA, Is.Not.SameAs(a));
         Assert.That(cloneA!.B, Is.Not.SameAs(b));
         Assert.That(cloneA.B!.A, Is.SameAs(cloneA)); // Cycle preserved
         
         // 2. Self Cycle C -> C
-        var c = new CircularNodeC();
+        CircularNodeC c = new CircularNodeC();
         c.Self = c;
         
-        var cloneC = c.FastDeepClone();
+        CircularNodeC cloneC = c.FastDeepClone();
         Assert.That(cloneC, Is.Not.Null);
         Assert.That(cloneC, Is.Not.SameAs(c));
         Assert.That(cloneC!.Self, Is.SameAs(cloneC)); // Cycle preserved
         
         // 3. Lollipop Graph D -> E <-> F
-        var d = new CircularNodeD();
-        var e = new CircularNodeE();
-        var f = new CircularNodeF();
+        CircularNodeD d = new CircularNodeD();
+        CircularNodeE e = new CircularNodeE();
+        CircularNodeF f = new CircularNodeF();
         d.E = e;
         e.F = f;
         f.E = e;
         
-        var cloneD = d.FastDeepClone();
+        CircularNodeD cloneD = d.FastDeepClone();
         Assert.That(cloneD, Is.Not.Null);
         Assert.That(cloneD, Is.Not.SameAs(d));
         Assert.That(cloneD!.E, Is.Not.SameAs(e));

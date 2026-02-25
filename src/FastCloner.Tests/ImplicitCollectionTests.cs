@@ -31,7 +31,7 @@ public class ImplicitCollectionTests
     [SourceGeneratorCompatible]
     public void ImplicitCollection_Should_Be_Cloned()
     {
-        var original = new RootContainer
+        RootContainer original = new RootContainer
         {
             Middle = new ImplicitCollectionContainer
             {
@@ -43,7 +43,7 @@ public class ImplicitCollectionTests
             }
         };
 
-        var clone = original.FastDeepClone();
+        RootContainer clone = original.FastDeepClone();
 
         Assert.That(clone, Is.Not.Null);
         Assert.That(clone.Middle, Is.Not.Null);

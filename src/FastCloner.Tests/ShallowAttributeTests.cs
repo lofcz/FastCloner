@@ -169,13 +169,13 @@ public class ShallowAttributeTests
     public void Reflection_ShallowAttribute_ParentReference_ShouldBeShallowCloned()
     {
         // Arrange
-        var parent = new ParentObject
+        ParentObject parent = new ParentObject
         {
             Name = "Parent1",
             Id = 1
         };
         
-        var child = new ChildWithShallowParent
+        ChildWithShallowParent child = new ChildWithShallowParent
         {
             Parent = parent,
             ChildName = "Child1",
@@ -183,7 +183,7 @@ public class ShallowAttributeTests
         };
 
         // Act
-        var clone = FastCloner.DeepClone(child);
+        ChildWithShallowParent? clone = FastCloner.DeepClone(child);
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -198,19 +198,19 @@ public class ShallowAttributeTests
     public void Reflection_MixedClone_ShallowAndDeep_ShouldWorkCorrectly()
     {
         // Arrange
-        var sharedState = new SharedState
+        SharedState sharedState = new SharedState
         {
             ConfigValue = "Config1",
             Version = 1
         };
         
-        var ownedData = new OwnedData
+        OwnedData ownedData = new OwnedData
         {
             Value = "Owned1",
             Count = 42
         };
         
-        var original = new MixedCloneClass
+        MixedCloneClass original = new MixedCloneClass
         {
             SharedData = sharedState,
             OwnData = ownedData,
@@ -218,7 +218,7 @@ public class ShallowAttributeTests
         };
 
         // Act
-        var clone = FastCloner.DeepClone(original);
+        MixedCloneClass? clone = FastCloner.DeepClone(original);
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -238,20 +238,20 @@ public class ShallowAttributeTests
     public void Reflection_ShallowField_ShouldBeShallowCloned()
     {
         // Arrange
-        var sharedState = new SharedState
+        SharedState sharedState = new SharedState
         {
             ConfigValue = "FieldConfig",
             Version = 5
         };
         
-        var original = new ClassWithShallowField
+        ClassWithShallowField original = new ClassWithShallowField
         {
             SharedField = sharedState,
             Name = "FieldTest"
         };
 
         // Act
-        var clone = FastCloner.DeepClone(original);
+        ClassWithShallowField? clone = FastCloner.DeepClone(original);
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -265,17 +265,17 @@ public class ShallowAttributeTests
     public void Reflection_ShallowCollection_ShouldPreserveReference()
     {
         // Arrange
-        var sharedList = new List<int> { 1, 2, 3, 4, 5 };
-        var ownList = new List<int> { 10, 20, 30 };
+        List<int> sharedList = new List<int> { 1, 2, 3, 4, 5 };
+        List<int> ownList = new List<int> { 10, 20, 30 };
         
-        var original = new ClassWithShallowCollection
+        ClassWithShallowCollection original = new ClassWithShallowCollection
         {
             SharedList = sharedList,
             OwnList = ownList
         };
 
         // Act
-        var clone = FastCloner.DeepClone(original);
+        ClassWithShallowCollection? clone = FastCloner.DeepClone(original);
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -293,7 +293,7 @@ public class ShallowAttributeTests
     public void Reflection_ShallowAttribute_NullValue_ShouldBeHandledCorrectly()
     {
         // Arrange
-        var original = new ChildWithShallowParent
+        ChildWithShallowParent original = new ChildWithShallowParent
         {
             Parent = null,
             ChildName = "OrphanChild",
@@ -301,7 +301,7 @@ public class ShallowAttributeTests
         };
 
         // Act
-        var clone = FastCloner.DeepClone(original);
+        ChildWithShallowParent? clone = FastCloner.DeepClone(original);
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -314,13 +314,13 @@ public class ShallowAttributeTests
     public void Reflection_ModifyingShallowClonedReference_AffectsOriginal()
     {
         // Arrange
-        var parent = new ParentObject
+        ParentObject parent = new ParentObject
         {
             Name = "OriginalParent",
             Id = 1
         };
         
-        var child = new ChildWithShallowParent
+        ChildWithShallowParent child = new ChildWithShallowParent
         {
             Parent = parent,
             ChildName = "Child1",
@@ -328,7 +328,7 @@ public class ShallowAttributeTests
         };
 
         // Act
-        var clone = FastCloner.DeepClone(child);
+        ChildWithShallowParent? clone = FastCloner.DeepClone(child);
         
         // Modify the shallow-cloned parent through the clone
         clone!.Parent!.Name = "ModifiedParent";
@@ -341,14 +341,14 @@ public class ShallowAttributeTests
     public void Reflection_ShallowOnValueType_ShouldCopyValue()
     {
         // Arrange
-        var original = new ClassWithShallowValueType
+        ClassWithShallowValueType original = new ClassWithShallowValueType
         {
             ShallowInt = 42,
             NormalInt = 100
         };
 
         // Act
-        var clone = FastCloner.DeepClone(original);
+        ClassWithShallowValueType? clone = FastCloner.DeepClone(original);
 
         // Assert - value types are always copied by value
         Assert.That(clone, Is.Not.Null);
@@ -360,11 +360,11 @@ public class ShallowAttributeTests
     public void Reflection_ShallowOnReadonlyField_ShouldCopyReference()
     {
         // Arrange
-        var sharedState = new SharedState { ConfigValue = "ReadonlyTest", Version = 10 };
-        var original = new ClassWithReadonlyShallowField(sharedState, "TestName");
+        SharedState sharedState = new SharedState { ConfigValue = "ReadonlyTest", Version = 10 };
+        ClassWithReadonlyShallowField original = new ClassWithReadonlyShallowField(sharedState, "TestName");
 
         // Act
-        var clone = FastCloner.DeepClone(original);
+        ClassWithReadonlyShallowField? clone = FastCloner.DeepClone(original);
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -377,7 +377,7 @@ public class ShallowAttributeTests
     public void Reflection_ShallowOnNestedObject_ShouldPreserveDeepNesting()
     {
         // Arrange
-        var deepNested = new DeepNestedObject
+        DeepNestedObject deepNested = new DeepNestedObject
         {
             Level1 = new Level1Object
             {
@@ -389,14 +389,14 @@ public class ShallowAttributeTests
             }
         };
 
-        var original = new ClassWithShallowNestedObject
+        ClassWithShallowNestedObject original = new ClassWithShallowNestedObject
         {
             ShallowNested = deepNested,
             Name = "NestedTest"
         };
 
         // Act
-        var clone = FastCloner.DeepClone(original);
+        ClassWithShallowNestedObject? clone = FastCloner.DeepClone(original);
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -410,8 +410,8 @@ public class ShallowAttributeTests
     public void Reflection_ShallowInInheritedClass_ShouldRespectAttribute()
     {
         // Arrange
-        var sharedState = new SharedState { ConfigValue = "Inherited", Version = 5 };
-        var original = new DerivedClassWithShallowMember
+        SharedState sharedState = new SharedState { ConfigValue = "Inherited", Version = 5 };
+        DerivedClassWithShallowMember original = new DerivedClassWithShallowMember
         {
             SharedData = sharedState,
             DerivedValue = "Derived",
@@ -419,7 +419,7 @@ public class ShallowAttributeTests
         };
 
         // Act
-        var clone = FastCloner.DeepClone(original);
+        DerivedClassWithShallowMember? clone = FastCloner.DeepClone(original);
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -433,19 +433,19 @@ public class ShallowAttributeTests
     public void Reflection_ShallowWithCircularReference_ShouldNotCauseInfiniteLoop()
     {
         // Arrange - create a circular reference scenario
-        var node1 = new CircularNodeWithShallowParent { Name = "Node1" };
-        var node2 = new CircularNodeWithShallowParent { Name = "Node2", Parent = node1 };
+        CircularNodeWithShallowParent node1 = new CircularNodeWithShallowParent { Name = "Node1" };
+        CircularNodeWithShallowParent node2 = new CircularNodeWithShallowParent { Name = "Node2", Parent = node1 };
         node1.Children.Add(node2);
 
         // Act
-        var clone = FastCloner.DeepClone(node1);
+        CircularNodeWithShallowParent? clone = FastCloner.DeepClone(node1);
 
         // Assert
         Assert.That(clone, Is.Not.Null);
         Assert.That(clone!.Name, Is.EqualTo("Node1"));
         Assert.That(clone.Children, Has.Count.EqualTo(1));
         
-        var clonedChild = clone.Children[0];
+        CircularNodeWithShallowParent clonedChild = clone.Children[0];
         Assert.That(clonedChild.Name, Is.EqualTo("Node2"));
         // Parent is shallow-cloned, so it references the ORIGINAL node1, not the clone
         Assert.That(clonedChild.Parent, Is.SameAs(node1));
@@ -455,11 +455,11 @@ public class ShallowAttributeTests
     public void Reflection_MultipleShallowMembers_ShouldAllBeShallowCloned()
     {
         // Arrange
-        var shared1 = new SharedState { ConfigValue = "Shared1", Version = 1 };
-        var shared2 = new SharedState { ConfigValue = "Shared2", Version = 2 };
-        var owned = new OwnedData { Value = "Owned", Count = 42 };
+        SharedState shared1 = new SharedState { ConfigValue = "Shared1", Version = 1 };
+        SharedState shared2 = new SharedState { ConfigValue = "Shared2", Version = 2 };
+        OwnedData owned = new OwnedData { Value = "Owned", Count = 42 };
 
-        var original = new ClassWithMultipleShallowMembers
+        ClassWithMultipleShallowMembers original = new ClassWithMultipleShallowMembers
         {
             SharedState1 = shared1,
             SharedState2 = shared2,
@@ -467,7 +467,7 @@ public class ShallowAttributeTests
         };
 
         // Act
-        var clone = FastCloner.DeepClone(original);
+        ClassWithMultipleShallowMembers? clone = FastCloner.DeepClone(original);
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -614,19 +614,19 @@ public class ShallowAttributeTests
     public void Reflection_FieldKeyword_ShallowAttribute_ShouldBeRespected()
     {
         // Arrange
-        var sharedState = new SharedState
+        SharedState sharedState = new SharedState
         {
             ConfigValue = "FieldKeywordTest",
             Version = 42
         };
         
-        var ownedData = new OwnedData
+        OwnedData ownedData = new OwnedData
         {
             Value = "Owned",
             Count = 100
         };
         
-        var original = new ClassWithFieldKeywordShallow
+        ClassWithFieldKeywordShallow original = new ClassWithFieldKeywordShallow
         {
             ShallowWithValidation = sharedState,
             NormalProperty = "  trimmed  ",
@@ -634,7 +634,7 @@ public class ShallowAttributeTests
         };
 
         // Act
-        var clone = FastCloner.DeepClone(original);
+        ClassWithFieldKeywordShallow? clone = FastCloner.DeepClone(original);
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -654,20 +654,20 @@ public class ShallowAttributeTests
     public void Reflection_FieldKeyword_WithValidation_ShallowAttribute_ShouldWork()
     {
         // Arrange
-        var config = new SharedState
+        SharedState config = new SharedState
         {
             ConfigValue = "ValidationTest",
             Version = 1
         };
         
-        var original = new ClassWithFieldKeywordValidation
+        ClassWithFieldKeywordValidation original = new ClassWithFieldKeywordValidation
         {
             Config = config,
             Counter = -5 // Will be clamped to 0
         };
 
         // Act
-        var clone = FastCloner.DeepClone(original);
+        ClassWithFieldKeywordValidation? clone = FastCloner.DeepClone(original);
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -683,19 +683,19 @@ public class ShallowAttributeTests
     public void Reflection_FieldKeyword_ModifyingShallowClonedReference_AffectsOriginal()
     {
         // Arrange
-        var sharedState = new SharedState
+        SharedState sharedState = new SharedState
         {
             ConfigValue = "Original",
             Version = 1
         };
         
-        var original = new ClassWithFieldKeywordShallow
+        ClassWithFieldKeywordShallow original = new ClassWithFieldKeywordShallow
         {
             ShallowWithValidation = sharedState
         };
 
         // Act
-        var clone = FastCloner.DeepClone(original);
+        ClassWithFieldKeywordShallow? clone = FastCloner.DeepClone(original);
         clone!.ShallowWithValidation!.ConfigValue = "Modified";
 
         // Assert - modifying through clone should affect original
@@ -711,13 +711,13 @@ public class ShallowAttributeTests
     public void Aot_ShallowAttribute_ParentReference_ShouldBeShallowCloned()
     {
         // Arrange
-        var parent = new AotParentObject
+        AotParentObject parent = new AotParentObject
         {
             Name = "AotParent1",
             Id = 1
         };
         
-        var child = new AotChildWithShallowParent
+        AotChildWithShallowParent child = new AotChildWithShallowParent
         {
             Parent = parent,
             ChildName = "AotChild1",
@@ -725,7 +725,7 @@ public class ShallowAttributeTests
         };
 
         // Act
-        var clone = child.FastDeepClone();
+        AotChildWithShallowParent clone = child.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -741,19 +741,19 @@ public class ShallowAttributeTests
     public void Aot_MixedClone_ShallowAndDeep_ShouldWorkCorrectly()
     {
         // Arrange
-        var sharedState = new AotSharedState
+        AotSharedState sharedState = new AotSharedState
         {
             ConfigValue = "AotConfig1",
             Version = 1
         };
         
-        var ownedData = new AotOwnedData
+        AotOwnedData ownedData = new AotOwnedData
         {
             Value = "AotOwned1",
             Count = 42
         };
         
-        var original = new AotMixedCloneClass
+        AotMixedCloneClass original = new AotMixedCloneClass
         {
             SharedData = sharedState,
             OwnData = ownedData,
@@ -761,7 +761,7 @@ public class ShallowAttributeTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        AotMixedCloneClass clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -782,20 +782,20 @@ public class ShallowAttributeTests
     public void Aot_ShallowField_ShouldBeShallowCloned()
     {
         // Arrange
-        var sharedState = new AotSharedState
+        AotSharedState sharedState = new AotSharedState
         {
             ConfigValue = "AotFieldConfig",
             Version = 5
         };
         
-        var original = new AotClassWithShallowField
+        AotClassWithShallowField original = new AotClassWithShallowField
         {
             SharedField = sharedState,
             Name = "AotFieldTest"
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        AotClassWithShallowField clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -810,17 +810,17 @@ public class ShallowAttributeTests
     public void Aot_ShallowCollection_ShouldPreserveReference()
     {
         // Arrange
-        var sharedList = new List<int> { 1, 2, 3, 4, 5 };
-        var ownList = new List<int> { 10, 20, 30 };
+        List<int> sharedList = new List<int> { 1, 2, 3, 4, 5 };
+        List<int> ownList = new List<int> { 10, 20, 30 };
         
-        var original = new AotClassWithShallowCollection
+        AotClassWithShallowCollection original = new AotClassWithShallowCollection
         {
             SharedList = sharedList,
             OwnList = ownList
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        AotClassWithShallowCollection clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -839,7 +839,7 @@ public class ShallowAttributeTests
     public void Aot_ShallowAttribute_NullValue_ShouldBeHandledCorrectly()
     {
         // Arrange
-        var original = new AotChildWithShallowParent
+        AotChildWithShallowParent original = new AotChildWithShallowParent
         {
             Parent = null,
             ChildName = "AotOrphanChild",
@@ -847,7 +847,7 @@ public class ShallowAttributeTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        AotChildWithShallowParent clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -861,13 +861,13 @@ public class ShallowAttributeTests
     public void Aot_ModifyingShallowClonedReference_AffectsOriginal()
     {
         // Arrange
-        var parent = new AotParentObject
+        AotParentObject parent = new AotParentObject
         {
             Name = "AotOriginalParent",
             Id = 1
         };
         
-        var child = new AotChildWithShallowParent
+        AotChildWithShallowParent child = new AotChildWithShallowParent
         {
             Parent = parent,
             ChildName = "AotChild1",
@@ -875,7 +875,7 @@ public class ShallowAttributeTests
         };
 
         // Act
-        var clone = child.FastDeepClone();
+        AotChildWithShallowParent clone = child.FastDeepClone();
         
         // Modify the shallow-cloned parent through the clone
         clone!.Parent!.Name = "AotModifiedParent";
@@ -889,7 +889,7 @@ public class ShallowAttributeTests
     public void Aot_ShallowOnNestedObject_ShouldPreserveDeepNesting()
     {
         // Arrange
-        var deepNested = new AotDeepNestedObject
+        AotDeepNestedObject deepNested = new AotDeepNestedObject
         {
             Level1 = new AotLevel1Object
             {
@@ -901,14 +901,14 @@ public class ShallowAttributeTests
             }
         };
 
-        var original = new AotClassWithShallowNestedObject
+        AotClassWithShallowNestedObject original = new AotClassWithShallowNestedObject
         {
             ShallowNested = deepNested,
             Name = "AotNestedTest"
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        AotClassWithShallowNestedObject clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -923,8 +923,8 @@ public class ShallowAttributeTests
     public void Aot_ShallowInInheritedClass_ShouldRespectAttribute()
     {
         // Arrange
-        var sharedState = new AotSharedState { ConfigValue = "AotInherited", Version = 5 };
-        var original = new AotDerivedClassWithShallowMember
+        AotSharedState sharedState = new AotSharedState { ConfigValue = "AotInherited", Version = 5 };
+        AotDerivedClassWithShallowMember original = new AotDerivedClassWithShallowMember
         {
             SharedData = sharedState,
             DerivedValue = "AotDerived",
@@ -932,7 +932,7 @@ public class ShallowAttributeTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        AotDerivedClassWithShallowMember clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -947,11 +947,11 @@ public class ShallowAttributeTests
     public void Aot_MultipleShallowMembers_ShouldAllBeShallowCloned()
     {
         // Arrange
-        var shared1 = new AotSharedState { ConfigValue = "AotShared1", Version = 1 };
-        var shared2 = new AotSharedState { ConfigValue = "AotShared2", Version = 2 };
-        var owned = new AotOwnedData { Value = "AotOwned", Count = 42 };
+        AotSharedState shared1 = new AotSharedState { ConfigValue = "AotShared1", Version = 1 };
+        AotSharedState shared2 = new AotSharedState { ConfigValue = "AotShared2", Version = 2 };
+        AotOwnedData owned = new AotOwnedData { Value = "AotOwned", Count = 42 };
 
-        var original = new AotClassWithMultipleShallowMembers
+        AotClassWithMultipleShallowMembers original = new AotClassWithMultipleShallowMembers
         {
             SharedState1 = shared1,
             SharedState2 = shared2,
@@ -959,7 +959,7 @@ public class ShallowAttributeTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        AotClassWithMultipleShallowMembers clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -1062,15 +1062,15 @@ public class ShallowAttributeTests
     public void Aot_ShallowGetterOnlyCollection_ShouldShallowCloneItems()
     {
         // Arrange - Issue #22: [FastClonerShallow] on getter-only collection should shallow clone items
-        var item1 = new AotOwnedData { Value = "Item1", Count = 1 };
-        var item2 = new AotOwnedData { Value = "Item2", Count = 2 };
+        AotOwnedData item1 = new AotOwnedData { Value = "Item1", Count = 1 };
+        AotOwnedData item2 = new AotOwnedData { Value = "Item2", Count = 2 };
         
-        var original = new AotClassWithShallowGetterOnlyCollection { Name = "ShallowGetterOnly" };
+        AotClassWithShallowGetterOnlyCollection original = new AotClassWithShallowGetterOnlyCollection { Name = "ShallowGetterOnly" };
         original.Items.Add(item1);
         original.Items.Add(item2);
 
         // Act
-        var clone = original.FastDeepClone();
+        AotClassWithShallowGetterOnlyCollection clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -1090,15 +1090,15 @@ public class ShallowAttributeTests
     public void Aot_DeepGetterOnlyCollection_ShouldDeepCloneItems()
     {
         // Arrange - Without [FastClonerShallow], getter-only collection should deep clone items
-        var item1 = new AotOwnedData { Value = "Item1", Count = 1 };
-        var item2 = new AotOwnedData { Value = "Item2", Count = 2 };
+        AotOwnedData item1 = new AotOwnedData { Value = "Item1", Count = 1 };
+        AotOwnedData item2 = new AotOwnedData { Value = "Item2", Count = 2 };
         
-        var original = new AotClassWithDeepGetterOnlyCollection { Name = "DeepGetterOnly" };
+        AotClassWithDeepGetterOnlyCollection original = new AotClassWithDeepGetterOnlyCollection { Name = "DeepGetterOnly" };
         original.Items.Add(item1);
         original.Items.Add(item2);
 
         // Act
-        var clone = original.FastDeepClone();
+        AotClassWithDeepGetterOnlyCollection clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -1121,13 +1121,13 @@ public class ShallowAttributeTests
     public void Aot_ShallowGetterOnlyCollection_ModifyingClonedItemsAffectsOriginal()
     {
         // Arrange
-        var item1 = new AotOwnedData { Value = "Original", Count = 1 };
+        AotOwnedData item1 = new AotOwnedData { Value = "Original", Count = 1 };
         
-        var original = new AotClassWithShallowGetterOnlyCollection { Name = "Test" };
+        AotClassWithShallowGetterOnlyCollection original = new AotClassWithShallowGetterOnlyCollection { Name = "Test" };
         original.Items.Add(item1);
 
         // Act
-        var clone = original.FastDeepClone();
+        AotClassWithShallowGetterOnlyCollection clone = original.FastDeepClone();
         clone!.Items[0].Value = "Modified";
 
         // Assert - modifying through clone should affect original (shallow clone)
@@ -1140,13 +1140,13 @@ public class ShallowAttributeTests
     public void Aot_DeepGetterOnlyCollection_ModifyingClonedItemsDoesNotAffectOriginal()
     {
         // Arrange
-        var item1 = new AotOwnedData { Value = "Original", Count = 1 };
+        AotOwnedData item1 = new AotOwnedData { Value = "Original", Count = 1 };
         
-        var original = new AotClassWithDeepGetterOnlyCollection { Name = "Test" };
+        AotClassWithDeepGetterOnlyCollection original = new AotClassWithDeepGetterOnlyCollection { Name = "Test" };
         original.Items.Add(item1);
 
         // Act
-        var clone = original.FastDeepClone();
+        AotClassWithDeepGetterOnlyCollection clone = original.FastDeepClone();
         clone!.Items[0].Value = "Modified";
 
         // Assert - modifying through clone should NOT affect original (deep clone)

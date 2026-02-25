@@ -26,7 +26,7 @@ public class AdvancedCollectionTests
     [Test]
     public void TestAdvancedCollections()
     {
-        var original = new AdvancedCollections
+        AdvancedCollections original = new AdvancedCollections
         {
             Observable = new ObservableCollection<int> { 1, 2, 3 },
             ReadOnly = new ReadOnlyCollection<int>(new List<int> { 4, 5, 6 }),
@@ -38,7 +38,7 @@ public class AdvancedCollectionTests
             ReadOnlyDict = new ReadOnlyDictionary<int, int>(new Dictionary<int, int> { { 2, 200 } })
         };
 
-        var clone = original.FastDeepClone();
+        AdvancedCollections clone = original.FastDeepClone();
 
         Assert.That(clone, Is.Not.Null);
         Assert.That(clone, Is.Not.SameAs(original));

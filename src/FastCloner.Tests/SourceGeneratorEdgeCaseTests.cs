@@ -31,7 +31,7 @@ public class SourceGeneratorEdgeCaseTests
     public void MultiDimensionalArray_2D_Should_Be_Cloned()
     {
         // Arrange
-        var original = new ClassWith2dArray
+        ClassWith2dArray original = new ClassWith2dArray
         {
             Name = "Test",
             Matrix = new int[2, 3]
@@ -42,7 +42,7 @@ public class SourceGeneratorEdgeCaseTests
         };
 
         // Act - requires FastCloner runtime for multi-dimensional arrays
-        var clone = original.FastDeepClone();
+        ClassWith2dArray clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -62,7 +62,7 @@ public class SourceGeneratorEdgeCaseTests
     public void MultiDimensionalArray_3D_Should_Be_Cloned()
     {
         // Arrange
-        var original = new ClassWith3dArray
+        ClassWith3dArray original = new ClassWith3dArray
         {
             Cube = new double[2, 2, 2]
         };
@@ -70,7 +70,7 @@ public class SourceGeneratorEdgeCaseTests
         original.Cube[1, 1, 1] = 2.2;
 
         // Act - requires FastCloner runtime for multi-dimensional arrays
-        var clone = original.FastDeepClone();
+        ClassWith3dArray clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -106,7 +106,7 @@ public class SourceGeneratorEdgeCaseTests
     public void Fields_Should_Be_Cloned_In_Object_Initializers()
     {
         // Arrange
-        var original = new ClassWithFields
+        ClassWithFields original = new ClassWithFields
         {
             IntField = 42,
             StringField = "Test",
@@ -114,7 +114,7 @@ public class SourceGeneratorEdgeCaseTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithFields clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -136,7 +136,7 @@ public class SourceGeneratorEdgeCaseTests
     public void Mixed_Properties_And_Fields_Should_Be_Cloned()
     {
         // Arrange
-        var original = new ClassWithMixedMembers
+        ClassWithMixedMembers original = new ClassWithMixedMembers
         {
             PropertyValue = 10,
             FieldValue = 20,
@@ -145,7 +145,7 @@ public class SourceGeneratorEdgeCaseTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithMixedMembers clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -180,7 +180,7 @@ public class SourceGeneratorEdgeCaseTests
     public void InitOnly_Properties_Should_Be_Cloned()
     {
         // Arrange
-        var original = new ClassWithInitOnlyProps
+        ClassWithInitOnlyProps original = new ClassWithInitOnlyProps
         {
             Id = 123,
             Name = "Test",
@@ -188,7 +188,7 @@ public class SourceGeneratorEdgeCaseTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithInitOnlyProps clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -202,7 +202,7 @@ public class SourceGeneratorEdgeCaseTests
     public void Record_With_Init_Properties_Should_Be_Cloned()
     {
         // Arrange
-        var original = new RecordWithInitProps
+        RecordWithInitProps original = new RecordWithInitProps
         {
             Id = 456,
             Name = "RecordTest",
@@ -210,7 +210,7 @@ public class SourceGeneratorEdgeCaseTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        RecordWithInitProps clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -244,14 +244,14 @@ public class SourceGeneratorEdgeCaseTests
     public void PrivateSetter_Properties_Should_Be_Skipped()
     {
         // Arrange
-        var original = new ClassWithPrivateSetter
+        ClassWithPrivateSetter original = new ClassWithPrivateSetter
         {
             PublicProperty = 100
         };
         original.SetPrivate(200);
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithPrivateSetter clone = original.FastDeepClone();
 
         // Assert - public property should be cloned, private setter property will be default
         Assert.That(clone, Is.Not.Null);
@@ -293,7 +293,7 @@ public class SourceGeneratorEdgeCaseTests
     {
         // Arrange
         int counter = 0;
-        var original = new ClassWithDelegates
+        ClassWithDelegates original = new ClassWithDelegates
         {
             IntFunc = () => ++counter,
             SimpleAction = () => counter++,
@@ -301,7 +301,7 @@ public class SourceGeneratorEdgeCaseTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithDelegates clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -321,7 +321,7 @@ public class SourceGeneratorEdgeCaseTests
     {
         // Arrange
         int initCount = 0;
-        var original = new ClassWithLazy
+        ClassWithLazy original = new ClassWithLazy
         {
             LazyValue = new Lazy<string>(() =>
             {
@@ -332,7 +332,7 @@ public class SourceGeneratorEdgeCaseTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithLazy clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -341,8 +341,8 @@ public class SourceGeneratorEdgeCaseTests
         Assert.That(clone.LazyValue, Is.SameAs(original.LazyValue));
         
         // Accessing value should only initialize once
-        var _ = clone.LazyValue!.Value;
-        var __ = original.LazyValue!.Value;
+        string _ = clone.LazyValue!.Value;
+        string __ = original.LazyValue!.Value;
         Assert.That(initCount, Is.EqualTo(1)); // Should be 1 because same Lazy instance
     }
 
@@ -351,15 +351,15 @@ public class SourceGeneratorEdgeCaseTests
     public void WeakReference_Should_Be_Shallow_Copied()
     {
         // Arrange
-        var target = new object();
-        var original = new ClassWithWeakReference
+        object target = new object();
+        ClassWithWeakReference original = new ClassWithWeakReference
         {
             WeakRef = new WeakReference<object>(target),
             Name = "Test"
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithWeakReference clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -368,8 +368,8 @@ public class SourceGeneratorEdgeCaseTests
         Assert.That(clone.WeakRef, Is.SameAs(original.WeakRef));
         
         // Both should reference the same target
-        original.WeakRef!.TryGetTarget(out var origTarget);
-        clone.WeakRef!.TryGetTarget(out var cloneTarget);
+        original.WeakRef!.TryGetTarget(out object? origTarget);
+        clone.WeakRef!.TryGetTarget(out object? cloneTarget);
         Assert.That(cloneTarget, Is.SameAs(origTarget));
     }
 
@@ -392,7 +392,7 @@ public class SourceGeneratorEdgeCaseTests
     public void Complex_EdgeCase_Combining_Multiple_Issues()
     {
         // Arrange
-        var original = new ComplexEdgeCase
+        ComplexEdgeCase original = new ComplexEdgeCase
         {
             Matrix = new int[2, 2] { { 1, 2 }, { 3, 4 } },
             ListField = new List<int> { 10, 20, 30 },
@@ -402,7 +402,7 @@ public class SourceGeneratorEdgeCaseTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ComplexEdgeCase clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -452,12 +452,12 @@ public class SourceGeneratorEdgeCaseTests
     public void MultiDimArray_HttpClient_Should_Be_DeepCloned()
     {
         // Arrange
-        var client1 = new HttpClient();
-        var client2 = new HttpClient();
-        var client3 = new HttpClient();
-        var client4 = new HttpClient();
+        HttpClient client1 = new HttpClient();
+        HttpClient client2 = new HttpClient();
+        HttpClient client3 = new HttpClient();
+        HttpClient client4 = new HttpClient();
 
-        var original = new ClassWithHttpClientMatrix
+        ClassWithHttpClientMatrix original = new ClassWithHttpClientMatrix
         {
             Name = "HttpClientTest",
             ClientMatrix = new HttpClient[2, 2]
@@ -468,7 +468,7 @@ public class SourceGeneratorEdgeCaseTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithHttpClientMatrix clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -490,19 +490,19 @@ public class SourceGeneratorEdgeCaseTests
     public void MultiDimArray_3D_HttpClient_Should_Be_DeepCloned()
     {
         // Arrange
-        var clients = new HttpClient[2, 2, 2];
+        HttpClient[,,] clients = new HttpClient[2, 2, 2];
         for (int i = 0; i < 2; i++)
             for (int j = 0; j < 2; j++)
                 for (int k = 0; k < 2; k++)
                     clients[i, j, k] = new HttpClient();
 
-        var original = new ClassWithHttpClient3dArray
+        ClassWithHttpClient3dArray original = new ClassWithHttpClient3dArray
         {
             ClientCube = clients
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithHttpClient3dArray clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -550,7 +550,7 @@ public class SourceGeneratorEdgeCaseTests
     public void JaggedArray_2D_Should_Be_Cloned()
     {
         // Arrange
-        var original = new ClassWithJaggedArray
+        ClassWithJaggedArray original = new ClassWithJaggedArray
         {
             Name = "Test",
             JaggedInts = new int[][]
@@ -562,7 +562,7 @@ public class SourceGeneratorEdgeCaseTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithJaggedArray clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -591,7 +591,7 @@ public class SourceGeneratorEdgeCaseTests
     public void JaggedArray_3D_Should_Be_Cloned()
     {
         // Arrange
-        var original = new ClassWith3LevelJaggedArray
+        ClassWith3LevelJaggedArray original = new ClassWith3LevelJaggedArray
         {
             DeepJagged = new int[][][]
             {
@@ -608,7 +608,7 @@ public class SourceGeneratorEdgeCaseTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWith3LevelJaggedArray clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -636,7 +636,7 @@ public class SourceGeneratorEdgeCaseTests
     public void JaggedArray_WithObjects_Should_Be_Cloned()
     {
         // Arrange
-        var original = new ClassWithJaggedArrayOfObjects
+        ClassWithJaggedArrayOfObjects original = new ClassWithJaggedArrayOfObjects
         {
             Items = new SimpleItem[][]
             {
@@ -653,7 +653,7 @@ public class SourceGeneratorEdgeCaseTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithJaggedArrayOfObjects clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -684,7 +684,7 @@ public class SourceGeneratorEdgeCaseTests
     public void JaggedArray_WithNullElements_Should_Be_Handled()
     {
         // Arrange
-        var original = new ClassWithJaggedArray
+        ClassWithJaggedArray original = new ClassWithJaggedArray
         {
             Name = "WithNulls",
             JaggedInts = new int[][]
@@ -696,7 +696,7 @@ public class SourceGeneratorEdgeCaseTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithJaggedArray clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -724,7 +724,7 @@ public class SourceGeneratorEdgeCaseTests
     public void Struct_With_Fields_Should_Be_Cloned()
     {
         // Arrange
-        var original = new StructWithFields
+        StructWithFields original = new StructWithFields
         {
             IntField = 42,
             StringProp = "Test",
@@ -732,7 +732,7 @@ public class SourceGeneratorEdgeCaseTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        StructWithFields clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone.IntField, Is.EqualTo(42));
@@ -759,7 +759,7 @@ public class SourceGeneratorEdgeCaseTests
     public void Class_With_Required_Members_Should_Be_Cloned()
     {
         // Arrange
-        var original = new ClassWithRequiredMembers 
+        ClassWithRequiredMembers original = new ClassWithRequiredMembers 
         { 
             RequiredName = "Required", 
             RequiredId = 123,
@@ -767,7 +767,7 @@ public class SourceGeneratorEdgeCaseTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithRequiredMembers clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -793,14 +793,14 @@ public class SourceGeneratorEdgeCaseTests
     public void Class_With_Init_Properties_And_Cycles_Should_Be_Deep_Cloned()
     {
         // Arrange
-        var original = new ClassWithInitAndCycle
+        ClassWithInitAndCycle original = new ClassWithInitAndCycle
         {
             Name = "CyclicInit"
         };
         original.Self = original;
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithInitAndCycle clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -831,11 +831,11 @@ public class SourceGeneratorEdgeCaseTests
     public void Struct_With_Readonly_Reference_Fields_Should_Be_Deep_Cloned()
     {
         // Arrange
-        var list = new List<int> { 1, 2, 3 };
-        var original = new StructWithReadonlyRefs(list, 42);
+        List<int> list = new List<int> { 1, 2, 3 };
+        StructWithReadonlyRefs original = new StructWithReadonlyRefs(list, 42);
 
         // Act
-        var clone = original.FastDeepClone();
+        StructWithReadonlyRefs clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone.NormalField, Is.EqualTo(42));
@@ -897,7 +897,7 @@ public class SourceGeneratorEdgeCaseTests
     {
         // Arrange - This test documents the expected behavior for Issue #19
         // Currently this scenario is NOT supported by the source generator
-        var original = new ClassWithObservableCollectionGetterOnly
+        ClassWithObservableCollectionGetterOnly original = new ClassWithObservableCollectionGetterOnly
         {
             Name = "Test"
         };
@@ -906,7 +906,7 @@ public class SourceGeneratorEdgeCaseTests
         original.Items.Add("Item3");
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithObservableCollectionGetterOnly clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -930,14 +930,14 @@ public class SourceGeneratorEdgeCaseTests
     public void ObservableCollection_WithGetterSetter_Should_Be_Cloned()
     {
         // Arrange - This scenario is already supported
-        var original = new ClassWithObservableCollectionGetterSetter
+        ClassWithObservableCollectionGetterSetter original = new ClassWithObservableCollectionGetterSetter
         {
             Name = "Test",
             Items = new ObservableCollection<string> { "Item1", "Item2", "Item3" }
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithObservableCollectionGetterSetter clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -961,14 +961,14 @@ public class SourceGeneratorEdgeCaseTests
     public void ObservableCollection_WithInit_Should_Be_Cloned()
     {
         // Arrange - This is the workaround mentioned in Issue #19
-        var original = new ClassWithObservableCollectionInit
+        ClassWithObservableCollectionInit original = new ClassWithObservableCollectionInit
         {
             Name = "Test",
             Items = new ObservableCollection<string> { "Item1", "Item2", "Item3" }
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithObservableCollectionInit clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -992,7 +992,7 @@ public class SourceGeneratorEdgeCaseTests
     public void ObservableCollection_WithObjects_GetterOnly_Should_Be_Deep_Cloned()
     {
         // Arrange - Test with nested objects to verify deep cloning
-        var original = new ClassWithObservableCollectionOfObjects
+        ClassWithObservableCollectionOfObjects original = new ClassWithObservableCollectionOfObjects
         {
             Description = "Container"
         };
@@ -1000,7 +1000,7 @@ public class SourceGeneratorEdgeCaseTests
         original.Items.Add(new ObservableItem { Value = "Second", Id = 2 });
 
         // Act
-        var clone = original.FastDeepClone();
+        ClassWithObservableCollectionOfObjects clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);

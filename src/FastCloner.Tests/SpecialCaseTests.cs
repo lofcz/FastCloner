@@ -804,7 +804,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         string val = "value";
         cwt.Add(key, val);
         
-        var clone = cwt.DeepClone();
+        ConditionalWeakTable<string, string> clone = cwt.DeepClone();
         
         Assert.That(clone, Is.Not.SameAs(cwt));
         
@@ -824,7 +824,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         string target = "target";
         WeakReference<string> weak = new WeakReference<string>(target);
         
-        var clone = weak.DeepClone();
+        WeakReference<string> clone = weak.DeepClone();
         
         Assert.That(clone, Is.SameAs(weak));
         
@@ -838,7 +838,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     public void CancellationTokenSource_DeepClone_VerifyBehavior()
     {
         CancellationTokenSource cts = new CancellationTokenSource();
-        var clone = cts.DeepClone();
+        CancellationTokenSource clone = cts.DeepClone();
         Assert.That(clone, Is.SameAs(cts));
     }
 
@@ -848,8 +848,8 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         // CancellationTokenSource manages native handles and cannot be safely deep cloned by value.
         // It is now treated as a "Safe" type, meaning DeepClone returns the SAME instance.
         
-        using var cts = new CancellationTokenSource();
-        var clone = cts.DeepClone();
+        using CancellationTokenSource cts = new CancellationTokenSource();
+        CancellationTokenSource clone = cts.DeepClone();
         
         // Assert it is the SAME object (Reference Copy)
         Assert.That(clone, Is.SameAs(cts));
@@ -3448,8 +3448,8 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     [Test]
     public void ValueTask_Should_Be_Safe()
     {
-        var original = new ValueTask<int>(42);
-        var clone = original.DeepClone();
+        ValueTask<int> original = new ValueTask<int>(42);
+        ValueTask<int> clone = original.DeepClone();
         
         Assert.That(clone.Result, Is.EqualTo(42));
     }
@@ -3457,11 +3457,11 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     [Test]
     public void ValueTask_From_Task_Should_Be_Safe()
     {
-        var tcs = new TaskCompletionSource<int>();
+        TaskCompletionSource<int> tcs = new TaskCompletionSource<int>();
         tcs.SetResult(42);
-        var original = new ValueTask<int>(tcs.Task);
+        ValueTask<int> original = new ValueTask<int>(tcs.Task);
         
-        var clone = original.DeepClone();
+        ValueTask<int> clone = original.DeepClone();
         
         Assert.That(clone.Result, Is.EqualTo(42));
     }
@@ -3473,7 +3473,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         string target = "target";
         WeakReference<string> weak = new WeakReference<string>(target);
         
-        var clone = weak.DeepClone();
+        WeakReference<string> clone = weak.DeepClone();
         
         // Assert it is the SAME object (Reference Copy)
         Assert.That(clone, Is.SameAs(weak));

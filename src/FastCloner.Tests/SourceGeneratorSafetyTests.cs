@@ -22,7 +22,7 @@ namespace FastCloner.Tests.SourceGenerator
         public void Verify_SourceGenerator_Uses_ReferenceCopy_For_SpecialTypes()
         {
             // Arrange
-            var source = new SafetyTestClass
+            SafetyTestClass source = new SafetyTestClass
             {
                 Cts = new CancellationTokenSource(),
                 WeakRef = new WeakReference<string>("test"),
@@ -32,7 +32,7 @@ namespace FastCloner.Tests.SourceGenerator
 
             // Act
             // This calls the Source Generated FastDeepClone() method
-            var clone = source.FastDeepClone();
+            SafetyTestClass clone = source.FastDeepClone();
 
             // Assert
             Assert.That(clone, Is.Not.SameAs(source));

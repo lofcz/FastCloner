@@ -8,12 +8,12 @@ public class CollectionTests
     [Test]
     public void PriorityQueue_Should_Be_Deep_Cloned_Correctly()
     {
-        var original = new PriorityQueue<string, int>();
+        PriorityQueue<string, int> original = new PriorityQueue<string, int>();
         original.Enqueue("Low", 10);
         original.Enqueue("High", 1);
         original.Enqueue("Medium", 5);
 
-        var clone = original.DeepClone();
+        PriorityQueue<string, int> clone = original.DeepClone();
 
         Assert.That(clone, Is.Not.SameAs(original));
         Assert.That(clone.Count, Is.EqualTo(3));
@@ -31,12 +31,12 @@ public class CollectionTests
     [Test]
     public void Stack_Should_Be_Deep_Cloned_Correctly()
     {
-        var original = new Stack<int>();
+        Stack<int> original = new Stack<int>();
         original.Push(1);
         original.Push(2);
         original.Push(3);
 
-        var clone = original.DeepClone();
+        Stack<int> clone = original.DeepClone();
 
         Assert.That(clone, Is.Not.SameAs(original));
         Assert.That(clone.Count, Is.EqualTo(3));
@@ -54,12 +54,12 @@ public class CollectionTests
     [Test]
     public void Queue_Should_Be_Deep_Cloned_Correctly()
     {
-        var original = new Queue<int>();
+        Queue<int> original = new Queue<int>();
         original.Enqueue(1);
         original.Enqueue(2);
         original.Enqueue(3);
 
-        var clone = original.DeepClone();
+        Queue<int> clone = original.DeepClone();
 
         Assert.That(clone, Is.Not.SameAs(original));
         Assert.That(clone.Count, Is.EqualTo(3));
@@ -77,12 +77,12 @@ public class CollectionTests
     [Test]
     public void ConcurrentStack_Should_Be_Deep_Cloned_Correctly()
     {
-        var original = new ConcurrentStack<int>();
+        ConcurrentStack<int> original = new ConcurrentStack<int>();
         original.Push(1);
         original.Push(2);
         original.Push(3);
 
-        var clone = original.DeepClone();
+        ConcurrentStack<int> clone = original.DeepClone();
 
         Assert.That(clone, Is.Not.SameAs(original));
         Assert.That(clone.Count, Is.EqualTo(3));
@@ -107,12 +107,12 @@ public class CollectionTests
     [Test]
     public void ConcurrentQueue_Should_Be_Deep_Cloned_Correctly()
     {
-        var original = new ConcurrentQueue<int>();
+        ConcurrentQueue<int> original = new ConcurrentQueue<int>();
         original.Enqueue(1);
         original.Enqueue(2);
         original.Enqueue(3);
 
-        var clone = original.DeepClone();
+        ConcurrentQueue<int> clone = original.DeepClone();
 
         Assert.That(clone, Is.Not.SameAs(original));
         Assert.That(clone.Count, Is.EqualTo(3));
@@ -137,12 +137,12 @@ public class CollectionTests
     [Test]
     public void BlockingCollection_Should_Be_Deep_Cloned_Correctly()
     {
-        var original = new BlockingCollection<int>();
+        BlockingCollection<int> original = new BlockingCollection<int>();
         original.Add(1);
         original.Add(2);
         original.Add(3);
 
-        var clone = original.DeepClone();
+        BlockingCollection<int> clone = original.DeepClone();
 
         Assert.That(clone, Is.Not.SameAs(original));
         Assert.That(clone.Count, Is.EqualTo(3));
@@ -159,12 +159,12 @@ public class CollectionTests
     [Test]
     public void LinkedList_Should_Be_Deep_Cloned_Correctly()
     {
-        var original = new LinkedList<int>();
+        LinkedList<int> original = new LinkedList<int>();
         original.AddLast(1);
         original.AddLast(2);
         original.AddLast(3);
 
-        var clone = original.DeepClone();
+        LinkedList<int> clone = original.DeepClone();
 
         Assert.That(clone, Is.Not.SameAs(original));
         Assert.That(clone.Count, Is.EqualTo(3));

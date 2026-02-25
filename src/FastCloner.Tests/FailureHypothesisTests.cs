@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using System.Threading.Channels;
 using System.Threading.Tasks.Dataflow;
 
 namespace FastCloner.Tests;
@@ -10,11 +11,11 @@ public class FailureHypothesisTests
     [Test]
     public void BufferBlock_Should_Be_Deep_Cloned_Independently()
     {
-        var original = new BufferBlock<int>();
+        BufferBlock<int> original = new BufferBlock<int>();
         original.Post(1);
         
         // Deep clone
-        var clone = original.DeepClone();
+        BufferBlock<int> clone = original.DeepClone();
         
         Assert.That(clone, Is.Not.SameAs(original));
         
@@ -42,8 +43,8 @@ public class FailureHypothesisTests
     [Test]
     public void SemaphoreSlim_Should_Be_Deep_Cloned_Independently()
     {
-        using var original = new SemaphoreSlim(1, 1);
-        var clone = original.DeepClone();
+        using SemaphoreSlim original = new SemaphoreSlim(1, 1);
+        SemaphoreSlim clone = original.DeepClone();
 
         Assert.That(clone, Is.Not.SameAs(original));
         
@@ -59,13 +60,13 @@ public class FailureHypothesisTests
     [Test]
     public void ConcurrentBag_Should_Be_Deep_Cloned_Correctly()
     {
-        var original = new ConcurrentBag<int> { 1, 2, 3 };
-        var clone = original.DeepClone();
+        ConcurrentBag<int> original = new ConcurrentBag<int> { 1, 2, 3 };
+        ConcurrentBag<int> clone = original.DeepClone();
 
         Assert.That(clone, Is.Not.SameAs(original));
         
         // Verify items exist
-        var items = clone.ToList();
+        List<int> items = clone.ToList();
         Assert.That(items, Has.Count.EqualTo(3));
         Assert.That(items, Contains.Item(1));
         Assert.That(items, Contains.Item(2));
@@ -87,8 +88,8 @@ public class FailureHypothesisTests
     [Test]
     public void CancellationTokenSource_Should_Be_Reference_Copied()
     {
-        using var original = new CancellationTokenSource();
-        var clone = original.DeepClone();
+        using CancellationTokenSource original = new CancellationTokenSource();
+        CancellationTokenSource clone = original.DeepClone();
 
         Assert.That(clone, Is.SameAs(original));
         Assert.That(clone.IsCancellationRequested, Is.False);
@@ -108,11 +109,11 @@ public class FailureHypothesisTests
     [Test]
     public void ConcurrentQueue_Should_Be_Deep_Cloned_Correctly()
     {
-        var original = new ConcurrentQueue<int>();
+        ConcurrentQueue<int> original = new ConcurrentQueue<int>();
         original.Enqueue(1);
         original.Enqueue(2);
         
-        var clone = original.DeepClone();
+        ConcurrentQueue<int> clone = original.DeepClone();
         
         Assert.That(clone, Is.Not.SameAs(original));
         Assert.That(clone.Count, Is.EqualTo(2));
@@ -139,11 +140,11 @@ public class FailureHypothesisTests
     [Test]
     public void ConcurrentStack_Should_Be_Deep_Cloned_Correctly()
     {
-        var original = new ConcurrentStack<int>();
+        ConcurrentStack<int> original = new ConcurrentStack<int>();
         original.Push(1);
         original.Push(2);
         
-        var clone = original.DeepClone();
+        ConcurrentStack<int> clone = original.DeepClone();
         
         Assert.That(clone, Is.Not.SameAs(original));
         Assert.That(clone.Count, Is.EqualTo(2));
@@ -162,10 +163,10 @@ public class FailureHypothesisTests
     [Test]
     public void Channel_Should_Be_Deep_Cloned_Independently()
     {
-        var original = System.Threading.Channels.Channel.CreateUnbounded<int>();
+        Channel<int> original = System.Threading.Channels.Channel.CreateUnbounded<int>();
         original.Writer.TryWrite(1);
         
-        var clone = original.DeepClone();
+        Channel<int> clone = original.DeepClone();
         
         Assert.That(clone, Is.Not.SameAs(original));
         
@@ -186,8 +187,8 @@ public class FailureHypothesisTests
     [Test]
     public void ManualResetEventSlim_Should_Be_Deep_Cloned_Independently()
     {
-        using var original = new ManualResetEventSlim(false);
-        var clone = original.DeepClone();
+        using ManualResetEventSlim original = new ManualResetEventSlim(false);
+        ManualResetEventSlim clone = original.DeepClone();
         
         Assert.That(clone, Is.Not.SameAs(original));
         Assert.That(clone.IsSet, Is.False);
@@ -210,10 +211,10 @@ public class FailureHypothesisTests
     [Test]
     public void ReaderWriterLockSlim_Should_Be_Deep_Cloned_Independently()
     {
-        using var original = new ReaderWriterLockSlim();
+        using ReaderWriterLockSlim original = new ReaderWriterLockSlim();
         original.EnterReadLock();
         
-        var clone = original.DeepClone();
+        ReaderWriterLockSlim clone = original.DeepClone();
         
         Assert.That(clone, Is.Not.SameAs(original));
 
@@ -231,10 +232,10 @@ public class FailureHypothesisTests
     [Test]
     public void Task_Should_Not_Be_Deep_Cloned()
     {
-        var tcs = new TaskCompletionSource<int>();
+        TaskCompletionSource<int> tcs = new TaskCompletionSource<int>();
         Task<int> original = tcs.Task;
         
-        var clone = original.DeepClone();
+        Task<int> clone = original.DeepClone();
         
         tcs.SetResult(42);
         

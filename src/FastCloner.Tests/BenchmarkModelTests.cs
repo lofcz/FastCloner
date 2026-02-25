@@ -92,10 +92,10 @@ public class BenchmarkModelTests
     public void ComplexModel_DeepClone_ShouldCloneAllProperties()
     {
         // Arrange
-        var original = CreateComplexModel();
+        ComplexModel original = CreateComplexModel();
 
         // Act
-        var clone = original.FastDeepClone();
+        ComplexModel clone = original.FastDeepClone();
 
         // Assert - verify it's a different instance
         Assert.That(clone, Is.Not.Null);
@@ -140,8 +140,8 @@ public class BenchmarkModelTests
     public void ComplexModel_ModifyClone_ShouldNotAffectOriginal()
     {
         // Arrange
-        var original = CreateComplexModel();
-        var clone = original.FastDeepClone();
+        ComplexModel original = CreateComplexModel();
+        ComplexModel clone = original.FastDeepClone();
 
         // Act - modify the clone
         clone!.Name = "Modified";

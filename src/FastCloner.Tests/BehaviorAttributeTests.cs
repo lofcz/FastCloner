@@ -98,8 +98,8 @@ public class BehaviorAttributeTests
     public void FastClonerReference_PreservesReference()
     {
         // Arrange
-        var service = new SharedService { ServiceName = "TestService", InstanceId = 42 };
-        var original = new ClassWithReferenceAttribute
+        SharedService service = new SharedService { ServiceName = "TestService", InstanceId = 42 };
+        ClassWithReferenceAttribute original = new ClassWithReferenceAttribute
         {
             Name = "Test",
             SharedService = service,
@@ -107,7 +107,7 @@ public class BehaviorAttributeTests
         };
 
         // Act
-        var clone = original.DeepClone();
+        ClassWithReferenceAttribute clone = original.DeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -127,7 +127,7 @@ public class BehaviorAttributeTests
     public void FastClonerReference_WithNullValue_ClonesSuccessfully()
     {
         // Arrange
-        var original = new ClassWithReferenceAttribute
+        ClassWithReferenceAttribute original = new ClassWithReferenceAttribute
         {
             Name = "Test",
             SharedService = null!,
@@ -135,7 +135,7 @@ public class BehaviorAttributeTests
         };
 
         // Act
-        var clone = original.DeepClone();
+        ClassWithReferenceAttribute clone = original.DeepClone();
 
         // Assert
         Assert.That(clone, Is.Not.Null);
@@ -151,7 +151,7 @@ public class BehaviorAttributeTests
     public void FastClonerBehavior_Reference_PreservesReference()
     {
         // Arrange
-        var original = new ClassWithExplicitBehavior
+        ClassWithExplicitBehavior original = new ClassWithExplicitBehavior
         {
             Name = "Test",
             Service1 = new SharedService { ServiceName = "Svc", InstanceId = 1 },
@@ -161,7 +161,7 @@ public class BehaviorAttributeTests
         };
 
         // Act
-        var clone = original.DeepClone();
+        ClassWithExplicitBehavior clone = original.DeepClone();
 
         // Assert - Reference behavior
         Assert.That(clone.Service1, Is.SameAs(original.Service1));
@@ -171,7 +171,7 @@ public class BehaviorAttributeTests
     public void FastClonerBehavior_Shallow_CopiesReference()
     {
         // Arrange
-        var original = new ClassWithExplicitBehavior
+        ClassWithExplicitBehavior original = new ClassWithExplicitBehavior
         {
             Name = "Test",
             Service1 = new SharedService { ServiceName = "Svc", InstanceId = 1 },
@@ -181,7 +181,7 @@ public class BehaviorAttributeTests
         };
 
         // Act
-        var clone = original.DeepClone();
+        ClassWithExplicitBehavior clone = original.DeepClone();
 
         // Assert - Shallow behavior copies reference directly
         Assert.That(clone.ShallowData, Is.SameAs(original.ShallowData));
@@ -191,7 +191,7 @@ public class BehaviorAttributeTests
     public void FastClonerBehavior_Ignore_SetsToNull()
     {
         // Arrange
-        var original = new ClassWithExplicitBehavior
+        ClassWithExplicitBehavior original = new ClassWithExplicitBehavior
         {
             Name = "Test",
             Service1 = new SharedService { ServiceName = "Svc", InstanceId = 1 },
@@ -201,7 +201,7 @@ public class BehaviorAttributeTests
         };
 
         // Act
-        var clone = original.DeepClone();
+        ClassWithExplicitBehavior clone = original.DeepClone();
 
         // Assert - Ignored behavior sets to null/default
         Assert.That(clone.IgnoredData, Is.Null);
@@ -211,7 +211,7 @@ public class BehaviorAttributeTests
     public void FastClonerBehavior_Clone_DeepClones()
     {
         // Arrange
-        var original = new ClassWithExplicitBehavior
+        ClassWithExplicitBehavior original = new ClassWithExplicitBehavior
         {
             Name = "Test",
             Service1 = new SharedService { ServiceName = "Svc", InstanceId = 1 },
@@ -221,7 +221,7 @@ public class BehaviorAttributeTests
         };
 
         // Act
-        var clone = original.DeepClone();
+        ClassWithExplicitBehavior clone = original.DeepClone();
 
         // Assert - Explicit Clone behavior deep clones
         Assert.That(clone.ExplicitCloneData, Is.Not.SameAs(original.ExplicitCloneData));
@@ -236,7 +236,7 @@ public class BehaviorAttributeTests
     public void MixedAttributes_AllBehaviorsWorkCorrectly()
     {
         // Arrange
-        var original = new MixedAttributeClass
+        MixedAttributeClass original = new MixedAttributeClass
         {
             Ignored = new InnerData { Value = "Ignored" },
             Shallow = new InnerData { Value = "Shallow" },
@@ -245,7 +245,7 @@ public class BehaviorAttributeTests
         };
 
         // Act
-        var clone = original.DeepClone();
+        MixedAttributeClass clone = original.DeepClone();
 
         // Assert
         Assert.That(clone.Ignored, Is.Null);                          // [FastClonerIgnore] -> null
@@ -263,14 +263,14 @@ public class BehaviorAttributeTests
     public void FastClonerIgnore_WithFalse_DoesNotIgnore()
     {
         // Arrange
-        var original = new ClassWithIgnoreFalse
+        ClassWithIgnoreFalse original = new ClassWithIgnoreFalse
         {
             NotIgnored = new InnerData { Value = "NotIgnored" },
             IsIgnored = new InnerData { Value = "IsIgnored" }
         };
 
         // Act
-        var clone = original.DeepClone();
+        ClassWithIgnoreFalse clone = original.DeepClone();
 
         // Assert
         // NotIgnored should be deep cloned (ignored=false means NOT ignored)
@@ -346,7 +346,7 @@ public class BehaviorAttributeTests
     public void TypeLevelReference_PreservesReference()
     {
         // Arrange
-        var original = new ContainerWithTypeBehaviors
+        ContainerWithTypeBehaviors original = new ContainerWithTypeBehaviors
         {
             RefType = new TypeMarkedAsReference { Name = "Ref", Value = 42 },
             IgnoredType = new TypeMarkedAsIgnored { Data = "Ignored" },
@@ -355,7 +355,7 @@ public class BehaviorAttributeTests
         };
 
         // Act
-        var clone = original.DeepClone();
+        ContainerWithTypeBehaviors clone = original.DeepClone();
 
         // Assert - TypeMarkedAsReference should preserve reference
         Assert.That(clone.RefType, Is.SameAs(original.RefType));
@@ -365,7 +365,7 @@ public class BehaviorAttributeTests
     public void TypeLevelIgnore_SetsToNull()
     {
         // Arrange
-        var original = new ContainerWithTypeBehaviors
+        ContainerWithTypeBehaviors original = new ContainerWithTypeBehaviors
         {
             RefType = new TypeMarkedAsReference { Name = "Ref", Value = 42 },
             IgnoredType = new TypeMarkedAsIgnored { Data = "Ignored" },
@@ -374,7 +374,7 @@ public class BehaviorAttributeTests
         };
 
         // Act
-        var clone = original.DeepClone();
+        ContainerWithTypeBehaviors clone = original.DeepClone();
 
         // Assert - TypeMarkedAsIgnored should be null
         Assert.That(clone.IgnoredType, Is.Null);
@@ -384,7 +384,7 @@ public class BehaviorAttributeTests
     public void TypeLevelShallow_CopiesReference()
     {
         // Arrange
-        var original = new ContainerWithTypeBehaviors
+        ContainerWithTypeBehaviors original = new ContainerWithTypeBehaviors
         {
             RefType = new TypeMarkedAsReference { Name = "Ref", Value = 42 },
             IgnoredType = new TypeMarkedAsIgnored { Data = "Ignored" },
@@ -393,7 +393,7 @@ public class BehaviorAttributeTests
         };
 
         // Act
-        var clone = original.DeepClone();
+        ContainerWithTypeBehaviors clone = original.DeepClone();
 
         // Assert - TypeMarkedAsShallow should be same reference (shallow clone for members = copy reference)
         Assert.That(clone.ShallowType, Is.SameAs(original.ShallowType));
@@ -403,7 +403,7 @@ public class BehaviorAttributeTests
     public void TypeLevel_NormalType_DeepClones()
     {
         // Arrange
-        var original = new ContainerWithTypeBehaviors
+        ContainerWithTypeBehaviors original = new ContainerWithTypeBehaviors
         {
             RefType = new TypeMarkedAsReference { Name = "Ref", Value = 42 },
             IgnoredType = new TypeMarkedAsIgnored { Data = "Ignored" },
@@ -412,7 +412,7 @@ public class BehaviorAttributeTests
         };
 
         // Act
-        var clone = original.DeepClone();
+        ContainerWithTypeBehaviors clone = original.DeepClone();
 
         // Assert - Normal type should be deep cloned
         Assert.That(clone.NormalType, Is.Not.SameAs(original.NormalType));
@@ -423,14 +423,14 @@ public class BehaviorAttributeTests
     public void MemberLevelOverride_TakesPrecedenceOverTypeLevel()
     {
         // Arrange
-        var original = new ContainerWithMemberOverride
+        ContainerWithMemberOverride original = new ContainerWithMemberOverride
         {
             OverriddenToClone = new TypeMarkedAsReference { Name = "Override", Value = 1 },
             DefaultBehavior = new TypeMarkedAsReference { Name = "Default", Value = 2 }
         };
 
         // Act
-        var clone = original.DeepClone();
+        ContainerWithMemberOverride clone = original.DeepClone();
 
         // Assert
         // OverriddenToClone should be deep cloned (member-level override)

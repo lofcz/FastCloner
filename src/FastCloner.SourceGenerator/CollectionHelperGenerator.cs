@@ -415,13 +415,9 @@ internal static class CollectionHelperGenerator
 
         if (hasClonableAttr)
         {
-            if (parentNeedsState)
-            {
-                string extensionClassName = MemberCloneGenerator.GetExtensionClassNameForType(member.ElementTypeName!, context.Model.Namespace);
-                return $"{extensionClassName}.InternalFastDeepClone({itemVar}, state)";
-            }
-            
-            return $"{itemVar}?.FastDeepClone()";
+            string extensionClassName = MemberCloneGenerator.GetExtensionClassNameForType(member);
+            string stateArg = parentNeedsState ? "state" : "null";
+            return $"{extensionClassName}.InternalFastDeepClone({itemVar}, {stateArg})";
         }
 
         if (context.TryGetMemberModel(member.ElementTypeName!, out MemberModel nestedModel))

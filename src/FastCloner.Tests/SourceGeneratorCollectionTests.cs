@@ -332,7 +332,7 @@ public class SourceGeneratorCollectionTests
     public void Stack_With_Complex_Elements_Should_Preserve_LIFO_Order()
     {
         // Arrange
-        var original = new StackContainer
+        StackContainer original = new StackContainer
         {
             Items = new Stack<MutableItem>()
         };
@@ -341,7 +341,7 @@ public class SourceGeneratorCollectionTests
         original.Items.Push(new MutableItem { Id = 3, Name = "Third" });
 
         // Act
-        var clone = original.FastDeepClone();
+        StackContainer clone = original.FastDeepClone();
 
         // Assert - verify LIFO order (3, 2, 1)
         Assert.That(clone, Is.Not.Null);
@@ -349,7 +349,7 @@ public class SourceGeneratorCollectionTests
         Assert.That(clone.Items, Is.Not.SameAs(original.Items));
         Assert.That(clone.Items!.Count, Is.EqualTo(3));
 
-        var cloneItems = clone.Items.ToArray();
+        MutableItem[] cloneItems = clone.Items.ToArray();
         Assert.That(cloneItems[0].Id, Is.EqualTo(3), "First pop should be 3 (LIFO)");
         Assert.That(cloneItems[1].Id, Is.EqualTo(2), "Second pop should be 2 (LIFO)");
         Assert.That(cloneItems[2].Id, Is.EqualTo(1), "Third pop should be 1 (LIFO)");
@@ -363,8 +363,8 @@ public class SourceGeneratorCollectionTests
     [SourceGeneratorCompatible]
     public void Stack_Empty_Should_Clone_Correctly()
     {
-        var original = new StackContainer { Items = new Stack<MutableItem>() };
-        var clone = original.FastDeepClone();
+        StackContainer original = new StackContainer { Items = new Stack<MutableItem>() };
+        StackContainer clone = original.FastDeepClone();
         
         Assert.That(clone!.Items, Is.Not.Null);
         Assert.That(clone.Items!.Count, Is.EqualTo(0));
@@ -379,7 +379,7 @@ public class SourceGeneratorCollectionTests
     public void Queue_With_Complex_Elements_Should_Preserve_FIFO_Order()
     {
         // Arrange
-        var original = new QueueContainer
+        QueueContainer original = new QueueContainer
         {
             Items = new Queue<MutableItem>()
         };
@@ -388,13 +388,13 @@ public class SourceGeneratorCollectionTests
         original.Items.Enqueue(new MutableItem { Id = 3, Name = "Third" });
 
         // Act
-        var clone = original.FastDeepClone();
+        QueueContainer clone = original.FastDeepClone();
 
         // Assert - verify FIFO order (1, 2, 3)
         Assert.That(clone!.Items, Is.Not.Null);
         Assert.That(clone.Items!.Count, Is.EqualTo(3));
 
-        var cloneItems = clone.Items.ToArray();
+        MutableItem[] cloneItems = clone.Items.ToArray();
         Assert.That(cloneItems[0].Id, Is.EqualTo(1), "First dequeue should be 1 (FIFO)");
         Assert.That(cloneItems[1].Id, Is.EqualTo(2), "Second dequeue should be 2 (FIFO)");
         Assert.That(cloneItems[2].Id, Is.EqualTo(3), "Third dequeue should be 3 (FIFO)");
@@ -413,7 +413,7 @@ public class SourceGeneratorCollectionTests
     public void LinkedList_With_Complex_Elements_Should_Preserve_Order()
     {
         // Arrange
-        var original = new LinkedListContainer
+        LinkedListContainer original = new LinkedListContainer
         {
             Items = new LinkedList<MutableItem>()
         };
@@ -422,7 +422,7 @@ public class SourceGeneratorCollectionTests
         original.Items.AddLast(new MutableItem { Id = 3, Name = "Third" });
 
         // Act
-        var clone = original.FastDeepClone();
+        LinkedListContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone!.Items, Is.Not.Null);
@@ -444,13 +444,13 @@ public class SourceGeneratorCollectionTests
     public void SortedSet_Should_Maintain_Sorted_Order()
     {
         // Arrange - insert out of order
-        var original = new SortedSetContainer
+        SortedSetContainer original = new SortedSetContainer
         {
             Numbers = new SortedSet<int> { 3, 1, 4, 1, 5, 9, 2, 6 }
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        SortedSetContainer clone = original.FastDeepClone();
 
         // Assert - should be sorted: 1, 2, 3, 4, 5, 6, 9
         Assert.That(clone!.Numbers, Is.Not.Null);
@@ -462,7 +462,7 @@ public class SourceGeneratorCollectionTests
     public void SortedDictionary_Should_Maintain_Key_Order_And_Deep_Clone_Values()
     {
         // Arrange
-        var original = new SortedDictionaryContainer
+        SortedDictionaryContainer original = new SortedDictionaryContainer
         {
             Items = new SortedDictionary<int, MutableItem>
             {
@@ -473,11 +473,11 @@ public class SourceGeneratorCollectionTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        SortedDictionaryContainer clone = original.FastDeepClone();
 
         // Assert - keys should be in order: 1, 2, 3
         Assert.That(clone!.Items, Is.Not.Null);
-        var keys = clone.Items!.Keys.ToArray();
+        int[] keys = clone.Items!.Keys.ToArray();
         Assert.That(keys, Is.EqualTo(new[] { 1, 2, 3 }));
 
         // Verify deep clone
@@ -490,7 +490,7 @@ public class SourceGeneratorCollectionTests
     public void SortedList_Should_Maintain_Key_Order_And_Deep_Clone_Values()
     {
         // Arrange
-        var original = new SortedListContainer
+        SortedListContainer original = new SortedListContainer
         {
             Items = new SortedList<string, MutableItem>
             {
@@ -501,11 +501,11 @@ public class SourceGeneratorCollectionTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        SortedListContainer clone = original.FastDeepClone();
 
         // Assert - keys should be in order: alpha, bravo, charlie
         Assert.That(clone!.Items, Is.Not.Null);
-        var keys = clone.Items!.Keys.ToArray();
+        string[] keys = clone.Items!.Keys.ToArray();
         Assert.That(keys, Is.EqualTo(new[] { "alpha", "bravo", "charlie" }));
 
         // Verify deep clone
@@ -522,7 +522,7 @@ public class SourceGeneratorCollectionTests
     public void ConcurrentStack_With_Complex_Elements_Should_Preserve_Order()
     {
         // Arrange
-        var original = new ConcurrentStackContainer
+        ConcurrentStackContainer original = new ConcurrentStackContainer
         {
             Items = new ConcurrentStack<MutableItem>()
         };
@@ -531,18 +531,18 @@ public class SourceGeneratorCollectionTests
         original.Items.Push(new MutableItem { Id = 3, Name = "Third" });
 
         // Act
-        var clone = original.FastDeepClone();
+        ConcurrentStackContainer clone = original.FastDeepClone();
 
         // Assert - LIFO order
         Assert.That(clone!.Items, Is.Not.Null);
-        var cloneItems = clone.Items!.ToArray();
+        MutableItem[] cloneItems = clone.Items!.ToArray();
         Assert.That(cloneItems[0].Id, Is.EqualTo(3));
         Assert.That(cloneItems[1].Id, Is.EqualTo(2));
         Assert.That(cloneItems[2].Id, Is.EqualTo(1));
 
         // Verify deep clone
         cloneItems[0].Name = "Modified";
-        original.Items.TryPeek(out var originalTop);
+        original.Items.TryPeek(out MutableItem? originalTop);
         Assert.That(originalTop!.Name, Is.EqualTo("Third"));
     }
 
@@ -551,7 +551,7 @@ public class SourceGeneratorCollectionTests
     public void ConcurrentQueue_With_Complex_Elements_Should_Preserve_Order()
     {
         // Arrange
-        var original = new ConcurrentQueueContainer
+        ConcurrentQueueContainer original = new ConcurrentQueueContainer
         {
             Items = new ConcurrentQueue<MutableItem>()
         };
@@ -560,11 +560,11 @@ public class SourceGeneratorCollectionTests
         original.Items.Enqueue(new MutableItem { Id = 3, Name = "Third" });
 
         // Act
-        var clone = original.FastDeepClone();
+        ConcurrentQueueContainer clone = original.FastDeepClone();
 
         // Assert - FIFO order
         Assert.That(clone!.Items, Is.Not.Null);
-        var cloneItems = clone.Items!.ToArray();
+        MutableItem[] cloneItems = clone.Items!.ToArray();
         Assert.That(cloneItems[0].Id, Is.EqualTo(1));
         Assert.That(cloneItems[1].Id, Is.EqualTo(2));
         Assert.That(cloneItems[2].Id, Is.EqualTo(3));
@@ -575,7 +575,7 @@ public class SourceGeneratorCollectionTests
     public void ConcurrentDictionary_With_Complex_Values_Should_Deep_Clone()
     {
         // Arrange
-        var original = new ConcurrentDictionaryContainer
+        ConcurrentDictionaryContainer original = new ConcurrentDictionaryContainer
         {
             Items = new ConcurrentDictionary<int, MutableItem>()
         };
@@ -583,7 +583,7 @@ public class SourceGeneratorCollectionTests
         original.Items[2] = new MutableItem { Id = 2, Name = "Two" };
 
         // Act
-        var clone = original.FastDeepClone();
+        ConcurrentDictionaryContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone!.Items, Is.Not.Null);
@@ -600,7 +600,7 @@ public class SourceGeneratorCollectionTests
     public void ConcurrentBag_With_Complex_Elements_Should_Clone()
     {
         // Arrange
-        var original = new ConcurrentBagContainer
+        ConcurrentBagContainer original = new ConcurrentBagContainer
         {
             Items = new ConcurrentBag<MutableItem>
             {
@@ -611,21 +611,21 @@ public class SourceGeneratorCollectionTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ConcurrentBagContainer clone = original.FastDeepClone();
 
         // Assert - ConcurrentBag doesn't guarantee order, just check contents
         Assert.That(clone!.Items, Is.Not.Null);
         Assert.That(clone.Items!.Count, Is.EqualTo(3));
         
-        var cloneIds = clone.Items.Select(x => x.Id).OrderBy(x => x).ToArray();
+        int[] cloneIds = clone.Items.Select(x => x.Id).OrderBy(x => x).ToArray();
         Assert.That(cloneIds, Is.EqualTo(new[] { 1, 2, 3 }));
 
         // Verify deep clone
-        var firstCloneItem = clone.Items.First();
-        var originalId = firstCloneItem.Id;
+        MutableItem firstCloneItem = clone.Items.First();
+        int originalId = firstCloneItem.Id;
         firstCloneItem.Name = "Modified";
         
-        var originalItem = original.Items.First(x => x.Id == originalId);
+        MutableItem originalItem = original.Items.First(x => x.Id == originalId);
         Assert.That(originalItem.Name, Is.Not.EqualTo("Modified"));
     }
 
@@ -638,7 +638,7 @@ public class SourceGeneratorCollectionTests
     public void ImmutableList_With_Complex_Elements_Should_Deep_Clone()
     {
         // Arrange
-        var original = new ImmutableListContainer
+        ImmutableListContainer original = new ImmutableListContainer
         {
             Items = ImmutableList.Create(
                 new MutableItem { Id = 1, Name = "One" },
@@ -647,7 +647,7 @@ public class SourceGeneratorCollectionTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ImmutableListContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone!.Items, Is.Not.Null);
@@ -664,7 +664,7 @@ public class SourceGeneratorCollectionTests
     public void ImmutableArray_With_Complex_Elements_Should_Deep_Clone()
     {
         // Arrange
-        var original = new ImmutableArrayContainer
+        ImmutableArrayContainer original = new ImmutableArrayContainer
         {
             Items = ImmutableArray.Create(
                 new MutableItem { Id = 1, Name = "One" },
@@ -673,7 +673,7 @@ public class SourceGeneratorCollectionTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ImmutableArrayContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone!.Items.Length, Is.EqualTo(2));
@@ -689,7 +689,7 @@ public class SourceGeneratorCollectionTests
     public void ImmutableStack_With_Complex_Elements_Should_Preserve_Order()
     {
         // Arrange - Push creates stack in reverse order (last push = top)
-        var original = new ImmutableStackContainer
+        ImmutableStackContainer original = new ImmutableStackContainer
         {
             Items = ImmutableStack<MutableItem>.Empty
                 .Push(new MutableItem { Id = 1, Name = "First" })
@@ -698,11 +698,11 @@ public class SourceGeneratorCollectionTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ImmutableStackContainer clone = original.FastDeepClone();
 
         // Assert - LIFO: 3 should be on top
         Assert.That(clone!.Items, Is.Not.Null);
-        var cloneArray = clone.Items!.ToArray();
+        MutableItem[] cloneArray = clone.Items!.ToArray();
         Assert.That(cloneArray[0].Id, Is.EqualTo(3), "Top should be 3");
         Assert.That(cloneArray[1].Id, Is.EqualTo(2));
         Assert.That(cloneArray[2].Id, Is.EqualTo(1));
@@ -717,7 +717,7 @@ public class SourceGeneratorCollectionTests
     public void ImmutableQueue_With_Complex_Elements_Should_Preserve_Order()
     {
         // Arrange
-        var original = new ImmutableQueueContainer
+        ImmutableQueueContainer original = new ImmutableQueueContainer
         {
             Items = ImmutableQueue<MutableItem>.Empty
                 .Enqueue(new MutableItem { Id = 1, Name = "First" })
@@ -726,11 +726,11 @@ public class SourceGeneratorCollectionTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ImmutableQueueContainer clone = original.FastDeepClone();
 
         // Assert - FIFO order
         Assert.That(clone!.Items, Is.Not.Null);
-        var cloneArray = clone.Items!.ToArray();
+        MutableItem[] cloneArray = clone.Items!.ToArray();
         Assert.That(cloneArray[0].Id, Is.EqualTo(1), "First should be 1 (FIFO)");
         Assert.That(cloneArray[1].Id, Is.EqualTo(2));
         Assert.That(cloneArray[2].Id, Is.EqualTo(3));
@@ -745,13 +745,13 @@ public class SourceGeneratorCollectionTests
     public void ImmutableHashSet_With_Primitives_Returns_Same_Reference()
     {
         // Arrange
-        var original = new ImmutableHashSetPrimitiveContainer
+        ImmutableHashSetPrimitiveContainer original = new ImmutableHashSetPrimitiveContainer
         {
             Numbers = ImmutableHashSet.Create(1, 2, 3, 4, 5)
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ImmutableHashSetPrimitiveContainer clone = original.FastDeepClone();
 
         // Assert - optimization: should return same reference for immutable with immutable elements
         Assert.That(clone!.Numbers, Is.Not.Null);
@@ -764,7 +764,7 @@ public class SourceGeneratorCollectionTests
     public void ImmutableDictionary_With_Primitives_Returns_Same_Reference()
     {
         // Arrange
-        var original = new ImmutableDictionaryPrimitiveContainer
+        ImmutableDictionaryPrimitiveContainer original = new ImmutableDictionaryPrimitiveContainer
         {
             Items = ImmutableDictionary.Create<int, string>()
                 .Add(1, "One")
@@ -772,7 +772,7 @@ public class SourceGeneratorCollectionTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ImmutableDictionaryPrimitiveContainer clone = original.FastDeepClone();
 
         // Assert - optimization: should return same reference
         Assert.That(clone!.Items, Is.Not.Null);
@@ -785,7 +785,7 @@ public class SourceGeneratorCollectionTests
     public void ImmutableDictionary_With_Complex_Values_Should_Deep_Clone()
     {
         // Arrange
-        var original = new ImmutableDictionaryComplexContainer
+        ImmutableDictionaryComplexContainer original = new ImmutableDictionaryComplexContainer
         {
             Items = ImmutableDictionary.Create<int, MutableItem>()
                 .Add(1, new MutableItem { Id = 1, Name = "One" })
@@ -793,7 +793,7 @@ public class SourceGeneratorCollectionTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ImmutableDictionaryComplexContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone!.Items, Is.Not.Null);
@@ -809,13 +809,13 @@ public class SourceGeneratorCollectionTests
     public void ImmutableSortedSet_Should_Maintain_Order()
     {
         // Arrange
-        var original = new ImmutableSortedSetContainer
+        ImmutableSortedSetContainer original = new ImmutableSortedSetContainer
         {
             Numbers = ImmutableSortedSet.Create(5, 3, 1, 4, 2)
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ImmutableSortedSetContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone!.Numbers, Is.Not.Null);
@@ -830,7 +830,7 @@ public class SourceGeneratorCollectionTests
     public void ImmutableSortedDictionary_Should_Maintain_Order_And_Deep_Clone()
     {
         // Arrange
-        var original = new ImmutableSortedDictionaryContainer
+        ImmutableSortedDictionaryContainer original = new ImmutableSortedDictionaryContainer
         {
             Items = ImmutableSortedDictionary.Create<int, MutableItem>()
                 .Add(3, new MutableItem { Id = 3, Name = "Three" })
@@ -839,11 +839,11 @@ public class SourceGeneratorCollectionTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ImmutableSortedDictionaryContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone!.Items, Is.Not.Null);
-        var keys = clone.Items!.Keys.ToArray();
+        int[] keys = clone.Items!.Keys.ToArray();
         Assert.That(keys, Is.EqualTo(new[] { 1, 2, 3 }));
 
         // Verify deep clone
@@ -860,7 +860,7 @@ public class SourceGeneratorCollectionTests
     public void ReadOnlyCollection_With_Complex_Elements_Should_Deep_Clone()
     {
         // Arrange
-        var original = new ReadOnlyCollectionContainer
+        ReadOnlyCollectionContainer original = new ReadOnlyCollectionContainer
         {
             Items = new ReadOnlyCollection<MutableItem>(new List<MutableItem>
             {
@@ -870,7 +870,7 @@ public class SourceGeneratorCollectionTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ReadOnlyCollectionContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone!.Items, Is.Not.Null);
@@ -887,7 +887,7 @@ public class SourceGeneratorCollectionTests
     public void ReadOnlyDictionary_With_Complex_Values_Should_Deep_Clone()
     {
         // Arrange
-        var original = new ReadOnlyDictionaryContainer
+        ReadOnlyDictionaryContainer original = new ReadOnlyDictionaryContainer
         {
             Items = new ReadOnlyDictionary<int, MutableItem>(new Dictionary<int, MutableItem>
             {
@@ -897,7 +897,7 @@ public class SourceGeneratorCollectionTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ReadOnlyDictionaryContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone!.Items, Is.Not.Null);
@@ -917,7 +917,7 @@ public class SourceGeneratorCollectionTests
     public void ObservableCollection_With_Complex_Elements_Should_Deep_Clone()
     {
         // Arrange
-        var original = new ObservableCollectionContainer
+        ObservableCollectionContainer original = new ObservableCollectionContainer
         {
             Items = new ObservableCollection<MutableItem>
             {
@@ -927,7 +927,7 @@ public class SourceGeneratorCollectionTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        ObservableCollectionContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone!.Items, Is.Not.Null);
@@ -952,22 +952,22 @@ public class SourceGeneratorCollectionTests
     public void HashSet_With_Complex_Elements_Should_Deep_Clone()
     {
         // Arrange
-        var item1 = new MutableItem { Id = 1, Name = "One" };
-        var item2 = new MutableItem { Id = 2, Name = "Two" };
-        var original = new HashSetContainer
+        MutableItem item1 = new MutableItem { Id = 1, Name = "One" };
+        MutableItem item2 = new MutableItem { Id = 2, Name = "Two" };
+        HashSetContainer original = new HashSetContainer
         {
             Items = new HashSet<MutableItem> { item1, item2 }
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        HashSetContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone!.Items, Is.Not.Null);
         Assert.That(clone.Items!.Count, Is.EqualTo(2));
 
         // Verify deep clone - get an item and modify it
-        var cloneItem = clone.Items.First(x => x.Id == 1);
+        MutableItem cloneItem = clone.Items.First(x => x.Id == 1);
         cloneItem.Name = "Modified";
         Assert.That(item1.Name, Is.EqualTo("One"));
     }
@@ -981,7 +981,7 @@ public class SourceGeneratorCollectionTests
     public void JaggedArray_With_Complex_Elements_Should_Deep_Clone()
     {
         // Arrange
-        var original = new JaggedArrayContainer
+        JaggedArrayContainer original = new JaggedArrayContainer
         {
             Items = new[]
             {
@@ -991,7 +991,7 @@ public class SourceGeneratorCollectionTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        JaggedArrayContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone!.Items, Is.Not.Null);
@@ -1010,7 +1010,7 @@ public class SourceGeneratorCollectionTests
     public void MultiDimArray_With_Complex_Elements_Should_Deep_Clone()
     {
         // Arrange
-        var original = new MultiDimArrayContainer
+        MultiDimArrayContainer original = new MultiDimArrayContainer
         {
             Items = new MutableItem[2, 3]
         };
@@ -1022,7 +1022,7 @@ public class SourceGeneratorCollectionTests
         original.Items[1, 2] = new MutableItem { Id = 6, Name = "1-2" };
 
         // Act
-        var clone = original.FastDeepClone();
+        MultiDimArrayContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone!.Items, Is.Not.Null);
@@ -1041,7 +1041,7 @@ public class SourceGeneratorCollectionTests
     public void ThreeDimArray_With_Primitives_Should_Clone()
     {
         // Arrange
-        var original = new ThreeDimArrayContainer
+        ThreeDimArrayContainer original = new ThreeDimArrayContainer
         {
             Numbers = new int[2, 3, 4]
         };
@@ -1051,7 +1051,7 @@ public class SourceGeneratorCollectionTests
                     original.Numbers[i, j, k] = i * 100 + j * 10 + k;
 
         // Act
-        var clone = original.FastDeepClone();
+        ThreeDimArrayContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone!.Numbers, Is.Not.Null);
@@ -1072,20 +1072,20 @@ public class SourceGeneratorCollectionTests
     public void NestedCollections_List_Of_Stacks_Should_Deep_Clone()
     {
         // Arrange
-        var stack1 = new Stack<MutableItem>();
+        Stack<MutableItem> stack1 = new Stack<MutableItem>();
         stack1.Push(new MutableItem { Id = 1, Name = "S1-1" });
         stack1.Push(new MutableItem { Id = 2, Name = "S1-2" });
 
-        var stack2 = new Stack<MutableItem>();
+        Stack<MutableItem> stack2 = new Stack<MutableItem>();
         stack2.Push(new MutableItem { Id = 3, Name = "S2-1" });
 
-        var original = new NestedCollectionContainer
+        NestedCollectionContainer original = new NestedCollectionContainer
         {
             StackList = new List<Stack<MutableItem>> { stack1, stack2 }
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        NestedCollectionContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone!.StackList, Is.Not.Null);
@@ -1106,7 +1106,7 @@ public class SourceGeneratorCollectionTests
     public void Dictionary_With_List_Values_Should_Deep_Clone()
     {
         // Arrange
-        var original = new DictionaryWithCollectionValuesContainer
+        DictionaryWithCollectionValuesContainer original = new DictionaryWithCollectionValuesContainer
         {
             Items = new Dictionary<string, List<MutableItem>>
             {
@@ -1125,7 +1125,7 @@ public class SourceGeneratorCollectionTests
         };
 
         // Act
-        var clone = original.FastDeepClone();
+        DictionaryWithCollectionValuesContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone!.Items, Is.Not.Null);
@@ -1147,10 +1147,10 @@ public class SourceGeneratorCollectionTests
     public void Null_Collections_Should_Remain_Null()
     {
         // Arrange
-        var original = new StackContainer { Items = null };
+        StackContainer original = new StackContainer { Items = null };
 
         // Act
-        var clone = original.FastDeepClone();
+        StackContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone!.Items, Is.Null);
@@ -1161,7 +1161,7 @@ public class SourceGeneratorCollectionTests
     public void Collection_With_Null_Elements_Should_Clone_Correctly()
     {
         // Arrange
-        var original = new QueueContainer
+        QueueContainer original = new QueueContainer
         {
             Items = new Queue<MutableItem>()
         };
@@ -1170,11 +1170,11 @@ public class SourceGeneratorCollectionTests
         original.Items.Enqueue(new MutableItem { Id = 3, Name = "Three" });
 
         // Act
-        var clone = original.FastDeepClone();
+        QueueContainer clone = original.FastDeepClone();
 
         // Assert
         Assert.That(clone!.Items!.Count, Is.EqualTo(3));
-        var cloneArray = clone.Items.ToArray();
+        MutableItem[] cloneArray = clone.Items.ToArray();
         Assert.That(cloneArray[0].Id, Is.EqualTo(1));
         Assert.That(cloneArray[1], Is.Null);
         Assert.That(cloneArray[2].Id, Is.EqualTo(3));
@@ -1188,7 +1188,7 @@ public class SourceGeneratorCollectionTests
     [SourceGeneratorCompatible]
     public void ICollection_With_Complex_Elements_Should_Deep_Clone()
     {
-        var original = new ICollectionContainer
+        ICollectionContainer original = new ICollectionContainer
         {
             Items = new List<MutableItem>
             {
@@ -1198,14 +1198,14 @@ public class SourceGeneratorCollectionTests
             }
         };
 
-        var clone = original.FastDeepClone();
+        ICollectionContainer clone = original.FastDeepClone();
 
         Assert.That(clone, Is.Not.Null);
         Assert.That(clone!.Items, Is.Not.Null);
         Assert.That(clone.Items, Is.Not.SameAs(original.Items));
         Assert.That(clone.Items!.Count, Is.EqualTo(3));
 
-        var cloneList = clone.Items.ToList();
+        List<MutableItem> cloneList = clone.Items.ToList();
         Assert.That(cloneList[0].Id, Is.EqualTo(1));
         Assert.That(cloneList[1].Id, Is.EqualTo(2));
         Assert.That(cloneList[2].Id, Is.EqualTo(3));
@@ -1218,8 +1218,8 @@ public class SourceGeneratorCollectionTests
     [SourceGeneratorCompatible]
     public void ICollection_Null_Should_Remain_Null()
     {
-        var original = new ICollectionContainer { Items = null };
-        var clone = original.FastDeepClone();
+        ICollectionContainer original = new ICollectionContainer { Items = null };
+        ICollectionContainer clone = original.FastDeepClone();
         Assert.That(clone!.Items, Is.Null);
     }
 
@@ -1227,7 +1227,7 @@ public class SourceGeneratorCollectionTests
     [SourceGeneratorCompatible]
     public void IEnumerable_With_Complex_Elements_Should_Deep_Clone()
     {
-        var original = new IEnumerableContainer
+        IEnumerableContainer original = new IEnumerableContainer
         {
             Items = new List<MutableItem>
             {
@@ -1236,13 +1236,13 @@ public class SourceGeneratorCollectionTests
             }
         };
 
-        var clone = original.FastDeepClone();
+        IEnumerableContainer clone = original.FastDeepClone();
 
         Assert.That(clone, Is.Not.Null);
         Assert.That(clone!.Items, Is.Not.Null);
         Assert.That(clone.Items, Is.Not.SameAs(original.Items));
 
-        var cloneList = clone.Items!.ToList();
+        List<MutableItem> cloneList = clone.Items!.ToList();
         Assert.That(cloneList.Count, Is.EqualTo(2));
         Assert.That(cloneList[0].Id, Is.EqualTo(10));
         Assert.That(cloneList[1].Id, Is.EqualTo(20));
@@ -1255,7 +1255,7 @@ public class SourceGeneratorCollectionTests
     [SourceGeneratorCompatible]
     public void IReadOnlyCollection_With_Complex_Elements_Should_Deep_Clone()
     {
-        var original = new IReadOnlyCollectionContainer
+        IReadOnlyCollectionContainer original = new IReadOnlyCollectionContainer
         {
             Items = new List<MutableItem>
             {
@@ -1265,14 +1265,14 @@ public class SourceGeneratorCollectionTests
             }
         };
 
-        var clone = original.FastDeepClone();
+        IReadOnlyCollectionContainer clone = original.FastDeepClone();
 
         Assert.That(clone, Is.Not.Null);
         Assert.That(clone!.Items, Is.Not.Null);
         Assert.That(clone.Items, Is.Not.SameAs(original.Items));
         Assert.That(clone.Items!.Count, Is.EqualTo(3));
 
-        var cloneList = clone.Items.ToList();
+        List<MutableItem> cloneList = clone.Items.ToList();
         Assert.That(cloneList[0].Id, Is.EqualTo(100));
         Assert.That(cloneList[2].Id, Is.EqualTo(300));
 
@@ -1284,20 +1284,20 @@ public class SourceGeneratorCollectionTests
     [SourceGeneratorCompatible]
     public void ConcreteClass_Only_IEnumerable_Should_Deep_Clone()
     {
-        var original = new ConcreteEnumerableOnlyContainer
+        ConcreteEnumerableOnlyContainer original = new ConcreteEnumerableOnlyContainer
         {
             Items = new EnumerableOnlyCollection<MutableItem>()
         };
         original.Items.Add(new MutableItem { Id = 1, Name = "One" });
         original.Items.Add(new MutableItem { Id = 2, Name = "Two" });
 
-        var clone = original.FastDeepClone();
+        ConcreteEnumerableOnlyContainer clone = original.FastDeepClone();
 
         Assert.That(clone, Is.Not.Null);
         Assert.That(clone!.Items, Is.Not.Null);
         Assert.That(clone.Items, Is.Not.SameAs(original.Items));
 
-        var cloneList = clone.Items!.ToList();
+        List<MutableItem> cloneList = clone.Items!.ToList();
         Assert.That(cloneList.Count, Is.EqualTo(2));
         Assert.That(cloneList[0].Id, Is.EqualTo(1));
         Assert.That(cloneList[1].Id, Is.EqualTo(2));

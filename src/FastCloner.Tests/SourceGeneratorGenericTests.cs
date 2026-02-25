@@ -1,3 +1,4 @@
+using System.Reflection;
 using FastCloner.SourceGenerator.Shared;
 
 namespace FastCloner.Tests;
@@ -16,8 +17,8 @@ public class SourceGeneratorGenericTests
     [SourceGeneratorCompatible]
     public void GenericClass_Should_Be_Cloned()
     {
-        var original = new GenericClass<int> { Value = 42 };
-        var clone = original.FastDeepClone();
+        GenericClass<int> original = new GenericClass<int> { Value = 42 };
+        GenericClass<int> clone = original.FastDeepClone();
 
         Assert.That(clone, Is.Not.Null);
         Assert.That(clone.Value, Is.EqualTo(42));
@@ -40,10 +41,10 @@ public class SourceGeneratorGenericTests
     [SourceGeneratorCompatible]
     public void GenericClassWithConstraint_Should_Be_Cloned()
     {
-        var myTest = new GenericClassWithConstraint<Dictionary<string, SampleUnannotatedClass>>();
+        GenericClassWithConstraint<Dictionary<string, SampleUnannotatedClass>> myTest = new GenericClassWithConstraint<Dictionary<string, SampleUnannotatedClass>>();
         
-        var original = new GenericClassWithConstraint<List<int>> { Value = new List<int> { 1, 2, 3 } };
-        var clone = original.FastDeepClone();
+        GenericClassWithConstraint<List<int>> original = new GenericClassWithConstraint<List<int>> { Value = new List<int> { 1, 2, 3 } };
+        GenericClassWithConstraint<List<int>> clone = original.FastDeepClone();
 
         Assert.That(clone, Is.Not.Null);
         Assert.That(clone.Value, Is.Not.Null);
@@ -72,29 +73,29 @@ public class SourceGeneratorGenericTests
         // as a GenericNameSyntax, which would be picked up by the standard collector.
         // This validates that FastClonerIncludeAttribute is working.
         
-        var openType = typeof(GenericClassWithInclude<>);
-        var closedType = openType.MakeGenericType(typeof(Bar));
-        var instance = Activator.CreateInstance(closedType);
+        Type openType = typeof(GenericClassWithInclude<>);
+        Type closedType = openType.MakeGenericType(typeof(Bar));
+        object? instance = Activator.CreateInstance(closedType);
         
-        var bar = new Bar { Name = "test" };
+        Bar bar = new Bar { Name = "test" };
         closedType.GetProperty("Value").SetValue(instance, bar);
         
         // Find the generated extension method
         // Namespace is FastCloner.Tests, Class is GenericClassWithIncludeFastDeepCloneExtensions
-        var extensionsType = typeof(SourceGeneratorGenericTests).Assembly.GetType("FastCloner.Tests.GenericClassWithIncludeFastDeepCloneExtensions");
+        Type? extensionsType = typeof(SourceGeneratorGenericTests).Assembly.GetType("FastCloner.Tests.GenericClassWithIncludeFastDeepCloneExtensions");
         Assert.That(extensionsType, Is.Not.Null, "Generated extension class not found");
         
-        var method = extensionsType.GetMethod("FastDeepClone");
+        MethodInfo? method = extensionsType.GetMethod("FastDeepClone");
         Assert.That(method, Is.Not.Null, "FastDeepClone method not found");
         
-        var genericMethod = method.MakeGenericMethod(typeof(Bar));
-        var clone = genericMethod.Invoke(null, new[] { instance });
+        MethodInfo genericMethod = method.MakeGenericMethod(typeof(Bar));
+        object? clone = genericMethod.Invoke(null, new[] { instance });
         
         Assert.That(clone, Is.Not.Null);
         Assert.That(clone.GetType(), Is.EqualTo(closedType));
         Assert.That(clone, Is.Not.SameAs(instance));
         
-        var cloneValue = closedType.GetProperty("Value").GetValue(clone);
+        object? cloneValue = closedType.GetProperty("Value").GetValue(clone);
         Assert.That(cloneValue, Is.Not.SameAs(bar)); // Should be deep cloned if Bar is handled correctly
         Assert.That(((Bar)cloneValue).Name, Is.EqualTo("test"));
     }

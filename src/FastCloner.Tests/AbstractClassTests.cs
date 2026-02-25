@@ -178,7 +178,7 @@ public class AbstractClassTests
         Assert.That(clone, Is.TypeOf<Dog>());
         Assert.That(clone, Is.Not.SameAs(dog));
         
-        var clonedDog = (Dog)clone!;
+        Dog clonedDog = (Dog)clone!;
         Assert.That(clonedDog.Name, Is.EqualTo("Buddy"));
         Assert.That(clonedDog.Age, Is.EqualTo(5));
         Assert.That(clonedDog.Breed, Is.EqualTo("Golden Retriever"));
@@ -207,7 +207,7 @@ public class AbstractClassTests
         Assert.That(clone, Is.TypeOf<Cat>());
         Assert.That(clone, Is.Not.SameAs(cat));
         
-        var clonedCat = (Cat)clone!;
+        Cat clonedCat = (Cat)clone!;
         Assert.That(clonedCat.Name, Is.EqualTo("Whiskers"));
         Assert.That(clonedCat.Age, Is.EqualTo(3));
         Assert.That(clonedCat.Color, Is.EqualTo("Orange"));
@@ -240,7 +240,7 @@ public class AbstractClassTests
         Assert.That(clone, Is.TypeOf<Car>());
         Assert.That(clone!.Features, Is.Not.SameAs(car.Features));
         
-        var clonedCar = (Car)clone;
+        Car clonedCar = (Car)clone;
         Assert.That(clonedCar.Brand, Is.EqualTo("Tesla"));
         Assert.That(clonedCar.NumberOfDoors, Is.EqualTo(4));
         Assert.That(clonedCar.IsElectric, Is.True);
@@ -275,7 +275,7 @@ public class AbstractClassTests
         Assert.That(clone, Is.Not.Null);
         Assert.That(clone, Is.TypeOf<Triangle>());
         
-        var clonedTriangle = (Triangle)clone!;
+        Triangle clonedTriangle = (Triangle)clone!;
         Assert.That(clonedTriangle.Name, Is.EqualTo("Equilateral"));
         Assert.That(clonedTriangle.NumberOfSides, Is.EqualTo(3));
         Assert.That(clonedTriangle.Base, Is.EqualTo(10.0));
@@ -302,7 +302,7 @@ public class AbstractClassTests
         Assert.That(clone, Is.Not.Null);
         Assert.That(clone, Is.TypeOf<Rectangle>());
         
-        var clonedRect = (Rectangle)clone!;
+        Rectangle clonedRect = (Rectangle)clone!;
         Assert.That(clonedRect.Name, Is.EqualTo("Square"));
         Assert.That(clonedRect.NumberOfSides, Is.EqualTo(4));
         Assert.That(clonedRect.Width, Is.EqualTo(5.0));
@@ -339,7 +339,7 @@ public class AbstractClassTests
         Assert.That(clone, Is.Not.Null);
         Assert.That(clone, Is.TypeOf<Manager>());
         
-        var clonedManager = (Manager)clone!;
+        Manager clonedManager = (Manager)clone!;
         Assert.That(clonedManager.Name, Is.EqualTo("Alice"));
         Assert.That(clonedManager.Department, Is.EqualTo("Engineering"));
         
@@ -385,7 +385,7 @@ public class AbstractClassTests
         Assert.That(clone, Is.Not.Null);
         Assert.That(clone, Is.TypeOf<Developer>());
         
-        var clonedDev = (Developer)clone!;
+        Developer clonedDev = (Developer)clone!;
         Assert.That(clonedDev.Name, Is.EqualTo("Bob"));
         Assert.That(clonedDev.Team, Is.EqualTo("Backend"));
         Assert.That(clonedDev.ProgrammingLanguages!.Count, Is.EqualTo(3));
@@ -417,7 +417,7 @@ public class AbstractClassTests
         Assert.That(clone, Is.TypeOf<ExternalDog>());
         Assert.That(clone, Is.Not.SameAs(dog));
         
-        var clonedDog = (ExternalDog)clone!;
+        ExternalDog clonedDog = (ExternalDog)clone!;
         Assert.That(clonedDog.Name, Is.EqualTo("Rex"));
         Assert.That(clonedDog.Age, Is.EqualTo(4));
         Assert.That(clonedDog.Breed, Is.EqualTo("German Shepherd"));
@@ -443,7 +443,7 @@ public class AbstractClassTests
         Assert.That(clone, Is.Not.Null);
         Assert.That(clone, Is.TypeOf<ExternalCat>());
         
-        var clonedCat = (ExternalCat)clone!;
+        ExternalCat clonedCat = (ExternalCat)clone!;
         Assert.That(clonedCat.Name, Is.EqualTo("Mittens"));
         Assert.That(clonedCat.Age, Is.EqualTo(2));
         Assert.That(clonedCat.FurColor, Is.EqualTo("Calico"));
@@ -470,7 +470,7 @@ public class AbstractClassTests
         Assert.That(clone, Is.Not.Null);
         Assert.That(clone, Is.TypeOf<ExternalBird>());
         
-        var clonedBird = (ExternalBird)clone!;
+        ExternalBird clonedBird = (ExternalBird)clone!;
         Assert.That(clonedBird.Name, Is.EqualTo("Tweety"));
         Assert.That(clonedBird.Age, Is.EqualTo(1));
         Assert.That(clonedBird.Wingspan, Is.EqualTo(0.3));
@@ -544,7 +544,7 @@ public class AbstractClassTests
         Assert.That(clone, Is.Not.Null);
         Assert.That(clone, Is.TypeOf<Dog>());
         
-        var clonedDog = (Dog)clone!;
+        Dog clonedDog = (Dog)clone!;
         Assert.That(clonedDog.Name, Is.Null);
         Assert.That(clonedDog.Age, Is.EqualTo(2));
         Assert.That(clonedDog.Breed, Is.Null);
