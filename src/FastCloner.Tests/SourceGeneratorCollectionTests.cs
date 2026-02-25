@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -270,6 +271,53 @@ public class NestedCollectionContainer
 public class DictionaryWithCollectionValuesContainer
 {
     public Dictionary<string, List<MutableItem>>? Items { get; set; }
+}
+
+/// <summary>
+/// Tests ICollection&lt;T&gt; with complex elements - verifies no index-based access is generated (#28)
+/// </summary>
+[FastClonerClonable]
+public class ICollectionContainer
+{
+    public ICollection<MutableItem>? Items { get; set; }
+}
+
+/// <summary>
+/// Tests IEnumerable&lt;T&gt; with complex elements - verifies no .Count or index-based access is generated
+/// </summary>
+[FastClonerClonable]
+public class IEnumerableContainer
+{
+    public IEnumerable<MutableItem>? Items { get; set; }
+}
+
+/// <summary>
+/// Tests IReadOnlyCollection&lt;T&gt; with complex elements - verifies no index-based access is generated
+/// </summary>
+[FastClonerClonable]
+public class IReadOnlyCollectionContainer
+{
+    public IReadOnlyCollection<MutableItem>? Items { get; set; }
+}
+
+/// <summary>
+/// A concrete collection class that only implements IEnumerable&lt;T&gt;
+/// </summary>
+public class EnumerableOnlyCollection<T> : IEnumerable<T>
+{
+    private readonly List<T> _inner = new();
+    public void Add(T item) => _inner.Add(item);
+    public IEnumerator<T> GetEnumerator() => _inner.GetEnumerator();
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+}
+
+/// <summary>
+/// Container whose property type is a concrete class that only implements IEnumerable&lt;T&gt;.
+/// </summary>
+[FastClonerClonable]
+public class ConcreteEnumerableOnlyContainer
+{
+    public EnumerableOnlyCollection<MutableItem>? Items { get; set; }
 }
 
 #endregion
@@ -1130,6 +1178,132 @@ public class SourceGeneratorCollectionTests
         Assert.That(cloneArray[0].Id, Is.EqualTo(1));
         Assert.That(cloneArray[1], Is.Null);
         Assert.That(cloneArray[2].Id, Is.EqualTo(3));
+    }
+
+    #endregion
+
+    #region ICollection/IEnumerable/IReadOnlyCollection Interface Tests (#28)
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void ICollection_With_Complex_Elements_Should_Deep_Clone()
+    {
+        var original = new ICollectionContainer
+        {
+            Items = new List<MutableItem>
+            {
+                new MutableItem { Id = 1, Name = "One" },
+                new MutableItem { Id = 2, Name = "Two" },
+                new MutableItem { Id = 3, Name = "Three" }
+            }
+        };
+
+        var clone = original.FastDeepClone();
+
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone!.Items, Is.Not.Null);
+        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
+        Assert.That(clone.Items!.Count, Is.EqualTo(3));
+
+        var cloneList = clone.Items.ToList();
+        Assert.That(cloneList[0].Id, Is.EqualTo(1));
+        Assert.That(cloneList[1].Id, Is.EqualTo(2));
+        Assert.That(cloneList[2].Id, Is.EqualTo(3));
+
+        cloneList[0].Name = "Modified";
+        Assert.That(original.Items.First().Name, Is.EqualTo("One"));
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void ICollection_Null_Should_Remain_Null()
+    {
+        var original = new ICollectionContainer { Items = null };
+        var clone = original.FastDeepClone();
+        Assert.That(clone!.Items, Is.Null);
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void IEnumerable_With_Complex_Elements_Should_Deep_Clone()
+    {
+        var original = new IEnumerableContainer
+        {
+            Items = new List<MutableItem>
+            {
+                new MutableItem { Id = 10, Name = "Alpha" },
+                new MutableItem { Id = 20, Name = "Beta" }
+            }
+        };
+
+        var clone = original.FastDeepClone();
+
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone!.Items, Is.Not.Null);
+        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
+
+        var cloneList = clone.Items!.ToList();
+        Assert.That(cloneList.Count, Is.EqualTo(2));
+        Assert.That(cloneList[0].Id, Is.EqualTo(10));
+        Assert.That(cloneList[1].Id, Is.EqualTo(20));
+
+        cloneList[0].Name = "Modified";
+        Assert.That(original.Items.First().Name, Is.EqualTo("Alpha"));
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void IReadOnlyCollection_With_Complex_Elements_Should_Deep_Clone()
+    {
+        var original = new IReadOnlyCollectionContainer
+        {
+            Items = new List<MutableItem>
+            {
+                new MutableItem { Id = 100, Name = "X" },
+                new MutableItem { Id = 200, Name = "Y" },
+                new MutableItem { Id = 300, Name = "Z" }
+            }
+        };
+
+        var clone = original.FastDeepClone();
+
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone!.Items, Is.Not.Null);
+        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
+        Assert.That(clone.Items!.Count, Is.EqualTo(3));
+
+        var cloneList = clone.Items.ToList();
+        Assert.That(cloneList[0].Id, Is.EqualTo(100));
+        Assert.That(cloneList[2].Id, Is.EqualTo(300));
+
+        cloneList[0].Name = "Modified";
+        Assert.That(original.Items.First().Name, Is.EqualTo("X"));
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void ConcreteClass_Only_IEnumerable_Should_Deep_Clone()
+    {
+        var original = new ConcreteEnumerableOnlyContainer
+        {
+            Items = new EnumerableOnlyCollection<MutableItem>()
+        };
+        original.Items.Add(new MutableItem { Id = 1, Name = "One" });
+        original.Items.Add(new MutableItem { Id = 2, Name = "Two" });
+
+        var clone = original.FastDeepClone();
+
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone!.Items, Is.Not.Null);
+        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
+
+        var cloneList = clone.Items!.ToList();
+        Assert.That(cloneList.Count, Is.EqualTo(2));
+        Assert.That(cloneList[0].Id, Is.EqualTo(1));
+        Assert.That(cloneList[1].Id, Is.EqualTo(2));
+
+        cloneList[0].Name = "Modified";
+        Assert.That(original.Items.First().Name, Is.EqualTo("One"));
     }
 
     #endregion

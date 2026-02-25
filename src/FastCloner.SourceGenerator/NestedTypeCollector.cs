@@ -122,6 +122,9 @@ internal static class NestedTypeCollector
                      }
                  }
 
+                 bool collHasCount = kind == MemberTypeKind.Collection && TypeAnalyzer.CollectionHasCountProperty(type);
+                 bool collHasIndexer = kind == MemberTypeKind.Collection && TypeAnalyzer.CollectionHasIndexer(type);
+
                  MemberModel model = new MemberModel(
                     "NestedHelper",
                     type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
@@ -142,7 +145,10 @@ internal static class NestedTypeCollector
                     true,  // HasGetter - helper methods always have access
                     true,  // HasSetter - helper methods always have access
                     true,  // SetterIsAccessible - helper methods always have access
-                    MemberCloneBehavior.Clone  // MemberBehavior - helper methods use default cloning
+                    MemberCloneBehavior.Clone, // MemberBehavior - helper methods use default cloning
+                    null,  // PreserveIdentity
+                    collHasCount,
+                    collHasIndexer
                  );
 
                  if (!nestedTypes.ContainsKey(model.TypeFullName))

@@ -459,6 +459,46 @@ internal static class TypeAnalyzer
     }
 
     /// <summary>
+    /// Checks if a collection type has a Count property.
+    /// </summary>
+    public static bool CollectionHasCountProperty(ITypeSymbol type)
+    {
+        if (type.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_ICollection_T ||
+            type.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IReadOnlyCollection_T ||
+            type.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IReadOnlyList_T)
+            return true;
+
+        if (type is INamedTypeSymbol named &&
+            named.MetadataName == "IList`1" &&
+            named.ContainingNamespace?.ToDisplayString() == "System.Collections.Generic")
+            return true;
+
+        return type.AllInterfaces.Any(i =>
+            i.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_ICollection_T ||
+            i.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IReadOnlyCollection_T);
+    }
+
+    /// <summary>
+    /// Checks if a collection type supports indexed access via this[int] (IList&lt;T&gt; or IReadOnlyList&lt;T&gt;).
+    /// </summary>
+    public static bool CollectionHasIndexer(ITypeSymbol type)
+    {
+        if (type is INamedTypeSymbol named)
+        {
+            if (named.MetadataName == "IList`1" &&
+                named.ContainingNamespace?.ToDisplayString() == "System.Collections.Generic")
+                return true;
+
+            if (named.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IReadOnlyList_T)
+                return true;
+        }
+
+        return type.AllInterfaces.Any(i =>
+            (i.MetadataName == "IList`1" && i.ContainingNamespace?.ToDisplayString() == "System.Collections.Generic") ||
+            i.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IReadOnlyList_T);
+    }
+
+    /// <summary>
     /// Identifies the kind of collection (List, Set, Queue, etc.) for optimized code generation.
     /// </summary>
     public static CollectionKind GetCollectionKind(ITypeSymbol type)

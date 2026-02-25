@@ -177,9 +177,10 @@ internal static class CollectionHelperGenerator
         else if (isStack) addMethod = "Push";
         else if (isLinkedList) addMethod = "AddLast";
 
-        // Determine if capacity can be passed to constructor
-        // Only standard List, HashSet, Queue, Stack support new T(int capacity)
-        bool supportsCapacity = kind == CollectionKind.List || 
+        // Determine if capacity can be passed to constructor.
+        // Only standard List, HashSet, Queue, Stack support new T(int capacity).
+        // For CollectionKind.List, the source must also have .Count (e.g. IEnumerable<T> does not).
+        bool supportsCapacity = (kind == CollectionKind.List && member.CollectionHasCount) || 
                                 kind == CollectionKind.HashSet || 
                                 kind == CollectionKind.Queue || 
                                 kind == CollectionKind.Stack;
@@ -247,7 +248,7 @@ internal static class CollectionHelperGenerator
                 sb.AppendLine($"                result.Push(({member.ElementTypeName})temp[i]!);");
                 sb.AppendLine("            }");
             }
-            else if (kind == CollectionKind.List)
+            else if (kind == CollectionKind.List && member.CollectionHasIndexer)
             {
                 if (context.TargetFramework >= TargetFramework.Net5)
                 {
