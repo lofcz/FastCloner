@@ -417,7 +417,7 @@ internal static class CollectionHelperGenerator
         {
             string extensionClassName = MemberCloneGenerator.GetExtensionClassNameForType(member);
             string stateArg = parentNeedsState ? "state" : "null";
-            return $"{extensionClassName}.InternalFastDeepClone({itemVar}, {stateArg})";
+            return $"{extensionClassName}.InternalFastDeepClone({itemVar}, {stateArg})!";
         }
 
         if (context.TryGetMemberModel(member.ElementTypeName!, out MemberModel nestedModel))
@@ -433,7 +433,7 @@ internal static class CollectionHelperGenerator
             if (context.ShouldInline(implicitModel.FullyQualifiedName))
             {
                 string actualStateVarInline = parentNeedsState ? "state" : "null";
-                return MemberCloneGenerator.GetImplicitCloneExpression(context, implicitModel, itemVar, actualStateVarInline, "                ", true);
+                return MemberCloneGenerator.GetImplicitCloneExpression(context, implicitModel, itemVar, actualStateVarInline, "                ", true) + "!";
             }
             
             string helperName = context.GetOrCreateHelperMethodName(implicitModel.FullyQualifiedName);
@@ -651,7 +651,7 @@ internal static class CollectionHelperGenerator
         {
             if (member.KeyIsClonable)
             {
-                keyExpr = "kvp.Key?.FastDeepClone()";
+                keyExpr = "kvp.Key?.FastDeepClone()!";
             }
             else if (context.TryGetMemberModel(member.KeyTypeName!, out MemberModel nestedKeyModel))
             {
@@ -665,7 +665,7 @@ internal static class CollectionHelperGenerator
                 if (context.ShouldInline(implicitKeyModel.FullyQualifiedName))
                 {
                     string actualStateVar = needsState ? "state" : "null";
-                    keyExpr = MemberCloneGenerator.GetImplicitCloneExpression(context, implicitKeyModel, "kvp.Key", actualStateVar, "                ", true);
+                    keyExpr = MemberCloneGenerator.GetImplicitCloneExpression(context, implicitKeyModel, "kvp.Key", actualStateVar, "                ", true) + "!";
                 }
                 else
                 {
@@ -686,7 +686,7 @@ internal static class CollectionHelperGenerator
         {
             if (member.ValueIsClonable)
             {
-                valExpr = "kvp.Value?.FastDeepClone()";
+                valExpr = "kvp.Value?.FastDeepClone()!";
             }
             else if (context.TryGetMemberModel(member.ValueTypeName!, out MemberModel nestedValModel))
             {
@@ -700,7 +700,7 @@ internal static class CollectionHelperGenerator
                 if (context.ShouldInline(implicitValModel.FullyQualifiedName))
                 {
                     string actualStateVar = needsState ? "state" : "null";
-                    valExpr = MemberCloneGenerator.GetImplicitCloneExpression(context, implicitValModel, "kvp.Value", actualStateVar, "                ", true);
+                    valExpr = MemberCloneGenerator.GetImplicitCloneExpression(context, implicitValModel, "kvp.Value", actualStateVar, "                ", true) + "!";
                 }
                 else
                 {
@@ -771,7 +771,7 @@ internal static class CollectionHelperGenerator
             
             if (hasClonableAttr)
             {
-                itemExpr = "source[i]?.FastDeepClone()";
+                itemExpr = "source[i]?.FastDeepClone()!";
             }
             else if (context.TryGetMemberModel(member.ElementTypeName!, out MemberModel nestedModel))
             {
@@ -785,7 +785,7 @@ internal static class CollectionHelperGenerator
                 if (context.ShouldInline(implicitModel.FullyQualifiedName))
                 {
                     string actualStateVar = needsState ? "state" : "null";
-                    itemExpr = MemberCloneGenerator.GetImplicitCloneExpression(context, implicitModel, "source[i]", actualStateVar, "                ", true);
+                    itemExpr = MemberCloneGenerator.GetImplicitCloneExpression(context, implicitModel, "source[i]", actualStateVar, "                ", true) + "!";
                 }
                 else
                 {
@@ -877,7 +877,7 @@ internal static class CollectionHelperGenerator
             string itemExpr;
             if (hasClonableAttr)
             {
-                itemExpr = $"source[{indexList}]?.FastDeepClone()";
+                itemExpr = $"source[{indexList}]?.FastDeepClone()!";
             }
             else if (context.TryGetMemberModel(member.ElementTypeName!, out MemberModel nestedModel))
             {
@@ -891,7 +891,7 @@ internal static class CollectionHelperGenerator
                 if (context.ShouldInline(implicitModel.FullyQualifiedName))
                 {
                     string actualStateVar = needsState ? "state" : "null";
-                    itemExpr = MemberCloneGenerator.GetImplicitCloneExpression(context, implicitModel, $"source[{indexList}]", actualStateVar, "                ", true);
+                    itemExpr = MemberCloneGenerator.GetImplicitCloneExpression(context, implicitModel, $"source[{indexList}]", actualStateVar, "                ", true) + "!";
                 }
                 else
                 {
@@ -967,10 +967,10 @@ internal static class CollectionHelperGenerator
 
         if (needsState)
         {
-            return $"{methodName}{typeParams}({sourceExpression}, {stateVar})";
+            return $"{methodName}{typeParams}({sourceExpression}, {stateVar})!";
         }
 
-        return $"{methodName}{typeParams}({sourceExpression})";
+        return $"{methodName}{typeParams}({sourceExpression})!";
     }
 
     private static string GetTypeParametersString(TypeModel model)

@@ -1145,5 +1145,47 @@ public class SourceGeneratorEdgeCaseTests
         Assert.That(clone.Items["x"].Label, Is.EqualTo("X"));
     }
 
+    [FastClonerClonable]
+    public class ContainerWithObservableNonClonable
+    {
+        public ObservableCollection<ExternalNonClonableItem> Items { get; set; } = new();
+        public string? Name { get; set; }
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void ObservableCollection_WithNonClonableElements_ShouldDeepCloneViaFastCloner()
+    {
+        ContainerWithObservableNonClonable original = new()
+        {
+            Name = "Issue30",
+            Items = new ObservableCollection<ExternalNonClonableItem>
+            {
+                new ExternalNonClonableItem(1) { Label = "Alpha" },
+                new ExternalNonClonableItem(2) { Label = "Beta" },
+                new ExternalNonClonableItem(3) { Label = "Gamma" }
+            }
+        };
+
+        ContainerWithObservableNonClonable clone = original.FastDeepClone();
+
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone.Name, Is.EqualTo("Issue30"));
+        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
+        Assert.That(clone.Items.Count, Is.EqualTo(3));
+
+        for (int i = 0; i < original.Items.Count; i++)
+        {
+            Assert.That(clone.Items[i], Is.Not.SameAs(original.Items[i]));
+            Assert.That(clone.Items[i].Id, Is.EqualTo(original.Items[i].Id));
+            Assert.That(clone.Items[i].Label, Is.EqualTo(original.Items[i].Label));
+        }
+
+        original.Items[0].Label = "Modified";
+        original.Items.Add(new ExternalNonClonableItem(4) { Label = "Delta" });
+        Assert.That(clone.Items[0].Label, Is.EqualTo("Alpha"));
+        Assert.That(clone.Items.Count, Is.EqualTo(3));
+    }
+
     #endregion
 }

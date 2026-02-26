@@ -9,6 +9,7 @@ internal static class MemberCloneGenerator
     public static string GetMemberAssignment(CloneGeneratorContext context, MemberModel member, string sourceVar, string stateVar, string indent = "            ")
     {
         string memberName = member.Name;
+        string nf = (!member.IsNullable && !member.IsValueType) ? "!" : "";
 
         switch (member)
         {
@@ -30,7 +31,7 @@ internal static class MemberCloneGenerator
                     case MemberTypeKind.Clonable:
                     {
                         string extensionClassName = GetExtensionClassName(member);
-                        return $"{memberName} = {extensionClassName}.InternalFastDeepClone({sourceVar}.{memberName}, {stateVar})";
+                        return $"{memberName} = {extensionClassName}.InternalFastDeepClone({sourceVar}.{memberName}, {stateVar}){nf}";
                     }
                     case MemberTypeKind.Implicit:
                     {
@@ -42,7 +43,7 @@ internal static class MemberCloneGenerator
                             bool inlineShouldPassState = inlineMemberNeedsState || (stateVar != "null");
                             string inlineActualStateVar = inlineShouldPassState ? stateVar : "null";
 
-                            return $"{memberName} = {GetImplicitCloneExpression(context, implicitModel, $"{sourceVar}.{memberName}", inlineActualStateVar, indent, member.IsNullable)}";
+                            return $"{memberName} = {GetImplicitCloneExpression(context, implicitModel, $"{sourceVar}.{memberName}", inlineActualStateVar, indent, member.IsNullable)}{nf}";
                         }
 
                         string helperMethodName = context.GetOrCreateHelperMethodName(member);
@@ -54,7 +55,7 @@ internal static class MemberCloneGenerator
                         bool shouldPassState = memberNeedsState || (isRegisteredType && stateVar != "null");
                         string actualStateVar = shouldPassState ? stateVar : "null";
 
-                        return $"{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", shouldPassState, actualStateVar)}";
+                        return $"{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", shouldPassState, actualStateVar)}{nf}";
                     }
                     case MemberTypeKind.Collection:
                     case MemberTypeKind.Dictionary:
@@ -65,13 +66,13 @@ internal static class MemberCloneGenerator
                         bool memberNeedsState = MemberNeedsCircularRefTracking(context, member);
                         string actualStateVar = memberNeedsState ? stateVar : "null";
                         
-                        return $"{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", memberNeedsState, actualStateVar)}";
+                        return $"{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", memberNeedsState, actualStateVar)}{nf}";
                     }
                     case MemberTypeKind.Object:
                     case MemberTypeKind.Other:
                     default:
                         context.NeedsClonerClass = true;
-                        return $"{memberName} = Cloner<{member.TypeFullName}>.Clone({sourceVar}.{memberName}, {stateVar})";
+                        return $"{memberName} = Cloner<{member.TypeFullName}>.Clone({sourceVar}.{memberName}, {stateVar}){nf}";
                 }
         }
     }
@@ -79,6 +80,7 @@ internal static class MemberCloneGenerator
     public static void WriteMemberCloning(CloneGeneratorContext context, MemberModel member, string resultVar, string sourceVar, string stateVar)
     {
         string memberName = member.Name;
+        string nf = (!member.IsNullable && !member.IsValueType) ? "!" : "";
         StringBuilder sb = context.Source;
 
         switch (member)
@@ -105,7 +107,7 @@ internal static class MemberCloneGenerator
                     case MemberTypeKind.Clonable:
                     {
                         string extensionClassName = GetExtensionClassName(member);
-                        sb.AppendLine($"            {resultVar}.{memberName} = {extensionClassName}.InternalFastDeepClone({sourceVar}.{memberName}, {stateVar});");
+                        sb.AppendLine($"            {resultVar}.{memberName} = {extensionClassName}.InternalFastDeepClone({sourceVar}.{memberName}, {stateVar}){nf};");
                     }
                         break;
 
@@ -131,7 +133,7 @@ internal static class MemberCloneGenerator
                         bool shouldPassState = memberNeedsState || (isRegisteredType && stateVar != "null");
                         string actualStateVar = shouldPassState ? stateVar : "null";
                 
-                        sb.AppendLine($"            {resultVar}.{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", shouldPassState, actualStateVar)};");
+                        sb.AppendLine($"            {resultVar}.{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", shouldPassState, actualStateVar)}{nf};");
                     }
                         break;
 
@@ -143,7 +145,7 @@ internal static class MemberCloneGenerator
                         string helperMethodName = context.GetOrCreateHelperMethodName(member);
                         bool memberNeedsState = MemberNeedsCircularRefTracking(context, member);
                         string actualStateVar = memberNeedsState ? stateVar : "null";
-                        sb.AppendLine($"            {resultVar}.{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", memberNeedsState, actualStateVar)};");
+                        sb.AppendLine($"            {resultVar}.{memberName} = {GetHelperMethodCall(context, helperMethodName, $"{sourceVar}.{memberName}", memberNeedsState, actualStateVar)}{nf};");
                     }
                         break;
 
@@ -151,7 +153,7 @@ internal static class MemberCloneGenerator
                     case MemberTypeKind.Other:
                     default:
                         context.NeedsClonerClass = true;
-                        sb.AppendLine($"            {resultVar}.{memberName} = Cloner<{member.TypeFullName}>.Clone({sourceVar}.{memberName}, {stateVar});");
+                        sb.AppendLine($"            {resultVar}.{memberName} = Cloner<{member.TypeFullName}>.Clone({sourceVar}.{memberName}, {stateVar}){nf};");
                         break;
                 }
 

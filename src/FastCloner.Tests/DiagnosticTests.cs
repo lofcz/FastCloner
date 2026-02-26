@@ -211,12 +211,12 @@ public class ClassWithNonClonableCollection
         (ImmutableArray<Diagnostic> _, ImmutableArray<Diagnostic> compilationDiags) = RunGeneratorAndCompile(source);
 
         List<Diagnostic> nullableWarnings = compilationDiags
-            .Where(d => d.Id is "CS8604" or "CS8600")
+            .Where(d => d.Id is "CS8604" or "CS8600" or "CS8601" or "CS8603")
             .Where(d => d.Severity == DiagnosticSeverity.Warning)
             .ToList();
 
         Assert.That(nullableWarnings, Is.Empty,
-            "Generated code should not produce nullable warnings (CS8604/CS8600). " +
+            "Generated code should not produce nullable warnings. " +
             $"Found: {string.Join("; ", nullableWarnings.Select(d => $"{d.Id}: {d.GetMessage()}"))}");
     }
 
@@ -244,7 +244,7 @@ public class ClassWithNonClonableArray
         (ImmutableArray<Diagnostic> _, ImmutableArray<Diagnostic> compilationDiags) = RunGeneratorAndCompile(source);
 
         List<Diagnostic> nullableWarnings = compilationDiags
-            .Where(d => d.Id is "CS8604" or "CS8600")
+            .Where(d => d.Id is "CS8604" or "CS8600" or "CS8601" or "CS8603")
             .Where(d => d.Severity == DiagnosticSeverity.Warning)
             .ToList();
 
@@ -278,7 +278,7 @@ public class ClassWithNonClonableDictionary
         (ImmutableArray<Diagnostic> _, ImmutableArray<Diagnostic> compilationDiags) = RunGeneratorAndCompile(source);
 
         List<Diagnostic> nullableWarnings = compilationDiags
-            .Where(d => d.Id is "CS8604" or "CS8600")
+            .Where(d => d.Id is "CS8604" or "CS8600" or "CS8601" or "CS8603")
             .Where(d => d.Severity == DiagnosticSeverity.Warning)
             .ToList();
 

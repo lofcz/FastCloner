@@ -594,7 +594,7 @@ internal sealed class CloneCodeGenerator
         }
         
         sb.AppendLine("            {");
-        sb.AppendLine("                if (source == null) return default;");
+        sb.AppendLine("                if (source == null) return default!;");
         
         foreach (GenericUsage usage in _usages)
         {
@@ -636,7 +636,7 @@ internal sealed class CloneCodeGenerator
                     : $"(({argType})(object)source)";
 
                 sb.AppendLine($"                if (typeof({castTypeParam}) == typeof({argType}))");
-                sb.AppendLine($"                    return ({castTypeParam})(object){helperName}{typeParams}{callArgs};");
+                sb.AppendLine($"                    return ({castTypeParam})(object){helperName}{typeParams}{callArgs}!;");
             }
             else
             {
@@ -649,7 +649,7 @@ internal sealed class CloneCodeGenerator
                         : $"(({argType})(object)source)";
 
                      sb.AppendLine($"                if (typeof({castTypeParam}) == typeof({argType}))");
-                     sb.AppendLine($"                    return ({castTypeParam})(object){helperName}{typeParams}{callArgs};");
+                     sb.AppendLine($"                    return ({castTypeParam})(object){helperName}{typeParams}{callArgs}!;");
                 }
             }
         }

@@ -196,7 +196,7 @@ internal sealed class ContextCodeGenerator
         // Fallback to reflection-based FastCloner if available, otherwise throw
         if (_model.IsFastClonerAvailable)
         {
-            _sb.AppendLine($"            return {CloneGeneratorContext.FastClonerDeepCloneCall("input")};");
+            _sb.AppendLine($"            return {CloneGeneratorContext.FastClonerDeepCloneCall("input")}!;");
         }
         else
         {
