@@ -1025,4 +1025,125 @@ public class SourceGeneratorEdgeCaseTests
     }
 
     #endregion
+
+    #region Issue 12: Nullable Warnings in Generated Collection Clone Code (GitHub Issue #30)
+
+    /// <summary>
+    /// Non-clonable type (no parameterless ctor, no [FastClonerClonable]).
+    /// The source generator falls back to FastCloner.DeepClone() for this type,
+    /// which previously generated a nullable cast (Type?) causing CS8604 warnings.
+    /// </summary>
+    public class ExternalNonClonableItem
+    {
+        public ExternalNonClonableItem(int id) { Id = id; }
+        public int Id { get; set; }
+        public string? Label { get; set; }
+    }
+
+    [FastClonerClonable]
+    public class ContainerWithNonClonableList
+    {
+        public List<ExternalNonClonableItem> Items { get; set; } = new();
+    }
+
+    [FastClonerClonable]
+    public class ContainerWithNonClonableArray
+    {
+        public ExternalNonClonableItem[] Items { get; set; } = [];
+    }
+
+    [FastClonerClonable]
+    public class ContainerWithNonClonableDictionary
+    {
+        public Dictionary<string, ExternalNonClonableItem> Items { get; set; } = new();
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void List_WithNonClonableElements_ShouldDeepCloneViaFastCloner()
+    {
+        ContainerWithNonClonableList original = new()
+        {
+            Items =
+            [
+                new ExternalNonClonableItem(1) { Label = "First" },
+                new ExternalNonClonableItem(2) { Label = "Second" },
+                new ExternalNonClonableItem(3) { Label = "Third" }
+            ]
+        };
+
+        ContainerWithNonClonableList clone = original.FastDeepClone();
+
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
+        Assert.That(clone.Items.Count, Is.EqualTo(3));
+
+        for (int i = 0; i < original.Items.Count; i++)
+        {
+            Assert.That(clone.Items[i], Is.Not.SameAs(original.Items[i]));
+            Assert.That(clone.Items[i].Id, Is.EqualTo(original.Items[i].Id));
+            Assert.That(clone.Items[i].Label, Is.EqualTo(original.Items[i].Label));
+        }
+
+        original.Items[0].Label = "Modified";
+        original.Items.Add(new ExternalNonClonableItem(4) { Label = "Fourth" });
+        Assert.That(clone.Items[0].Label, Is.EqualTo("First"));
+        Assert.That(clone.Items.Count, Is.EqualTo(3));
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void Array_WithNonClonableElements_ShouldDeepCloneViaFastCloner()
+    {
+        ContainerWithNonClonableArray original = new()
+        {
+            Items =
+            [
+                new ExternalNonClonableItem(1) { Label = "A" },
+                new ExternalNonClonableItem(2) { Label = "B" }
+            ]
+        };
+
+        ContainerWithNonClonableArray clone = original.FastDeepClone();
+
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
+        Assert.That(clone.Items.Length, Is.EqualTo(2));
+        Assert.That(clone.Items[0], Is.Not.SameAs(original.Items[0]));
+        Assert.That(clone.Items[0].Id, Is.EqualTo(1));
+        Assert.That(clone.Items[0].Label, Is.EqualTo("A"));
+        Assert.That(clone.Items[1].Id, Is.EqualTo(2));
+
+        original.Items[0].Label = "Modified";
+        Assert.That(clone.Items[0].Label, Is.EqualTo("A"));
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public void Dictionary_WithNonClonableValues_ShouldDeepCloneViaFastCloner()
+    {
+        ContainerWithNonClonableDictionary original = new()
+        {
+            Items = new Dictionary<string, ExternalNonClonableItem>
+            {
+                ["x"] = new ExternalNonClonableItem(1) { Label = "X" },
+                ["y"] = new ExternalNonClonableItem(2) { Label = "Y" }
+            }
+        };
+
+        ContainerWithNonClonableDictionary clone = original.FastDeepClone();
+
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
+        Assert.That(clone.Items.Count, Is.EqualTo(2));
+        Assert.That(clone.Items["x"], Is.Not.SameAs(original.Items["x"]));
+        Assert.That(clone.Items["x"].Id, Is.EqualTo(1));
+        Assert.That(clone.Items["x"].Label, Is.EqualTo("X"));
+        Assert.That(clone.Items["y"].Id, Is.EqualTo(2));
+
+        original.Items["x"].Label = "Modified";
+        Assert.That(clone.Items["x"].Label, Is.EqualTo("X"));
+    }
+
+    #endregion
 }

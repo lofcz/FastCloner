@@ -443,7 +443,7 @@ internal static class CollectionHelperGenerator
         }
 
         return context.IsFastClonerAvailable ?
-            $"({member.ElementTypeName}?){CloneGeneratorContext.FastClonerDeepCloneCall(itemVar)}" :
+            $"({member.ElementTypeName}){CloneGeneratorContext.FastClonerDeepCloneCall(itemVar)}!" :
             itemVar;
     }
 
@@ -677,7 +677,7 @@ internal static class CollectionHelperGenerator
             }
             else if (context.IsFastClonerAvailable)
             {
-                keyExpr = $"({member.KeyTypeName}){CloneGeneratorContext.FastClonerDeepCloneCall("kvp.Key")}";
+                keyExpr = $"({member.KeyTypeName}){CloneGeneratorContext.FastClonerDeepCloneCall("kvp.Key")}!";
             }
         }
 
@@ -712,7 +712,7 @@ internal static class CollectionHelperGenerator
             }
             else if (context.IsFastClonerAvailable)
             {
-                valExpr = $"({member.ValueTypeName}){CloneGeneratorContext.FastClonerDeepCloneCall("kvp.Value")}";
+                valExpr = $"({member.ValueTypeName}){CloneGeneratorContext.FastClonerDeepCloneCall("kvp.Value")}!";
             }
         }
         
@@ -797,7 +797,7 @@ internal static class CollectionHelperGenerator
             }
             else if (context.IsFastClonerAvailable)
             {
-                itemExpr = $"({member.ElementTypeName}){CloneGeneratorContext.FastClonerDeepCloneCall("source[i]")}";
+                itemExpr = $"({member.ElementTypeName}){CloneGeneratorContext.FastClonerDeepCloneCall("source[i]")}!";
             }
             else
             {
@@ -903,7 +903,7 @@ internal static class CollectionHelperGenerator
             }
             else if (context.IsFastClonerAvailable)
             {
-                itemExpr = $"({member.ElementTypeName}){CloneGeneratorContext.FastClonerDeepCloneCall($"source[{indexList}]")}";
+                itemExpr = $"({member.ElementTypeName}){CloneGeneratorContext.FastClonerDeepCloneCall($"source[{indexList}]")}!";
             }
             else
             {

@@ -312,7 +312,7 @@ internal sealed class CloneCodeGenerator
         
         if (_context.IsFastClonerAvailable)
         {
-            sb.AppendLine($"            return ({typeName}){CloneGeneratorContext.FastClonerDeepCloneCall("source")};");
+            sb.AppendLine($"            return ({typeName}){CloneGeneratorContext.FastClonerDeepCloneCall("source")}!;");
         }
         else
         {
@@ -660,7 +660,7 @@ internal sealed class CloneCodeGenerator
         
         if (_context.IsFastClonerAvailable)
         {
-            sb.AppendLine($"                return ({fallbackCastTypeParam}){CloneGeneratorContext.FastClonerDeepCloneCall("source")};");
+            sb.AppendLine($"                return ({fallbackCastTypeParam}){CloneGeneratorContext.FastClonerDeepCloneCall("source")}!;");
         }
         else
         {

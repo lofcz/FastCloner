@@ -186,7 +186,108 @@ public class GenericClass<T>
         Assert.That(clone.Items[0], Is.Not.SameAs(original.Items[0])); // Should be deep cloned
     }
 
-    // Helper method to run the generator
+    [Test]
+    public void GeneratedCode_ForCollectionWithNonClonableElements_ShouldNotProduceNullableWarnings()
+    {
+        string source = @"
+#nullable enable
+using FastCloner.SourceGenerator.Shared;
+using System.Collections.Generic;
+
+namespace TestNamespace;
+
+public class NonClonableItem
+{
+    public NonClonableItem(int x) { Value = x; }
+    public int Value { get; set; }
+}
+
+[FastClonerClonable]
+public class ClassWithNonClonableCollection
+{
+    public List<NonClonableItem> Items { get; set; } = new();
+}
+";
+        (ImmutableArray<Diagnostic> _, ImmutableArray<Diagnostic> compilationDiags) = RunGeneratorAndCompile(source);
+
+        List<Diagnostic> nullableWarnings = compilationDiags
+            .Where(d => d.Id is "CS8604" or "CS8600")
+            .Where(d => d.Severity == DiagnosticSeverity.Warning)
+            .ToList();
+
+        Assert.That(nullableWarnings, Is.Empty,
+            "Generated code should not produce nullable warnings (CS8604/CS8600). " +
+            $"Found: {string.Join("; ", nullableWarnings.Select(d => $"{d.Id}: {d.GetMessage()}"))}");
+    }
+
+    [Test]
+    public void GeneratedCode_ForArrayWithNonClonableElements_ShouldNotProduceNullableWarnings()
+    {
+        string source = @"
+#nullable enable
+using FastCloner.SourceGenerator.Shared;
+
+namespace TestNamespace;
+
+public class NonClonableItem
+{
+    public NonClonableItem(int x) { Value = x; }
+    public int Value { get; set; }
+}
+
+[FastClonerClonable]
+public class ClassWithNonClonableArray
+{
+    public NonClonableItem[] Items { get; set; } = [];
+}
+";
+        (ImmutableArray<Diagnostic> _, ImmutableArray<Diagnostic> compilationDiags) = RunGeneratorAndCompile(source);
+
+        List<Diagnostic> nullableWarnings = compilationDiags
+            .Where(d => d.Id is "CS8604" or "CS8600")
+            .Where(d => d.Severity == DiagnosticSeverity.Warning)
+            .ToList();
+
+        Assert.That(nullableWarnings, Is.Empty,
+            "Generated code should not produce nullable warnings for arrays. " +
+            $"Found: {string.Join("; ", nullableWarnings.Select(d => $"{d.Id}: {d.GetMessage()}"))}");
+    }
+
+    [Test]
+    public void GeneratedCode_ForDictionaryWithNonClonableValues_ShouldNotProduceNullableWarnings()
+    {
+        string source = @"
+#nullable enable
+using FastCloner.SourceGenerator.Shared;
+using System.Collections.Generic;
+
+namespace TestNamespace;
+
+public class NonClonableItem
+{
+    public NonClonableItem(int x) { Value = x; }
+    public int Value { get; set; }
+}
+
+[FastClonerClonable]
+public class ClassWithNonClonableDictionary
+{
+    public Dictionary<string, NonClonableItem> Items { get; set; } = new();
+}
+";
+        (ImmutableArray<Diagnostic> _, ImmutableArray<Diagnostic> compilationDiags) = RunGeneratorAndCompile(source);
+
+        List<Diagnostic> nullableWarnings = compilationDiags
+            .Where(d => d.Id is "CS8604" or "CS8600")
+            .Where(d => d.Severity == DiagnosticSeverity.Warning)
+            .ToList();
+
+        Assert.That(nullableWarnings, Is.Empty,
+            "Generated code should not produce nullable warnings for dictionaries. " +
+            $"Found: {string.Join("; ", nullableWarnings.Select(d => $"{d.Id}: {d.GetMessage()}"))}");
+    }
+
+    // Helper method to run the generator (returns only generator diagnostics)
     private static ImmutableArray<Diagnostic> RunGenerator(string source)
     {
         SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source);
@@ -212,6 +313,40 @@ public class GenericClass<T>
         GeneratorDriverRunResult result = driver.GetRunResult();
 
         return result.Diagnostics;
+    }
+
+    /// <summary>
+    /// Runs the generator and compiles the result, returning both generator and compilation diagnostics.
+    /// Includes FastCloner runtime reference so DeepClone fallback code is generated.
+    /// </summary>
+    private static (ImmutableArray<Diagnostic> GeneratorDiags, ImmutableArray<Diagnostic> CompilationDiags) RunGeneratorAndCompile(string source)
+    {
+        SyntaxTree syntaxTree = CSharpSyntaxTree.ParseText(source);
+
+        List<MetadataReference> references =
+        [
+            MetadataReference.CreateFromFile(typeof(object).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(FastClonerClonableAttribute).Assembly.Location),
+            MetadataReference.CreateFromFile(typeof(FastCloner).Assembly.Location),
+            MetadataReference.CreateFromFile(Assembly.Load("System.Runtime").Location),
+            MetadataReference.CreateFromFile(Assembly.Load("System.Collections").Location),
+            MetadataReference.CreateFromFile(Assembly.Load("netstandard").Location)
+        ];
+
+        CSharpCompilation compilation = CSharpCompilation.Create(
+            "TestAssembly",
+            [syntaxTree],
+            references,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
+                nullableContextOptions: NullableContextOptions.Enable));
+
+        FastClonerIncrementalGenerator generator = new FastClonerIncrementalGenerator();
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(generator);
+
+        driver.RunGeneratorsAndUpdateCompilation(compilation, out Compilation outputCompilation, out ImmutableArray<Diagnostic> generatorDiags);
+
+        ImmutableArray<Diagnostic> compilationDiags = outputCompilation.GetDiagnostics();
+        return (generatorDiags, compilationDiags);
     }
 
     public class UnclonableClass
