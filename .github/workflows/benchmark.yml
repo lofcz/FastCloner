@@ -35,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: ${{ fromJson(github.event_name == 'workflow_dispatch' && '["ubuntu-latest","windows-latest","macos-latest"]' || '["ubuntu-latest"]') }}
 
     steps:
     - name: Select target OS execution
@@ -44,11 +44,9 @@ jobs:
       run: |
         $eventName = "${{ github.event_name }}"
         $os = "${{ matrix.os }}"
-        $shouldRun = $false
+        $shouldRun = $true
 
-        if ($eventName -ne "workflow_dispatch") {
-          $shouldRun = $os -eq "ubuntu-latest"
-        } else {
+        if ($eventName -eq "workflow_dispatch") {
           switch ($os) {
             "ubuntu-latest" { $shouldRun = "${{ inputs.run_ubuntu }}" -eq "true"; break }
             "windows-latest" { $shouldRun = "${{ inputs.run_windows }}" -eq "true"; break }
