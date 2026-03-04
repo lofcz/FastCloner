@@ -501,7 +501,15 @@ internal static class FastClonerGenerator
     
     internal static object? CloneClassInternal(object? obj, FastCloneState state)
     {
-        return obj is null ? null : CloneClassInternalTyped(obj, obj.GetType(), state);
+        if (obj is null)
+            return null;
+
+        Type runtimeType = obj.GetType();
+        FastClonerCache.TypeCloneMetadata metadata = GetTypeMetadata(runtimeType, state);
+        if (!FastClonerCache.HasActiveTypeBehaviorOverrides && metadata.IsSafe)
+            return obj;
+
+        return CloneClassInternalTyped(obj, runtimeType, state, metadata);
     }
 
     internal static object? CloneClassInternalNoTracking(object? obj, FastCloneState state)

@@ -5,6 +5,8 @@ namespace FastCloner.Code;
 
 internal sealed class FastCloneState
 {
+    private const int InlineKnownRefCapacity = 4;
+    private const int MetadataCacheSize = 4;
     internal static readonly PropertyInfo UseWorkListProp = typeof(FastCloneState).GetProperty("UseWorkList")!;
 
     private const int MaxPoolSize = 16;
@@ -62,7 +64,7 @@ internal sealed class FastCloneState
         for (int i = 0; i < idx; i++)
         {
             baseFromTo[i] = null!;
-            baseFromTo[i + 3] = null!;
+            baseFromTo[i + InlineKnownRefCapacity] = null!;
         }
         idx = 0;
 
@@ -77,10 +79,11 @@ internal sealed class FastCloneState
         workCount = 0;
         UseWorkList = false;
         callDepth = 0;
-        metadata1 = null;
-        metadata2 = null;
-        metadataTypeHandle1 = default;
-        metadataTypeHandle2 = default;
+        metadataTypes[0] = null;
+        metadataTypes[1] = null;
+        metadataTypes[2] = null;
+        metadataTypes[3] = null;
+        metadataWriteIndex = 0;
     }
 
     private FastCloneState(bool trackReferences = true)
@@ -89,16 +92,15 @@ internal sealed class FastCloneState
     }
 
     private MiniDictionary? loops;
-    private readonly object[] baseFromTo = new object[6];
+    private readonly object[] baseFromTo = new object[InlineKnownRefCapacity * 2];
     private int idx;
     private WorkItem[]? workItems;
     private int workCount;
     public bool UseWorkList { get; set; }
     private int callDepth;
-    private RuntimeTypeHandle metadataTypeHandle1;
-    private FastClonerCache.TypeCloneMetadata? metadata1;
-    private RuntimeTypeHandle metadataTypeHandle2;
-    private FastClonerCache.TypeCloneMetadata? metadata2;
+    private readonly Type?[] metadataTypes = new Type?[MetadataCacheSize];
+    private readonly FastClonerCache.TypeCloneMetadata[] metadataValues = new FastClonerCache.TypeCloneMetadata[MetadataCacheSize];
+    private int metadataWriteIndex;
 
     private readonly struct WorkItem(object from, object to, Type type)
     {
@@ -112,16 +114,19 @@ internal sealed class FastCloneState
         if (!TrackReferences)
             return null;
 
-        return idx switch
-        {
-            1 when ReferenceEquals(from, baseFromTo[0]) => baseFromTo[3],
-            2 when ReferenceEquals(from, baseFromTo[0]) => baseFromTo[3],
-            2 when ReferenceEquals(from, baseFromTo[1]) => baseFromTo[4],
-            3 when ReferenceEquals(from, baseFromTo[0]) => baseFromTo[3],
-            3 when ReferenceEquals(from, baseFromTo[1]) => baseFromTo[4],
-            3 when ReferenceEquals(from, baseFromTo[2]) => baseFromTo[5],
-            _ => loops?.FindEntry(from)
-        };
+        if (idx > 0 && ReferenceEquals(from, baseFromTo[0]))
+            return baseFromTo[InlineKnownRefCapacity];
+
+        if (idx > 1 && ReferenceEquals(from, baseFromTo[1]))
+            return baseFromTo[InlineKnownRefCapacity + 1];
+
+        if (idx > 2 && ReferenceEquals(from, baseFromTo[2]))
+            return baseFromTo[InlineKnownRefCapacity + 2];
+
+        if (idx > 3 && ReferenceEquals(from, baseFromTo[3]))
+            return baseFromTo[InlineKnownRefCapacity + 3];
+
+        return loops?.FindEntry(from);
     }
 
     public void AddKnownRef(object from, object to)
@@ -129,10 +134,10 @@ internal sealed class FastCloneState
         if (!TrackReferences)
             return;
 
-        if (idx < 3)
+        if (idx < InlineKnownRefCapacity)
         {
             baseFromTo[idx] = from;
-            baseFromTo[idx + 3] = to;
+            baseFromTo[idx + InlineKnownRefCapacity] = to;
             idx++;
             return;
         }
@@ -143,10 +148,10 @@ internal sealed class FastCloneState
 
     public void EnsureKnownRefCapacity(int totalExpectedReferences)
     {
-        if (!TrackReferences || totalExpectedReferences <= 3)
+        if (!TrackReferences || totalExpectedReferences <= InlineKnownRefCapacity)
             return;
 
-        int expectedInDictionary = totalExpectedReferences - 3;
+        int expectedInDictionary = totalExpectedReferences - InlineKnownRefCapacity;
         if (expectedInDictionary <= 0)
             return;
 
@@ -227,24 +232,30 @@ internal sealed class FastCloneState
         if (callDepth > 0) callDepth--;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryGetCachedTypeMetadata(Type type, out FastClonerCache.TypeCloneMetadata metadata)
     {
-        RuntimeTypeHandle handle = type.TypeHandle;
-        FastClonerCache.TypeCloneMetadata? cached1 = metadata1;
-        if (cached1 is not null && metadataTypeHandle1.Equals(handle))
+        if (ReferenceEquals(type, metadataTypes[0]))
         {
-            metadata = cached1;
+            metadata = metadataValues[0];
             return true;
         }
 
-        FastClonerCache.TypeCloneMetadata? cached2 = metadata2;
-        if (cached2 is not null && metadataTypeHandle2.Equals(handle))
+        if (ReferenceEquals(type, metadataTypes[1]))
         {
-            metadataTypeHandle2 = metadataTypeHandle1;
-            metadata2 = cached1;
-            metadataTypeHandle1 = handle;
-            metadata1 = cached2;
-            metadata = cached2;
+            metadata = metadataValues[1];
+            return true;
+        }
+
+        if (ReferenceEquals(type, metadataTypes[2]))
+        {
+            metadata = metadataValues[2];
+            return true;
+        }
+
+        if (ReferenceEquals(type, metadataTypes[3]))
+        {
+            metadata = metadataValues[3];
             return true;
         }
 
@@ -255,32 +266,30 @@ internal sealed class FastCloneState
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void CacheTypeMetadata(Type type, FastClonerCache.TypeCloneMetadata metadata)
     {
-        RuntimeTypeHandle handle = type.TypeHandle;
-        if (metadataTypeHandle1.Equals(handle))
-        {
-            metadata1 = metadata;
-            return;
-        }
+        if (ReferenceEquals(type, metadataTypes[0])) { metadataValues[0] = metadata; return; }
+        if (ReferenceEquals(type, metadataTypes[1])) { metadataValues[1] = metadata; return; }
+        if (ReferenceEquals(type, metadataTypes[2])) { metadataValues[2] = metadata; return; }
+        if (ReferenceEquals(type, metadataTypes[3])) { metadataValues[3] = metadata; return; }
 
-        metadataTypeHandle2 = metadataTypeHandle1;
-        metadata2 = metadata1;
-        metadataTypeHandle1 = handle;
-        metadata1 = metadata;
+        int index = metadataWriteIndex;
+        metadataTypes[index] = type;
+        metadataValues[index] = metadata;
+        metadataWriteIndex = (index + 1) & (MetadataCacheSize - 1);
     }
 
     private sealed class MiniDictionary
     {
-        private struct Entry(int hashCode, nint next, object key, object value)
+        private struct Entry(int hashCode, int next, object key, object value)
         {
             public readonly int HashCode = hashCode;
-            public nint Next = next;
+            public int Next = next;
             public readonly object Key = key;
             public readonly object Value = value;
         }
 
         private const int DefaultCapacity = 8;
 
-        private nint[] buckets;
+        private int[] buckets;
         private Entry[] entries;
         private int count;
         private int bucketMask;
@@ -309,10 +318,10 @@ internal sealed class FastCloneState
         public object? FindEntry(object key)
         {
             int hashCode = RuntimeHelpers.GetHashCode(key) & 0x7FFFFFFF;
-            nint bucketIndex = hashCode & bucketMask;
+            int bucketIndex = hashCode & bucketMask;
 
             Entry[] entriesLocal = entries;
-            for (nint i = buckets[bucketIndex]; i >= 0; i = entriesLocal[i].Next)
+            for (int i = buckets[bucketIndex]; i >= 0; i = entriesLocal[i].Next)
             {
                 ref readonly Entry entry = ref entriesLocal[i];
                 if (entry.HashCode == hashCode && ReferenceEquals(entry.Key, key))
@@ -324,9 +333,9 @@ internal sealed class FastCloneState
 
         private void Initialize(int size)
         {
-            buckets = new nint[size];
+            buckets = new int[size];
 #if MODERN
-            Array.Fill(buckets, (nint)(-1));
+            Array.Fill(buckets, -1);
 #else
             for (int i = 0; i < buckets.Length; i++)
                 buckets[i] = -1;
@@ -342,7 +351,7 @@ internal sealed class FastCloneState
 
             Array.Clear(entries, 0, count);
 #if MODERN
-            Array.Fill(buckets, (nint)(-1));
+            Array.Fill(buckets, -1);
 #else
             for (int i = 0; i < buckets.Length; i++)
                 buckets[i] = -1;
@@ -360,7 +369,7 @@ internal sealed class FastCloneState
         public void Insert(object key, object value)
         {
             int hashCode = RuntimeHelpers.GetHashCode(key) & 0x7FFFFFFF;
-            nint[] localBuckets = buckets;
+            int[] localBuckets = buckets;
             Entry[] localEntries = entries;
 
             if (count == localEntries.Length)
@@ -370,8 +379,8 @@ internal sealed class FastCloneState
                 localEntries = entries;
             }
 
-            nint targetBucket = hashCode & bucketMask;
-            nint index = count++;
+            int targetBucket = hashCode & bucketMask;
+            int index = count++;
             localEntries[index] = new Entry(hashCode, localBuckets[targetBucket], key, value);
             localBuckets[targetBucket] = index;
         }
@@ -380,9 +389,9 @@ internal sealed class FastCloneState
 
         private void Resize(int newSize)
         {
-            nint[] newBuckets = new nint[newSize];
+            int[] newBuckets = new int[newSize];
 #if MODERN
-            Array.Fill(newBuckets, (nint)(-1));
+            Array.Fill(newBuckets, -1);
 #else
             for (int i = 0; i < newBuckets.Length; i++)
                 newBuckets[i] = -1;
@@ -395,7 +404,7 @@ internal sealed class FastCloneState
             for (int i = 0; i < count; i++)
             {
                 ref Entry entry = ref newEntries[i];
-                nint bucket = entry.HashCode & newMask;
+                int bucket = entry.HashCode & newMask;
                 entry.Next = newBuckets[bucket];
                 newBuckets[bucket] = i;
             }

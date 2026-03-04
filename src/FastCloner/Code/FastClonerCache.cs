@@ -287,6 +287,9 @@ internal static class FastClonerCache
         public TValue GetOrAdd(Type type, Func<Type, TValue> valueFactory)
         {
             IntPtr handle = type.TypeHandle.Value;
+            if (cache.TryGetValue(handle, out TValue? existing))
+                return existing;
+
             return cache.GetOrAdd(handle, _ => valueFactory(type));
         }
 

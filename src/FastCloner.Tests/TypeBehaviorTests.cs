@@ -705,6 +705,92 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Assert.That(FastClonerCache.HasActiveTypeBehaviorOverrides, Is.False);
     }
 
+    public class ClassWithThreeStrings
+    {
+        public string? First { get; set; }
+        public string? Middle { get; set; }
+        public string? Last { get; set; }
+        public int Id { get; set; }
+    }
+
+    public class ClassWithMiddleStringIgnored
+    {
+        public string? First { get; set; }
+
+        [FastClonerIgnore]
+        public string? Middle { get; set; }
+
+        public string? Last { get; set; }
+        public int Id { get; set; }
+    }
+
+    [Test]
+    public void MemberIgnore_OnlyMiddleString_IsNull()
+    {
+        // Arrange
+        ClassWithMiddleStringIgnored original = new ClassWithMiddleStringIgnored
+        {
+            First = "Alpha",
+            Middle = "Beta",
+            Last = "Gamma",
+            Id = 99
+        };
+
+        // Act
+        ClassWithMiddleStringIgnored cloned = original.DeepClone();
+
+        // Assert
+        Assert.That(cloned, Is.Not.Null);
+        Assert.That(cloned.Id, Is.EqualTo(99));
+        Assert.That(cloned.First, Is.EqualTo("Alpha"));
+        Assert.That(cloned.Middle, Is.Null);
+        Assert.That(cloned.Last, Is.EqualTo("Gamma"));
+    }
+
+    [Test]
+    public void SetTypeBehavior_IgnoreString_ClassWithThreeStrings_AllStringsNull()
+    {
+        // Arrange
+        ClassWithThreeStrings original = new ClassWithThreeStrings
+        {
+            First = "Alpha",
+            Middle = "Beta",
+            Last = "Gamma",
+            Id = 99
+        };
+        FastCloner.SetTypeBehavior<string>(CloneBehavior.Ignore);
+
+        // Act
+        ClassWithThreeStrings cloned = original.DeepClone();
+
+        // Assert
+        Assert.That(cloned, Is.Not.Null);
+        Assert.That(cloned.Id, Is.EqualTo(99));
+        Assert.That(cloned.First, Is.Null);
+        Assert.That(cloned.Middle, Is.Null);
+        Assert.That(cloned.Last, Is.Null);
+    }
+
+    [Test]
+    public void SetTypeBehavior_IgnoreString_MixedObjectArray_OnlyStringsNull()
+    {
+        // Arrange
+        var original = new object?[] { "Hello", 42, "World", 3.14, "!" };
+        FastCloner.SetTypeBehavior<string>(CloneBehavior.Ignore);
+
+        // Act
+        object?[] cloned = original.DeepClone();
+
+        // Assert
+        Assert.That(cloned, Is.Not.Null);
+        Assert.That(cloned.Length, Is.EqualTo(5));
+        Assert.That(cloned[0], Is.Null);
+        Assert.That(cloned[1], Is.EqualTo(42));
+        Assert.That(cloned[2], Is.Null);
+        Assert.That(cloned[3], Is.EqualTo(3.14));
+        Assert.That(cloned[4], Is.Null);
+    }
+
     [Test]
     public void DisableOptionalFeatures_WhenEnabled_IgnoresTypeBehaviorOverrides()
     {
