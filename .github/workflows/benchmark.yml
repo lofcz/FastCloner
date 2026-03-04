@@ -102,7 +102,7 @@ jobs:
 
         $runsResponse = gh api "repos/$repo/actions/workflows/$workflowFile/runs?branch=next&event=push&status=success&per_page=50"
         $runs = ($runsResponse | ConvertFrom-Json).workflow_runs
-        $artifactId = $null
+        $baselineRunId = $null
 
         foreach ($run in $runs) {
           if ($run.id -eq ${{ github.run_id }}) {
@@ -115,20 +115,18 @@ jobs:
             Select-Object -First 1
 
           if ($artifact) {
-            $artifactId = $artifact.id
+            $baselineRunId = $run.id
             break
           }
         }
 
-        if (-not $artifactId) {
+        if (-not $baselineRunId) {
           Write-Host "No baseline artifact found for '$artifactName'."
           exit 0
         }
 
         New-Item -ItemType Directory -Force -Path baseline | Out-Null
-        gh api "repos/$repo/actions/artifacts/$artifactId/zip" --output baseline/baseline.zip
-        Expand-Archive -Path baseline/baseline.zip -DestinationPath baseline -Force
-        Remove-Item baseline/baseline.zip -Force
+        gh run download $baselineRunId --name $artifactName --dir baseline --repo $repo
 
         $baselineJson = Get-ChildItem -Path baseline -Filter "current-normalized.json" -Recurse | Select-Object -First 1
         if ($baselineJson) {
