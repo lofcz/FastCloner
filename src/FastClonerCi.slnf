@@ -1,11 +1,12 @@
-﻿{
+{
   "solution": {
     "path": "FastCloner.slnx",
     "projects": [
       "FastCloner\\FastCloner.csproj",
       "FastCloner.Tests\\FastCloner.Tests.csproj",
       "FastCloner.Contrib\\FastCloner.Contrib.csproj",
-      "FastCloner.Benchmark\\FastCloner.Benchmark.csproj"
+      "FastCloner.Benchmark\\FastCloner.Benchmark.csproj",
+      "FastCloner.Benchmark.CI\\FastCloner.Benchmark.CI.csproj"
     ]
   }
 }

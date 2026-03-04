@@ -248,8 +248,21 @@ internal static class FastClonerExprGenerator
             else
             {
                 MethodInfo classCloneMethod = GetClassCloneMethod(useShallowClassClone, skipCycleTracking);
-                Expression call = Expression.Call(classCloneMethod, originalMemberValue, state);
-                clonedValueExpression = Expression.Convert(call, memberType);
+                if (!useShallowClassClone && !skipCycleTracking)
+                {
+                    Expression deepCall = Expression.Call(classCloneMethod, originalMemberValue, state);
+                    Expression shallowCall = Expression.Call(StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassShallowAndTrack, originalMemberValue, state);
+                    Expression selected = Expression.Condition(
+                        Expression.Property(state, StaticMethodInfos.DeepCloneStateProperties.UseWorkList),
+                        shallowCall,
+                        deepCall);
+                    clonedValueExpression = Expression.Convert(selected, memberType);
+                }
+                else
+                {
+                    Expression call = Expression.Call(classCloneMethod, originalMemberValue, state);
+                    clonedValueExpression = Expression.Convert(call, memberType);
+                }
             }
 
             expressionList.Add(Expression.Call(
@@ -608,8 +621,21 @@ internal static class FastClonerExprGenerator
                 else
                 {
                     MethodInfo classCloneMethod = GetClassCloneMethod(useShallowClassClone, skipCycleTracking);
-                    Expression call = Expression.Call(classCloneMethod, originalMemberValue, state);
-                    clonedValueExpression = Expression.Convert(call, memberType);
+                    if (!useShallowClassClone && !skipCycleTracking)
+                    {
+                        Expression deepCall = Expression.Call(classCloneMethod, originalMemberValue, state);
+                        Expression shallowCall = Expression.Call(StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassShallowAndTrack, originalMemberValue, state);
+                        Expression selected = Expression.Condition(
+                            Expression.Property(state, StaticMethodInfos.DeepCloneStateProperties.UseWorkList),
+                            shallowCall,
+                            deepCall);
+                        clonedValueExpression = Expression.Convert(selected, memberType);
+                    }
+                    else
+                    {
+                        Expression call = Expression.Call(classCloneMethod, originalMemberValue, state);
+                        clonedValueExpression = Expression.Convert(call, memberType);
+                    }
                 }
 
                 switch (member)

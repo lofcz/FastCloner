@@ -6,6 +6,11 @@ namespace FastCloner.Code;
 
 internal static class StaticMethodInfos
 {
+    internal static class DeepCloneStateProperties
+    {
+        internal static readonly PropertyInfo UseWorkList = typeof(FastCloneState).GetProperty(nameof(FastCloneState.UseWorkList))!;
+    }
+
     internal static class DeepCloneStateMethods
     {
         internal static readonly MethodInfo AddKnownRef = typeof(FastCloneState).GetMethod(nameof(FastCloneState.AddKnownRef))!;

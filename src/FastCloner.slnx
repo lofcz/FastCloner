@@ -3,6 +3,7 @@
     <File Path="../README.md" />
   </Folder>
   <Project Path="FastCloner.Benchmark/FastCloner.Benchmark.csproj" />
+  <Project Path="FastCloner.Benchmark.CI/FastCloner.Benchmark.CI.csproj" />
   <Project Path="FastCloner.Contrib/FastCloner.Contrib.csproj" />
   <Project Path="FastCloner.SourceGenerator.Analyzers/FastCloner.SourceGenerator.Analyzers.csproj" />
   <Project Path="FastCloner.SourceGenerator.CodeFixes/FastCloner.SourceGenerator.CodeFixes.csproj" />

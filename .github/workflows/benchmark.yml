@@ -1,0 +1,226 @@
+name: Deep Clone Benchmarks
+
+on:
+  push:
+    branches: [ "next" ]
+  pull_request:
+    branches: [ "next" ]
+  workflow_dispatch:
+    inputs:
+      run_ubuntu:
+        description: "Run Ubuntu benchmarks"
+        type: boolean
+        default: true
+      run_windows:
+        description: "Run Windows benchmarks"
+        type: boolean
+        default: true
+      run_macos:
+        description: "Run macOS benchmarks"
+        type: boolean
+        default: true
+
+env:
+  DOTNET_VERSION: "10.0.103"
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+
+jobs:
+  benchmark:
+    name: Benchmarks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - name: Select target OS execution
+      id: run_gate
+      shell: pwsh
+      run: |
+        $eventName = "${{ github.event_name }}"
+        $os = "${{ matrix.os }}"
+        $shouldRun = $false
+
+        if ($eventName -ne "workflow_dispatch") {
+          $shouldRun = $os -eq "ubuntu-latest"
+        } else {
+          switch ($os) {
+            "ubuntu-latest" { $shouldRun = "${{ inputs.run_ubuntu }}" -eq "true"; break }
+            "windows-latest" { $shouldRun = "${{ inputs.run_windows }}" -eq "true"; break }
+            "macos-latest" { $shouldRun = "${{ inputs.run_macos }}" -eq "true"; break }
+          }
+        }
+
+        "should_run=$($shouldRun.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+    - name: Checkout repository
+      if: steps.run_gate.outputs.should_run == 'true'
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      if: steps.run_gate.outputs.should_run == 'true'
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore benchmark project
+      if: steps.run_gate.outputs.should_run == 'true'
+      run: dotnet restore src/FastCloner.Benchmark.CI/FastCloner.Benchmark.CI.csproj
+
+    - name: Run deep clone benchmarks
+      if: steps.run_gate.outputs.should_run == 'true'
+      shell: pwsh
+      run: >
+        dotnet run -c Release --project src/FastCloner.Benchmark.CI/FastCloner.Benchmark.CI.csproj -- --filter *DeepCloneBenchmarks*
+
+    - name: Resolve benchmark CSV path
+      if: steps.run_gate.outputs.should_run == 'true'
+      shell: pwsh
+      run: |
+        $csv = Get-ChildItem -Path "BenchmarkDotNet.Artifacts/results" -Filter "*DeepCloneBenchmarks-report.csv" -Recurse |
+          Sort-Object LastWriteTime -Descending |
+          Select-Object -First 1
+        if (-not $csv) {
+          throw "Could not find BenchmarkDotNet CSV output for DeepCloneBenchmarks."
+        }
+
+        "BENCHMARK_CSV=$($csv.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+        "RESULT_DIR=benchmark-results/${{ matrix.os }}" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+    - name: Download latest baseline from next
+      if: steps.run_gate.outputs.should_run == 'true' && github.event_name == 'pull_request'
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        $repo = "${{ github.repository }}"
+        $workflowFile = "benchmark.yml"
+        $artifactName = "deepclone-baseline-${{ matrix.os }}"
+
+        $runsResponse = gh api "repos/$repo/actions/workflows/$workflowFile/runs?branch=next&event=push&status=success&per_page=50"
+        $runs = ($runsResponse | ConvertFrom-Json).workflow_runs
+        $artifactId = $null
+
+        foreach ($run in $runs) {
+          if ($run.id -eq ${{ github.run_id }}) {
+            continue
+          }
+
+          $artifactsResponse = gh api "repos/$repo/actions/runs/$($run.id)/artifacts?per_page=100"
+          $artifact = ($artifactsResponse | ConvertFrom-Json).artifacts |
+            Where-Object { $_.name -eq $artifactName -and -not $_.expired } |
+            Select-Object -First 1
+
+          if ($artifact) {
+            $artifactId = $artifact.id
+            break
+          }
+        }
+
+        if (-not $artifactId) {
+          Write-Host "No baseline artifact found for '$artifactName'."
+          exit 0
+        }
+
+        New-Item -ItemType Directory -Force -Path baseline | Out-Null
+        gh api "repos/$repo/actions/artifacts/$artifactId/zip" --output baseline/baseline.zip
+        Expand-Archive -Path baseline/baseline.zip -DestinationPath baseline -Force
+        Remove-Item baseline/baseline.zip -Force
+
+        $baselineJson = Get-ChildItem -Path baseline -Filter "current-normalized.json" -Recurse | Select-Object -First 1
+        if ($baselineJson) {
+          "BASELINE_JSON=$($baselineJson.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Using baseline: $($baselineJson.FullName)"
+        } else {
+          Write-Host "Downloaded baseline artifact but current-normalized.json was not found."
+        }
+
+    - name: Generate normalized report and diff
+      if: steps.run_gate.outputs.should_run == 'true'
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Force -Path $env:RESULT_DIR | Out-Null
+
+        $args = @(
+          "run",
+          "-c", "Release",
+          "--project", "src/FastCloner.Benchmark.CI/FastCloner.Benchmark.CI.csproj",
+          "--",
+          "--report",
+          "--csv", $env:BENCHMARK_CSV,
+          "--normalized-json", "$env:RESULT_DIR/current-normalized.json",
+          "--current-report", "$env:RESULT_DIR/current-report.md",
+          "--summary-report", "$env:RESULT_DIR/summary.md",
+          "--comment-report", "$env:RESULT_DIR/pr-comment.md",
+          "--diff-json", "$env:RESULT_DIR/baseline-diff.json",
+          "--os", "${{ matrix.os }}"
+        )
+
+        if ($env:BASELINE_JSON) {
+          $args += @("--baseline-json", $env:BASELINE_JSON)
+        }
+
+        dotnet @args
+
+    - name: Add benchmark summary to workflow
+      if: always() && steps.run_gate.outputs.should_run == 'true'
+      shell: pwsh
+      run: |
+        if (Test-Path "$env:RESULT_DIR/summary.md") {
+          Get-Content "$env:RESULT_DIR/summary.md" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+        }
+
+    - name: Upload benchmark result artifacts
+      if: always() && steps.run_gate.outputs.should_run == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: deepclone-results-${{ matrix.os }}
+        path: |
+          benchmark-results/${{ matrix.os }}/**
+          BenchmarkDotNet.Artifacts/results/*DeepCloneBenchmarks*
+        if-no-files-found: warn
+        retention-days: 30
+
+    - name: Publish baseline artifact
+      if: steps.run_gate.outputs.should_run == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/next'
+      uses: actions/upload-artifact@v4
+      with:
+        name: deepclone-baseline-${{ matrix.os }}
+        path: benchmark-results/${{ matrix.os }}/current-normalized.json
+        if-no-files-found: error
+        retention-days: 30
+
+    - name: Upsert pull request benchmark comment
+      if: steps.run_gate.outputs.should_run == 'true' && github.event_name == 'pull_request' && matrix.os == 'ubuntu-latest'
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        $commentPath = "$env:RESULT_DIR/pr-comment.md"
+        if (-not (Test-Path $commentPath)) {
+          throw "PR comment report not found: $commentPath"
+        }
+
+        $marker = "<!-- deepclone-benchmark-report -->"
+        $body = $marker + "`n" + (Get-Content $commentPath -Raw)
+        $repo = "${{ github.repository }}"
+        $prNumber = "${{ github.event.pull_request.number }}"
+
+        $comments = gh api "repos/$repo/issues/$prNumber/comments?per_page=100" | ConvertFrom-Json
+        $existing = $comments | Where-Object { $_.body -like "*$marker*" } | Select-Object -First 1
+
+        $payloadPath = Join-Path $env:RUNNER_TEMP "deepclone-comment.json"
+        @{ body = $body } | ConvertTo-Json -Depth 10 | Set-Content -Path $payloadPath
+
+        if ($existing) {
+          gh api --method PATCH "repos/$repo/issues/comments/$($existing.id)" --input $payloadPath | Out-Null
+          Write-Host "Updated existing benchmark PR comment."
+        } else {
+          gh api --method POST "repos/$repo/issues/$prNumber/comments" --input $payloadPath | Out-Null
+          Write-Host "Created benchmark PR comment."
+        }
