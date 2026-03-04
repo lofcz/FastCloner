@@ -232,8 +232,7 @@ internal static class BenchmarkResultParser
             "us" => amount * 1000d,
             "ms" => amount * 1_000_000d,
             "s" => amount * 1_000_000_000d,
-            "μs" => amount * 1000d,
-            "µs" => amount * 1000d,
+            "μs" or "µs" => amount * 1000d,
             _ => amount
         };
     }

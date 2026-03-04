@@ -203,13 +203,13 @@ internal static class BenchmarkDiffReporter
         sb.AppendLine($"- Baseline generated (UTC): `{baseline.GeneratedAtUtc:yyyy-MM-dd HH:mm:ss}`");
         sb.AppendLine($"- Regression thresholds: time > `{FormatPercent(options.TimeThreshold)}`, alloc > `{FormatPercent(options.AllocThreshold)}`");
         sb.AppendLine();
-        sb.AppendLine("| Benchmark | FC Time (Baseline) | FC Time (Current) | Delta Time | FC Alloc (Baseline) | FC Alloc (Current) | Delta Alloc | Status |");
-        sb.AppendLine("|---|---:|---:|---|---:|---:|---|---|");
+        sb.AppendLine("| Status | Benchmark | FC Time (Baseline) | FC Time (Current) | Delta Time | FC Alloc (Baseline) | FC Alloc (Current) | Delta Alloc |");
+        sb.AppendLine("|---|---|---:|---:|---|---:|---:|---|");
 
         foreach (BaselineDiffItem item in diff.Items)
         {
             sb.AppendLine(
-                $"| {item.Benchmark} | {FormatNanoseconds(item.BaselineMeanNanoseconds)} | {FormatNanoseconds(item.CurrentMeanNanoseconds)} | {FormatCurrentDelta(item.TimeDeltaRatio, options.SameThreshold, "faster", "slower")} | {FormatBytes(item.BaselineAllocatedBytes)} | {FormatBytes(item.CurrentAllocatedBytes)} | {FormatCurrentDelta(item.AllocDeltaRatio, options.SameThreshold, "less", "more")} | {FormatStatus(item.Status)} |");
+                $"| {FormatStatus(item.Status)} | {item.Benchmark} | {FormatNanoseconds(item.BaselineMeanNanoseconds)} | {FormatNanoseconds(item.CurrentMeanNanoseconds)} | {FormatCurrentDelta(item.TimeDeltaRatio, options.SameThreshold, "faster", "slower")} | {FormatBytes(item.BaselineAllocatedBytes)} | {FormatBytes(item.CurrentAllocatedBytes)} | {FormatCurrentDelta(item.AllocDeltaRatio, options.SameThreshold, "less", "more")} |");
         }
 
         AppendStatusSection(sb, "Regressions", diff.Items.Where(item => item.Status == DiffStatus.Regression).ToList(), options.SameThreshold);
@@ -333,11 +333,11 @@ internal static class BenchmarkDiffReporter
     {
         return status switch
         {
-            DiffStatus.Regression => "regression",
-            DiffStatus.Improvement => "improvement",
-            DiffStatus.Mixed => "mixed",
-            DiffStatus.NewBenchmark => "new",
-            _ => "stable"
+            DiffStatus.Regression => "🔴",
+            DiffStatus.Improvement => "🟢",
+            DiffStatus.Mixed => "🟡",
+            DiffStatus.NewBenchmark => "🆕",
+            _ => "⚪"
         };
     }
 

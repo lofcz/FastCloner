@@ -68,6 +68,14 @@ internal static class FastClonerGenerator
         private FastClonerCache.TypeCloneMetadata? metadataB;
         private Func<object, FastCloneState, object>? recursiveB;
         private Func<object, FastCloneState, object>? worklistB;
+        private Type? typeC;
+        private FastClonerCache.TypeCloneMetadata? metadataC;
+        private Func<object, FastCloneState, object>? recursiveC;
+        private Func<object, FastCloneState, object>? worklistC;
+        private Type? typeD;
+        private FastClonerCache.TypeCloneMetadata? metadataD;
+        private Func<object, FastCloneState, object>? recursiveD;
+        private Func<object, FastCloneState, object>? worklistD;
         
         public void Resolve(
             Type runtimeType,
@@ -93,9 +101,37 @@ internal static class FastClonerGenerator
                 return;
             }
 
+            if (runtimeType == typeC && metadataC is not null)
+            {
+                metadata = metadataC;
+                recursiveCloner = recursiveC;
+                worklistCloner = worklistC;
+                PromoteThirdToFirst();
+                return;
+            }
+
+            if (runtimeType == typeD && metadataD is not null)
+            {
+                metadata = metadataD;
+                recursiveCloner = recursiveD;
+                worklistCloner = worklistD;
+                PromoteFourthToFirst();
+                return;
+            }
+
             metadata = GetTypeMetadata(runtimeType, state);
             recursiveCloner = metadata.RecursiveCloner;
             worklistCloner = metadata.WorklistCloner ?? recursiveCloner;
+
+            typeD = typeC;
+            metadataD = metadataC;
+            recursiveD = recursiveC;
+            worklistD = worklistC;
+            
+            typeC = typeB;
+            metadataC = metadataB;
+            recursiveC = recursiveB;
+            worklistC = worklistB;
 
             typeB = typeA;
             metadataB = metadataA;
@@ -127,6 +163,72 @@ internal static class FastClonerGenerator
             Func<object, FastCloneState, object>? previousWorklistA = worklistA;
             worklistA = worklistB;
             worklistB = previousWorklistA;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [SuppressMessage("ReSharper", "SwapViaDeconstruction")]
+        private void PromoteThirdToFirst()
+        {
+            Type? previousTypeA = typeA;
+            Type? previousTypeB = typeB;
+            typeA = typeC;
+            typeB = previousTypeA;
+            typeC = previousTypeB;
+
+            FastClonerCache.TypeCloneMetadata? previousMetadataA = metadataA;
+            FastClonerCache.TypeCloneMetadata? previousMetadataB = metadataB;
+            metadataA = metadataC;
+            metadataB = previousMetadataA;
+            metadataC = previousMetadataB;
+
+            Func<object, FastCloneState, object>? previousRecursiveA = recursiveA;
+            Func<object, FastCloneState, object>? previousRecursiveB = recursiveB;
+            recursiveA = recursiveC;
+            recursiveB = previousRecursiveA;
+            recursiveC = previousRecursiveB;
+
+            Func<object, FastCloneState, object>? previousWorklistA = worklistA;
+            Func<object, FastCloneState, object>? previousWorklistB = worklistB;
+            worklistA = worklistC;
+            worklistB = previousWorklistA;
+            worklistC = previousWorklistB;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [SuppressMessage("ReSharper", "SwapViaDeconstruction")]
+        private void PromoteFourthToFirst()
+        {
+            Type? previousTypeA = typeA;
+            Type? previousTypeB = typeB;
+            Type? previousTypeC = typeC;
+            typeA = typeD;
+            typeB = previousTypeA;
+            typeC = previousTypeB;
+            typeD = previousTypeC;
+
+            FastClonerCache.TypeCloneMetadata? previousMetadataA = metadataA;
+            FastClonerCache.TypeCloneMetadata? previousMetadataB = metadataB;
+            FastClonerCache.TypeCloneMetadata? previousMetadataC = metadataC;
+            metadataA = metadataD;
+            metadataB = previousMetadataA;
+            metadataC = previousMetadataB;
+            metadataD = previousMetadataC;
+
+            Func<object, FastCloneState, object>? previousRecursiveA = recursiveA;
+            Func<object, FastCloneState, object>? previousRecursiveB = recursiveB;
+            Func<object, FastCloneState, object>? previousRecursiveC = recursiveC;
+            recursiveA = recursiveD;
+            recursiveB = previousRecursiveA;
+            recursiveC = previousRecursiveB;
+            recursiveD = previousRecursiveC;
+
+            Func<object, FastCloneState, object>? previousWorklistA = worklistA;
+            Func<object, FastCloneState, object>? previousWorklistB = worklistB;
+            Func<object, FastCloneState, object>? previousWorklistC = worklistC;
+            worklistA = worklistD;
+            worklistB = previousWorklistA;
+            worklistC = previousWorklistB;
+            worklistD = previousWorklistC;
         }
     }
 
@@ -862,6 +964,7 @@ internal static class FastClonerGenerator
             return outArray;
         }
 
+        bool hasOptionalTypeOverrides = FastClonerCache.HasActiveTypeBehaviorOverrides;
         TypeCloneDispatchCache2 dispatch = default;
         for (int i = 0; i < l; i++)
         {
@@ -873,6 +976,15 @@ internal static class FastClonerGenerator
             }
 
             Type runtimeType = item.GetType();
+            if (!hasOptionalTypeOverrides &&
+                ((!runtimeType.IsValueType && FastClonerSafeTypes.CanReturnSameObject(runtimeType)) ||
+                 runtimeType.IsPrimitive ||
+                 runtimeType.IsEnum))
+            {
+                outArray[i] = item;
+                continue;
+            }
+
             dispatch.Resolve(runtimeType, state, out FastClonerCache.TypeCloneMetadata metadata, out Func<object, FastCloneState, object>? recursiveCloner, out Func<object, FastCloneState, object>? worklistCloner);
 
             outArray[i] = (T)CloneClassInternalResolved(item, state, runtimeType, metadata, recursiveCloner, worklistCloner)!;
