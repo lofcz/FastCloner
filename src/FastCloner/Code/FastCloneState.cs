@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Runtime.CompilerServices;
 
 namespace FastCloner.Code;
@@ -7,7 +6,6 @@ internal sealed class FastCloneState
 {
     private const int InlineKnownRefCapacity = 4;
     private const int MetadataCacheSize = 4;
-    internal static readonly PropertyInfo UseWorkListProp = typeof(FastCloneState).GetProperty("UseWorkList")!;
 
     private const int MaxPoolSize = 16;
     [ThreadStatic]

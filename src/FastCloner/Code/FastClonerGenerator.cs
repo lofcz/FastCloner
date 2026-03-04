@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -57,6 +58,78 @@ internal static class FastClonerGenerator
     private static readonly Type DictionaryInterfaceDefinition = typeof(IDictionary<,>);
     private static readonly Type EnumerableInterfaceDefinition = typeof(IEnumerable<>);
 
+    private struct TypeCloneDispatchCache2
+    {
+        private Type? typeA;
+        private FastClonerCache.TypeCloneMetadata? metadataA;
+        private Func<object, FastCloneState, object>? recursiveA;
+        private Func<object, FastCloneState, object>? worklistA;
+        private Type? typeB;
+        private FastClonerCache.TypeCloneMetadata? metadataB;
+        private Func<object, FastCloneState, object>? recursiveB;
+        private Func<object, FastCloneState, object>? worklistB;
+        
+        public void Resolve(
+            Type runtimeType,
+            FastCloneState state,
+            out FastClonerCache.TypeCloneMetadata metadata,
+            out Func<object, FastCloneState, object>? recursiveCloner,
+            out Func<object, FastCloneState, object>? worklistCloner)
+        {
+            if (runtimeType == typeA && metadataA is not null)
+            {
+                metadata = metadataA;
+                recursiveCloner = recursiveA;
+                worklistCloner = worklistA;
+                return;
+            }
+
+            if (runtimeType == typeB && metadataB is not null)
+            {
+                metadata = metadataB;
+                recursiveCloner = recursiveB;
+                worklistCloner = worklistB;
+                PromoteSecondToFirst();
+                return;
+            }
+
+            metadata = GetTypeMetadata(runtimeType, state);
+            recursiveCloner = metadata.RecursiveCloner;
+            worklistCloner = metadata.WorklistCloner ?? recursiveCloner;
+
+            typeB = typeA;
+            metadataB = metadataA;
+            recursiveB = recursiveA;
+            worklistB = worklistA;
+
+            typeA = runtimeType;
+            metadataA = metadata;
+            recursiveA = recursiveCloner;
+            worklistA = worklistCloner;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        [SuppressMessage("ReSharper", "SwapViaDeconstruction")] // not compatible with the old tfms, not worth the effort
+        private void PromoteSecondToFirst()
+        {
+            Type? previousTypeA = typeA;
+            typeA = typeB;
+            typeB = previousTypeA;
+
+            FastClonerCache.TypeCloneMetadata? previousMetadataA = metadataA;
+            metadataA = metadataB;
+            metadataB = previousMetadataA;
+
+            Func<object, FastCloneState, object>? previousRecursiveA = recursiveA;
+            recursiveA = recursiveB;
+            recursiveB = previousRecursiveA;
+
+            Func<object, FastCloneState, object>? previousWorklistA = worklistA;
+            worklistA = worklistB;
+            worklistB = previousWorklistA;
+        }
+    }
+
     internal static FastClonerCache.TypeCloneMetadata GetTypeMetadata(Type type) =>
         FastClonerCache.GetOrAddTypeMetadata(type, BuildTypeMetadata);
 
@@ -76,7 +149,7 @@ internal static class FastClonerGenerator
         bool canHaveCycles = !type.IsValueType && FastClonerCache.GetOrAddCanHaveCycles(type, CalculateCanHaveCycles);
         bool canSkipReferenceTracking = type.IsValueType && !ValueTypeContainsReferenceFieldsCached(type);
         bool hasDirectSelfReference = canHaveCycles && TypeHasDirectSelfReference(type);
-        bool hasBehaviorSensitiveMembers = !global::FastCloner.FastCloner.DisableOptionalFeatures &&
+        bool hasBehaviorSensitiveMembers = !FastCloner.DisableOptionalFeatures &&
                                            FastClonerCache.GetOrAddTypeContainsIgnoredMembers(type, FastClonerExprGenerator.CalculateTypeContainsIgnoredMembers);
         bool requiresSpecializedCloner = type.IsArray ||
                                          FastClonerExprGenerator.IsDictionaryType(type) ||
@@ -632,11 +705,7 @@ internal static class FastClonerGenerator
             if (knownRef is not null)
                 return knownRef;
 
-            Func<object, FastCloneState, object> activeCloner = state.UseWorkList && worklistCloner is not null
-                ? worklistCloner
-                : recursiveCloner;
-
-            return activeCloner(obj, state);
+            return recursiveCloner(obj, state);
         }
         finally
         {
@@ -781,7 +850,8 @@ internal static class FastClonerGenerator
         int l = obj.Length;
         T[] outArray = new T[l];
         state.EnsureKnownRefCapacity(l + 1);
-        state.EnsureWorkQueueCapacity(l);
+        if (state.UseWorkList)
+            state.EnsureWorkQueueCapacity(l);
         state.AddKnownRef(obj, outArray);
         Type declaredType = typeof(T);
         if (!declaredType.IsValueType &&
@@ -792,10 +862,7 @@ internal static class FastClonerGenerator
             return outArray;
         }
 
-        Type? lastType = null;
-        FastClonerCache.TypeCloneMetadata? lastMetadata = null;
-        Func<object, FastCloneState, object>? lastRecursive = null;
-        Func<object, FastCloneState, object>? lastWorklist = null;
+        TypeCloneDispatchCache2 dispatch = default;
         for (int i = 0; i < l; i++)
         {
             T? item = obj[i];
@@ -806,20 +873,9 @@ internal static class FastClonerGenerator
             }
 
             Type runtimeType = item.GetType();
-            FastClonerCache.TypeCloneMetadata metadata;
-            if (runtimeType == lastType && lastMetadata is not null)
-            {
-                metadata = lastMetadata;
-            }
-            else
-            {
-                metadata = lastMetadata = GetTypeMetadata(runtimeType, state);
-                lastRecursive = metadata.RecursiveCloner;
-                lastWorklist = metadata.WorklistCloner ?? lastRecursive;
-                lastType = runtimeType;
-            }
+            dispatch.Resolve(runtimeType, state, out FastClonerCache.TypeCloneMetadata metadata, out Func<object, FastCloneState, object>? recursiveCloner, out Func<object, FastCloneState, object>? worklistCloner);
 
-            outArray[i] = (T)CloneClassInternalResolved(item, state, runtimeType, metadata, lastRecursive, lastWorklist)!;
+            outArray[i] = (T)CloneClassInternalResolved(item, state, runtimeType, metadata, recursiveCloner, worklistCloner)!;
         }
 
         return outArray;
@@ -833,9 +889,9 @@ internal static class FastClonerGenerator
         state.AddKnownRef(obj, result);
 
 #if NET5_0_OR_GREATER
-        System.Runtime.InteropServices.CollectionsMarshal.SetCount(result, count);
-        ReadOnlySpan<T> srcSpan = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(obj);
-        Span<T> destSpan = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(result);
+        CollectionsMarshal.SetCount(result, count);
+        ReadOnlySpan<T> srcSpan = CollectionsMarshal.AsSpan(obj);
+        Span<T> destSpan = CollectionsMarshal.AsSpan(result);
         srcSpan.CopyTo(destSpan);
 #else
         for (int i = 0; i < count; i++)
@@ -855,9 +911,9 @@ internal static class FastClonerGenerator
         if (cloner is null)
         {
 #if NET5_0_OR_GREATER
-            System.Runtime.InteropServices.CollectionsMarshal.SetCount(result, count);
-            ReadOnlySpan<T> srcSpan = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(obj);
-            Span<T> destSpan = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(result);
+            CollectionsMarshal.SetCount(result, count);
+            ReadOnlySpan<T> srcSpan = CollectionsMarshal.AsSpan(obj);
+            Span<T> destSpan = CollectionsMarshal.AsSpan(result);
             srcSpan.CopyTo(destSpan);
 #else
             for (int i = 0; i < count; i++)
@@ -867,8 +923,8 @@ internal static class FastClonerGenerator
         }
 
 #if NET5_0_OR_GREATER
-        System.Runtime.InteropServices.CollectionsMarshal.SetCount(result, count);
-        Span<T> span = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(result);
+        CollectionsMarshal.SetCount(result, count);
+        Span<T> span = CollectionsMarshal.AsSpan(result);
         for (int i = 0; i < count; i++)
             span[i] = cloner(obj[i], state);
 #else
@@ -883,15 +939,16 @@ internal static class FastClonerGenerator
         if (obj is null) return null;
         int count = obj.Count;
         state.EnsureKnownRefCapacity(count + 1);
-        state.EnsureWorkQueueCapacity(count);
+        if (state.UseWorkList)
+            state.EnsureWorkQueueCapacity(count);
         List<T?> result = new(count);
         state.AddKnownRef(obj, result);
         Type declaredType = typeof(T);
 
 #if NET5_0_OR_GREATER
-        System.Runtime.InteropServices.CollectionsMarshal.SetCount(result, count);
-        ReadOnlySpan<T?> srcSpan = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(obj);
-        Span<T?> span = System.Runtime.InteropServices.CollectionsMarshal.AsSpan(result);
+        CollectionsMarshal.SetCount(result, count);
+        ReadOnlySpan<T?> srcSpan = CollectionsMarshal.AsSpan(obj);
+        Span<T?> span = CollectionsMarshal.AsSpan(result);
         if (declaredType.IsSealed)
         {
             FastClonerCache.TypeCloneMetadata metadata = GetTypeMetadata(declaredType, state);
@@ -908,10 +965,7 @@ internal static class FastClonerGenerator
             return result;
         }
 
-        Type? lastType = null;
-        FastClonerCache.TypeCloneMetadata? lastMetadata = null;
-        Func<object, FastCloneState, object>? lastRecursive = null;
-        Func<object, FastCloneState, object>? lastWorklist = null;
+        TypeCloneDispatchCache2 dispatch = default;
         for (int i = 0; i < count; i++)
         {
             T? item = srcSpan[i];
@@ -922,20 +976,9 @@ internal static class FastClonerGenerator
             }
 
             Type runtimeType = item.GetType();
-            FastClonerCache.TypeCloneMetadata metadata;
-            if (runtimeType == lastType && lastMetadata is not null)
-            {
-                metadata = lastMetadata;
-            }
-            else
-            {
-                metadata = lastMetadata = GetTypeMetadata(runtimeType, state);
-                lastRecursive = metadata.RecursiveCloner;
-                lastWorklist = metadata.WorklistCloner ?? lastRecursive;
-                lastType = runtimeType;
-            }
+            dispatch.Resolve(runtimeType, state, out FastClonerCache.TypeCloneMetadata metadata, out Func<object, FastCloneState, object>? recursiveCloner, out Func<object, FastCloneState, object>? worklistCloner);
 
-            span[i] = (T?)CloneClassInternalResolved(item, state, runtimeType, metadata, lastRecursive, lastWorklist);
+            span[i] = (T?)CloneClassInternalResolved(item, state, runtimeType, metadata, recursiveCloner, worklistCloner);
         }
 #else
         if (declaredType.IsSealed)
@@ -954,10 +997,7 @@ internal static class FastClonerGenerator
             return result;
         }
 
-        Type? lastType = null;
-        FastClonerCache.TypeCloneMetadata? lastMetadata = null;
-        Func<object, FastCloneState, object>? lastRecursive = null;
-        Func<object, FastCloneState, object>? lastWorklist = null;
+        TypeCloneDispatchCache2 dispatch = default;
         for (int i = 0; i < count; i++)
         {
             T? item = obj[i];
@@ -968,20 +1008,9 @@ internal static class FastClonerGenerator
             }
 
             Type runtimeType = item.GetType();
-            FastClonerCache.TypeCloneMetadata metadata;
-            if (runtimeType == lastType && lastMetadata is not null)
-            {
-                metadata = lastMetadata;
-            }
-            else
-            {
-                metadata = lastMetadata = GetTypeMetadata(runtimeType, state);
-                lastRecursive = metadata.RecursiveCloner;
-                lastWorklist = metadata.WorklistCloner ?? lastRecursive;
-                lastType = runtimeType;
-            }
+            dispatch.Resolve(runtimeType, state, out FastClonerCache.TypeCloneMetadata metadata, out Func<object, FastCloneState, object>? recursiveCloner, out Func<object, FastCloneState, object>? worklistCloner);
 
-            result.Add((T?)CloneClassInternalResolved(item, state, runtimeType, metadata, lastRecursive, lastWorklist));
+            result.Add((T?)CloneClassInternalResolved(item, state, runtimeType, metadata, recursiveCloner, worklistCloner));
         }
 #endif
 
@@ -1000,7 +1029,7 @@ internal static class FastClonerGenerator
 #if NET6_0_OR_GREATER
         foreach (KeyValuePair<TKey, TValue> kvp in obj)
         {
-            ref TValue valueRef = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
+            ref TValue valueRef = ref CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
             valueRef = ignoreValues ? default! : kvp.Value;
         }
 #else
@@ -1024,7 +1053,7 @@ internal static class FastClonerGenerator
 #if NET6_0_OR_GREATER
             foreach (KeyValuePair<TKey, TValue> kvp in obj)
             {
-                ref TValue valueRef = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
+                ref TValue valueRef = ref CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
                 valueRef = default;
             }
 #else
@@ -1040,7 +1069,7 @@ internal static class FastClonerGenerator
 #if NET6_0_OR_GREATER
             foreach (KeyValuePair<TKey, TValue> kvp in obj)
             {
-                ref TValue valueRef = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
+                ref TValue valueRef = ref CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
                 valueRef = kvp.Value;
             }
 #else
@@ -1053,7 +1082,7 @@ internal static class FastClonerGenerator
 #if NET6_0_OR_GREATER
             foreach (KeyValuePair<TKey, TValue> kvp in obj)
             {
-                ref TValue valueRef = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
+                ref TValue valueRef = ref CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
                 valueRef = cloner(kvp.Value, state);
             }
 #else
@@ -1096,7 +1125,7 @@ internal static class FastClonerGenerator
                     cloned = (TValue?)CloneClassInternalResolved(kvp.Value, state, declaredType, metadata!, recursiveCloner, worklistCloner);
                 }
 #if NET6_0_OR_GREATER
-                ref TValue? valueRef = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
+                ref TValue? valueRef = ref CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
                 valueRef = cloned;
 #else
                 result[kvp.Key] = cloned;
@@ -1115,7 +1144,7 @@ internal static class FastClonerGenerator
             if (value is null)
             {
 #if NET6_0_OR_GREATER
-                ref TValue? nullRef = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
+                ref TValue? nullRef = ref CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
                 nullRef = null;
 #else
                 result[kvp.Key] = null;
@@ -1128,7 +1157,7 @@ internal static class FastClonerGenerator
                 FastClonerCache.IsTypeIgnored(runtimeType))
             {
 #if NET6_0_OR_GREATER
-                ref TValue? ignoredRef = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
+                ref TValue? ignoredRef = ref CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
                 ignoredRef = null;
 #else
                 result[kvp.Key] = null;
@@ -1139,7 +1168,7 @@ internal static class FastClonerGenerator
             if (FastClonerSafeTypes.CanReturnSameObject(runtimeType))
             {
 #if NET6_0_OR_GREATER
-                ref TValue? valueRef = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
+                ref TValue? valueRef = ref CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
                 valueRef = value;
 #else
                 result[kvp.Key] = value;
@@ -1162,7 +1191,7 @@ internal static class FastClonerGenerator
 
             TValue? cloned = (TValue?)CloneClassInternalResolved(value, state, runtimeType, metadata, lastRecursive, lastWorklist);
 #if NET6_0_OR_GREATER
-            ref TValue? clonedRef = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
+            ref TValue? clonedRef = ref CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
             clonedRef = cloned;
 #else
             result[kvp.Key] = cloned;
@@ -1177,14 +1206,7 @@ internal static class FastClonerGenerator
     {
         Dictionary<TKey, object?> result = new(obj.Count, obj.Comparer);
         state.AddKnownRef(obj, result);
-        Type? typeA = null;
-        FastClonerCache.TypeCloneMetadata? metadataA = null;
-        Func<object, FastCloneState, object>? recursiveA = null;
-        Func<object, FastCloneState, object>? worklistA = null;
-        Type? typeB = null;
-        FastClonerCache.TypeCloneMetadata? metadataB = null;
-        Func<object, FastCloneState, object>? recursiveB = null;
-        Func<object, FastCloneState, object>? worklistB = null;
+        TypeCloneDispatchCache2 dispatch = default;
 
         foreach (KeyValuePair<TKey, object?> kvp in obj)
         {
@@ -1192,7 +1214,7 @@ internal static class FastClonerGenerator
             if (value is null)
             {
 #if NET6_0_OR_GREATER
-                ref object? nullRef = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
+                ref object? nullRef = ref CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
                 nullRef = null;
 #else
                 result[kvp.Key] = null;
@@ -1204,7 +1226,7 @@ internal static class FastClonerGenerator
             if (FastClonerSafeTypes.CanReturnSameObject(runtimeType))
             {
 #if NET6_0_OR_GREATER
-                ref object? safeRef = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
+                ref object? safeRef = ref CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
                 safeRef = value;
 #else
                 result[kvp.Key] = value;
@@ -1215,51 +1237,11 @@ internal static class FastClonerGenerator
             FastClonerCache.TypeCloneMetadata metadata;
             Func<object, FastCloneState, object>? recursiveCloner;
             Func<object, FastCloneState, object>? worklistCloner;
-            if (runtimeType == typeA && metadataA is not null)
-            {
-                metadata = metadataA;
-                recursiveCloner = recursiveA;
-                worklistCloner = worklistA;
-            }
-            else if (runtimeType == typeB && metadataB is not null)
-            {
-                metadata = metadataB;
-                recursiveCloner = recursiveB;
-                worklistCloner = worklistB;
-                Type? prevTypeA = typeA;
-                typeA = typeB;
-                typeB = prevTypeA;
-
-                FastClonerCache.TypeCloneMetadata? prevMetadataA = metadataA;
-                metadataA = metadataB;
-                metadataB = prevMetadataA;
-
-                Func<object, FastCloneState, object>? prevRecursiveA = recursiveA;
-                recursiveA = recursiveB;
-                recursiveB = prevRecursiveA;
-
-                Func<object, FastCloneState, object>? prevWorklistA = worklistA;
-                worklistA = worklistB;
-                worklistB = prevWorklistA;
-            }
-            else
-            {
-                metadata = GetTypeMetadata(runtimeType, state);
-                recursiveCloner = metadata.RecursiveCloner;
-                worklistCloner = metadata.WorklistCloner ?? recursiveCloner;
-                typeB = typeA;
-                metadataB = metadataA;
-                recursiveB = recursiveA;
-                worklistB = worklistA;
-                typeA = runtimeType;
-                metadataA = metadata;
-                recursiveA = recursiveCloner;
-                worklistA = worklistCloner;
-            }
+            dispatch.Resolve(runtimeType, state, out metadata, out recursiveCloner, out worklistCloner);
 
             object cloned = CloneClassInternalResolved(value, state, runtimeType, metadata, recursiveCloner, worklistCloner)!;
 #if NET6_0_OR_GREATER
-            ref object? clonedRef = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
+            ref object? clonedRef = ref CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
             clonedRef = cloned;
 #else
             result[kvp.Key] = cloned;
@@ -1316,18 +1298,23 @@ internal static class FastClonerGenerator
 
         return outArray;
     }
-
-    // rare cases, very slow cloning. currently it's ok
+    
     internal static Array? CloneAbstractArrayInternal(Array? obj, FastCloneState state)
     {
         // not null from called method, but will check it anyway
         if (obj == null) return null;
         int rank = obj.Rank;
-
-        int[] lengths = Enumerable.Range(0, rank).Select(obj.GetLength).ToArray();
-
-        int[] lowerBounds = Enumerable.Range(0, rank).Select(obj.GetLowerBound).ToArray();
-        int[] idxes = Enumerable.Range(0, rank).Select(obj.GetLowerBound).ToArray();
+        int[] lengths = new int[rank];
+        int[] lowerBounds = new int[rank];
+        bool hasZeroLength = false;
+        for (int i = 0; i < rank; i++)
+        {
+            int length = obj.GetLength(i);
+            int lowerBound = obj.GetLowerBound(i);
+            lengths[i] = length;
+            lowerBounds[i] = lowerBound;
+            hasZeroLength |= length == 0;
+        }
 
         Type? elementType = obj.GetType().GetElementType();
         Array outArray = Array.CreateInstance(elementType, lengths, lowerBounds);
@@ -1335,7 +1322,7 @@ internal static class FastClonerGenerator
         state.AddKnownRef(obj, outArray);
 
         // we're unable to set any value to this array, so, just return it
-        if (lengths.Any(x => x == 0))
+        if (hasZeroLength)
             return outArray;
 
         if (FastClonerSafeTypes.CanReturnSameObject(elementType))
@@ -1344,6 +1331,34 @@ internal static class FastClonerGenerator
             return outArray;
         }
 
+        switch (rank)
+        {
+            case 1:
+            {
+                int lower = lowerBounds[0];
+                int upper = lower + lengths[0];
+                for (int i = lower; i < upper; i++)
+                    outArray.SetValue(CloneClassInternal(obj.GetValue(i), state), i);
+
+                return outArray;
+            }
+            case 2:
+            {
+                int lower0 = lowerBounds[0];
+                int lower1 = lowerBounds[1];
+                int upper0 = lower0 + lengths[0];
+                int upper1 = lower1 + lengths[1];
+
+                for (int i = lower0; i < upper0; i++)
+                for (int k = lower1; k < upper1; k++)
+                    outArray.SetValue(CloneClassInternal(obj.GetValue(i, k), state), i, k);
+
+                return outArray;
+            }
+        }
+
+        int[] idxes = new int[rank];
+        Array.Copy(lowerBounds, idxes, rank);
         int ofs = rank - 1;
         while (true)
         {

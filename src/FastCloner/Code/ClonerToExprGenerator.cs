@@ -303,8 +303,6 @@ internal static class ClonerToExprGenerator
         int[] lowerBoundsFrom = new int[rank];
         int[] lowerBoundsTo = new int[rank];
         int[] lengths = new int[rank];
-        int[] idxesFrom = new int[rank];
-        int[] idxesTo = new int[rank];
         bool hasZeroLength = false;
         for (int i = 0; i < rank; i++)
         {
@@ -315,8 +313,6 @@ internal static class ClonerToExprGenerator
             lowerBoundsFrom[i] = lowerBoundFrom;
             lowerBoundsTo[i] = lowerBoundTo;
             lengths[i] = length;
-            idxesFrom[i] = lowerBoundFrom;
-            idxesTo[i] = lowerBoundTo;
             hasZeroLength |= length == 0;
         }
 
@@ -326,28 +322,119 @@ internal static class ClonerToExprGenerator
         if (hasZeroLength)
             return objTo;
 
-        while (true)
+        if (rank == 1)
         {
-            objTo.SetValue(
-                isDeep
-                    ? FastClonerGenerator.CloneClassInternal(
-                        objFrom.GetValue(idxesFrom),
-                        state)
-                    : objFrom.GetValue(idxesFrom), idxesTo);
-            int ofs = rank - 1;
+            int fromLower = lowerBoundsFrom[0];
+            int toLower = lowerBoundsTo[0];
+            int len = lengths[0];
+
+            if (isDeep)
+            {
+                for (int i = 0; i < len; i++)
+                    objTo.SetValue(FastClonerGenerator.CloneClassInternal(objFrom.GetValue(fromLower + i), state), toLower + i);
+            }
+            else
+            {
+                for (int i = 0; i < len; i++)
+                    objTo.SetValue(objFrom.GetValue(fromLower + i), toLower + i);
+            }
+
+            return objTo;
+        }
+
+        if (rank == 2)
+        {
+            int fromLower0 = lowerBoundsFrom[0];
+            int fromLower1 = lowerBoundsFrom[1];
+            int toLower0 = lowerBoundsTo[0];
+            int toLower1 = lowerBoundsTo[1];
+            int len0 = lengths[0];
+            int len1 = lengths[1];
+
+            if (isDeep)
+            {
+                for (int i = 0; i < len0; i++)
+                {
+                    int fromI = fromLower0 + i;
+                    int toI = toLower0 + i;
+                    for (int k = 0; k < len1; k++)
+                    {
+                        objTo.SetValue(
+                            FastClonerGenerator.CloneClassInternal(objFrom.GetValue(fromI, fromLower1 + k), state),
+                            toI,
+                            toLower1 + k);
+                    }
+                }
+            }
+            else
+            {
+                for (int i = 0; i < len0; i++)
+                {
+                    int fromI = fromLower0 + i;
+                    int toI = toLower0 + i;
+                    for (int k = 0; k < len1; k++)
+                    {
+                        objTo.SetValue(objFrom.GetValue(fromI, fromLower1 + k), toI, toLower1 + k);
+                    }
+                }
+            }
+
+            return objTo;
+        }
+
+        int[] idxesFrom = new int[rank];
+        int[] idxesTo = new int[rank];
+        Array.Copy(lowerBoundsFrom, idxesFrom, rank);
+        Array.Copy(lowerBoundsTo, idxesTo, rank);
+
+        if (isDeep)
+        {
             while (true)
             {
-                idxesFrom[ofs]++;
-                idxesTo[ofs]++;
-                if (idxesFrom[ofs] >= lowerBoundsFrom[ofs] + lengths[ofs])
+                objTo.SetValue(
+                    FastClonerGenerator.CloneClassInternal(
+                        objFrom.GetValue(idxesFrom),
+                        state),
+                    idxesTo);
+
+                int ofs = rank - 1;
+                while (true)
                 {
-                    idxesFrom[ofs] = lowerBoundsFrom[ofs];
-                    idxesTo[ofs] = lowerBoundsTo[ofs];
-                    ofs--;
-                    if (ofs < 0) return objTo;
+                    idxesFrom[ofs]++;
+                    idxesTo[ofs]++;
+                    if (idxesFrom[ofs] >= lowerBoundsFrom[ofs] + lengths[ofs])
+                    {
+                        idxesFrom[ofs] = lowerBoundsFrom[ofs];
+                        idxesTo[ofs] = lowerBoundsTo[ofs];
+                        ofs--;
+                        if (ofs < 0) return objTo;
+                    }
+                    else
+                        break;
                 }
-                else
-                    break;
+            }
+        }
+        else
+        {
+            while (true)
+            {
+                objTo.SetValue(objFrom.GetValue(idxesFrom), idxesTo);
+
+                int ofs = rank - 1;
+                while (true)
+                {
+                    idxesFrom[ofs]++;
+                    idxesTo[ofs]++;
+                    if (idxesFrom[ofs] >= lowerBoundsFrom[ofs] + lengths[ofs])
+                    {
+                        idxesFrom[ofs] = lowerBoundsFrom[ofs];
+                        idxesTo[ofs] = lowerBoundsTo[ofs];
+                        ofs--;
+                        if (ofs < 0) return objTo;
+                    }
+                    else
+                        break;
+                }
             }
         }
     }
