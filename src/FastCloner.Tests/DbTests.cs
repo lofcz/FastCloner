@@ -47,7 +47,7 @@ public class DbTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
     [OneTimeTearDown]
     public void TearDown()
     {
-        sessionFactory.Dispose();
+        sessionFactory?.Dispose();
         
         if (File.Exists(DbFile))
         {
