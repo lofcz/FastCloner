@@ -1800,6 +1800,35 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         }
     }
 
+    [Test]
+    public void Issue27_Clone_Entity_With_Ignored_EventHandlers_After_PreWarm_Nulls_Delegates()
+    {
+        MvvmEntity original = new MvvmEntity { Name = "Test", Value = 42 };
+        original.PropertyChanged += (sender, args) => { };
+        original.PropertyChanging += (sender, args) => { };
+
+        // Pre-warm clone delegates under default behavior before applying overrides.
+        MvvmEntity baselineClone = original.DeepClone();
+        Assert.That(baselineClone.HasPropertyChangedHandler, Is.True);
+        Assert.That(baselineClone.HasPropertyChangingHandler, Is.True);
+
+        FastCloner.SetTypeBehavior<PropertyChangedEventHandler>(CloneBehavior.Ignore);
+        FastCloner.SetTypeBehavior<PropertyChangingEventHandler>(CloneBehavior.Ignore);
+
+        try
+        {
+            MvvmEntity clone = original.DeepClone();
+            Assert.That(clone, Is.Not.Null);
+            Assert.That(clone.HasPropertyChangedHandler, Is.False, "Ignored delegate type should not remain from stale cache.");
+            Assert.That(clone.HasPropertyChangingHandler, Is.False, "Ignored delegate type should not remain from stale cache.");
+        }
+        finally
+        {
+            FastCloner.ClearTypeBehavior<PropertyChangedEventHandler>();
+            FastCloner.ClearTypeBehavior<PropertyChangingEventHandler>();
+        }
+    }
+
     public class NotifyingPerson : INotifyPropertyChanged
     {
         private string name;

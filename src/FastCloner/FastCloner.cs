@@ -7,6 +7,17 @@ namespace FastCloner;
 /// </summary>
 public static class FastCloner
 {
+    internal static volatile bool DisableOptionalFeatures;
+
+    internal static void SetDisableOptionalFeatures(bool value)
+    {
+        if (DisableOptionalFeatures == value)
+            return;
+
+        DisableOptionalFeatures = value;
+        RefreshCachesAfterBehaviorStateChange();
+    }
+
     /// <summary>
     /// Cloning objects with nest level above this threshold uses iterative approach instead of recursion.
     /// </summary>
@@ -62,17 +73,13 @@ public static class FastCloner
             // Clone is the default - remove any custom behavior
             if (FastClonerCache.TypeBehaviors.TryRemove(type, out _))
             {
-                FastClonerSafeTypes.ClearKnownTypesCache();
-                FastClonerCache.ClearCache();
-                FastClonerCache.RecalculateSafeTypeOverrides();
+                RefreshCachesAfterBehaviorStateChange();
             }
         }
         else
         {
             FastClonerCache.TypeBehaviors[type] = behavior;
-            FastClonerSafeTypes.ClearKnownTypesCache();
-            FastClonerCache.ClearCache();
-            FastClonerCache.RecalculateSafeTypeOverrides();
+            RefreshCachesAfterBehaviorStateChange();
         }
     }
 
@@ -118,9 +125,7 @@ public static class FastCloner
         bool removed = FastClonerCache.TypeBehaviors.TryRemove(type, out _);
         if (removed)
         {
-            FastClonerSafeTypes.ClearKnownTypesCache();
-            FastClonerCache.ClearCache();
-            FastClonerCache.RecalculateSafeTypeOverrides();
+            RefreshCachesAfterBehaviorStateChange();
         }
         return removed;
     }
@@ -141,8 +146,13 @@ public static class FastCloner
     public static void ClearAllTypeBehaviors()
     {
         FastClonerCache.TypeBehaviors.Clear();
+        RefreshCachesAfterBehaviorStateChange();
+    }
+
+    private static void RefreshCachesAfterBehaviorStateChange()
+    {
         FastClonerSafeTypes.ClearKnownTypesCache();
         FastClonerCache.ClearCache();
-        FastClonerCache.HasSafeTypeOverrides = false; 
+        FastClonerCache.RecalculateTypeBehaviorState();
     }
 }

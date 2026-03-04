@@ -45,6 +45,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     [TearDown]
     public void TearDown()
     {
+        FastCloner.SetDisableOptionalFeatures(false);
         FastCloner.ClearAllTypeBehaviors();
     }
 
@@ -626,6 +627,38 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
 
     [Test]
+    public void SetTypeBehavior_ExactTypeClone_Reflects_RuntimeMutations()
+    {
+        // Arrange
+        SimpleClass original = new SimpleClass { IntValue = 42, StringValue = "Value" };
+
+        // Act + Assert (default behavior)
+        SimpleClass baseline = original.DeepClone();
+        Assert.That(baseline, Is.Not.Null);
+        Assert.That(baseline, Is.Not.SameAs(original));
+        Assert.That(baseline.IntValue, Is.EqualTo(original.IntValue));
+        Assert.That(baseline.StringValue, Is.EqualTo(original.StringValue));
+
+        // Act + Assert (reference behavior)
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Reference);
+        SimpleClass referenced = original.DeepClone();
+        Assert.That(referenced, Is.SameAs(original));
+
+        // Act + Assert (ignore behavior)
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Ignore);
+        SimpleClass ignored = original.DeepClone();
+        Assert.That(ignored, Is.Null);
+
+        // Act + Assert (restored default behavior)
+        FastCloner.ClearTypeBehavior<SimpleClass>();
+        SimpleClass restored = original.DeepClone();
+        Assert.That(restored, Is.Not.Null);
+        Assert.That(restored, Is.Not.SameAs(original));
+        Assert.That(restored.IntValue, Is.EqualTo(original.IntValue));
+        Assert.That(restored.StringValue, Is.EqualTo(original.StringValue));
+    }
+
+    [Test]
     public void SetTypeBehavior_Shallow_PerformsShallowCopy()
     {
         // Arrange
@@ -647,5 +680,49 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         // Value types should still be independent copies (because it's a new container)
         clone.Id = 2;
         Assert.That(original.Id, Is.EqualTo(1));
+    }
+
+    [Test]
+    public void DisableOptionalFeatures_Toggle_RecomputesActiveTypeBehaviorChecks()
+    {
+        // Arrange
+        FastCloner.ClearAllTypeBehaviors();
+        FastCloner.SetDisableOptionalFeatures(false);
+
+        // Act + Assert
+        Assert.That(FastClonerCache.HasActiveTypeBehaviorOverrides, Is.False);
+
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Ignore);
+        Assert.That(FastClonerCache.HasActiveTypeBehaviorOverrides, Is.True);
+
+        FastCloner.SetDisableOptionalFeatures(true);
+        Assert.That(FastClonerCache.HasActiveTypeBehaviorOverrides, Is.False);
+
+        FastCloner.SetDisableOptionalFeatures(false);
+        Assert.That(FastClonerCache.HasActiveTypeBehaviorOverrides, Is.True);
+
+        FastCloner.ClearAllTypeBehaviors();
+        Assert.That(FastClonerCache.HasActiveTypeBehaviorOverrides, Is.False);
+    }
+
+    [Test]
+    public void DisableOptionalFeatures_WhenEnabled_IgnoresTypeBehaviorOverrides()
+    {
+        // Arrange
+        SimpleClass original = new SimpleClass { IntValue = 42, StringValue = "Value" };
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Ignore);
+
+        // Act + Assert (overrides active)
+        SimpleClass ignored = original.DeepClone();
+        Assert.That(ignored, Is.Null);
+
+        FastCloner.SetDisableOptionalFeatures(true);
+        SimpleClass clonedWithOptionalDisabled = original.DeepClone();
+        Assert.That(clonedWithOptionalDisabled, Is.Not.Null);
+        Assert.That(clonedWithOptionalDisabled, Is.Not.SameAs(original));
+
+        FastCloner.SetDisableOptionalFeatures(false);
+        SimpleClass ignoredAgain = original.DeepClone();
+        Assert.That(ignoredAgain, Is.Null);
     }
 }

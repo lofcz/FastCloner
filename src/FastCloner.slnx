@@ -9,6 +9,7 @@
   <Project Path="FastCloner.SourceGenerator.Console/FastCloner.SourceGenerator.Console.csproj" />
   <Project Path="FastCloner.SourceGenerator.Shared/FastCloner.SourceGenerator.Shared.csproj" />
   <Project Path="FastCloner.SourceGenerator/FastCloner.SourceGenerator.csproj" />
+  <Project Path="FastCloner.Internalization.Builder/FastCloner.Internalization.Builder.csproj" />
   <Project Path="FastCloner.Tests/FastCloner.Tests.csproj" />
   <Project Path="FastCloner/FastCloner.csproj" />
   <Project Path="FastCloner.Profiling/FastCloner.Profiling.csproj" />

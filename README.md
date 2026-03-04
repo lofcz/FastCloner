@@ -363,6 +363,38 @@ FastCloner's source generator is carefully engineered for zero impact on IDE res
 - **No Compilation Trashing**: We avoid expensive `CompilationProvider` combinations that break generator caching. Code generation only re-runs when your data models actually change, not on every keystroke or unrelated edit.
 - **Allocation Free**: `EquatableArray` collections ensure that change detection is instant and creates no garbage collection pressure.
 
+## Internalization
+
+For consumers who wish to embed FastCloner directly, without adding a dependency, use the [internalization builder project](LINK).
+
+Example command:
+
+```bash
+dotnet run --project src/FastCloner.Internalization.Builder/FastCloner.Internalization.Builder.csproj -- \
+  --root-namespace MyLibrary.FastCloner \
+  --output ../MyLibrary/FastCloner \
+  --preprocessor "MODERN=true;" \
+  --visibility internal \
+  --public-api none \
+  --runtime-only true \
+  --self-check
+```
+
+Important options:
+
+- `--root-namespace <ns>`: Rewrites `FastCloner` namespaces to your target root namespace.
+- `--preprocessor <SYMBOL=VALUE;...>`: Per-symbol preprocessor transformation input.
+  - `VALUE=true|false` is recognized as boolean and enables full condition resolution/removal where possible.
+  - any other value is used as direct replacement in `#if` expressions (e.g., `SOMETHING=random_text`).
+- `--implicit-usings <ns1;ns2;...>`: Namespaces the target project already imports implicitly.  
+  Generated global usings for these namespaces are omitted.  
+  Default is empty, so generated code carries explicit usings.
+- `--visibility <public|internal>`: Top-level visibility rewrite policy.
+- `--public-api <none|fastcloner|extensions|behaviors|all>`: Keeps selected public surface when `--visibility internal` is used.
+- `--runtime-only <true|false>`: Includes only runtime clone engine files.
+- `--dry-run`: Prints planned output files and transform stats without writing.
+- `--self-check`: Compiles generated source tree and reports compile errors.
+
 ## Contributing
 
 If you are looking to add new functionality, please open an issue first to verify your intent is aligned with the scope of the project. The library is covered by over [700 tests](https://github.com/lofcz/FastCloner/tree/next/src/FastCloner.Tests), please run them against your work before proposing changes. When reporting issues, providing a minimal reproduction we can plug in as a new test greatly reduces turnaround time.
