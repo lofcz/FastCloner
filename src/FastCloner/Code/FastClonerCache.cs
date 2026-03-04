@@ -213,11 +213,13 @@ internal static class FastClonerCache
     private static readonly ClrCache<object> deepClassToCache = new ClrCache<object>();
     private static readonly ClrCache<object> shallowClassToCache = new ClrCache<object>();
     private static readonly ConcurrentLazyCache<object> typeConvertCache = new ConcurrentLazyCache<object>();
-    private static readonly GenericClrCache<Tuple<Type, string>, object?> fieldCache = new GenericClrCache<Tuple<Type, string>, object?>();
+    private static readonly GenericClrCache<TypeNameKey, object?> fieldCache = new GenericClrCache<TypeNameKey, object?>();
     private static readonly ClrCache<Dictionary<string, Type>> ignoredEventInfoCache = new ClrCache<Dictionary<string, Type>>();
     private static readonly ClrCache<List<MemberInfo>> allMembersCache = new ClrCache<List<MemberInfo>>();
     private static readonly GenericClrCache<MemberInfo, CloneBehavior?> memberBehaviorCache = new GenericClrCache<MemberInfo, CloneBehavior?>();
     private static readonly ClrCache<bool> typeContainsIgnoredMembersCache = new ClrCache<bool>();
+    private static readonly ClrCache<CloneBehavior?> attributedTypeBehaviorCache = new ClrCache<CloneBehavior?>();
+    private static readonly ClrCache<bool> immutableCollectionStatusCache = new ClrCache<bool>();
     private static readonly ClrCache<object> specialTypesCache = new ClrCache<object>();
     private static readonly ClrCache<bool> isTypeSafeHandleCache = new ClrCache<bool>();
     private static readonly ClrCache<bool> anonymousTypeStatusCache = new ClrCache<bool>();
@@ -228,7 +230,8 @@ internal static class FastClonerCache
     private static readonly ClrCache<Type?> collectionPayloadTypeCache = new ClrCache<Type?>();
     private static readonly ClrCache<bool> compilerGeneratedTypeCache = new ClrCache<bool>();
 
-    public static object? GetOrAddField(Type type, string name, Func<Type, object?> valueFactory) => fieldCache.GetOrAdd(new Tuple<Type, string>(type, name), k => valueFactory(k.Item1));
+    public static object? GetOrAddField(Type type, string name, Func<Type, object?> valueFactory)
+        => fieldCache.GetOrAdd(new TypeNameKey(type, name), k => valueFactory(k.Type));
     public static object? GetOrAddClass(Type type, Func<Type, object?> valueFactory) => classCache.GetOrAdd(type, valueFactory);
     public static TypeCloneMetadata GetOrAddTypeMetadata(Type type, Func<Type, TypeCloneMetadata> valueFactory) => typeMetadataCache.GetOrAdd(type, valueFactory);
     public static object? GetOrAddStructAsObject(Type type, Func<Type, object?> valueFactory) => structCache.GetOrAdd(type, valueFactory);
@@ -238,6 +241,10 @@ internal static class FastClonerCache
     public static Dictionary<string, Type> GetOrAddIgnoredEventInfo(Type type, Func<Type, Dictionary<string, Type>> valueFactory) => ignoredEventInfoCache.GetOrAdd(type, valueFactory);
     public static List<MemberInfo> GetOrAddAllMembers(Type type, Func<Type, List<MemberInfo>> valueFactory) => allMembersCache.GetOrAdd(type, valueFactory);
     public static CloneBehavior? GetOrAddMemberBehavior(MemberInfo memberInfo, Func<MemberInfo, CloneBehavior?> valueFactory) => memberBehaviorCache.GetOrAdd(memberInfo, valueFactory);
+    public static CloneBehavior? GetOrAddAttributedTypeBehavior(Type type, Func<Type, CloneBehavior?> valueFactory)
+        => attributedTypeBehaviorCache.GetOrAdd(type, valueFactory);
+    public static bool GetOrAddImmutableCollectionStatus(Type type, Func<Type, bool> valueFactory)
+        => immutableCollectionStatusCache.GetOrAdd(type, valueFactory);
     public static bool GetOrAddTypeContainsIgnoredMembers(Type type, Func<Type, bool> valueFactory)
     {
         return typeContainsIgnoredMembersCache.GetOrAdd(type, valueFactory);
@@ -268,6 +275,8 @@ internal static class FastClonerCache
         allMembersCache.Clear();
         memberBehaviorCache.Clear();
         typeContainsIgnoredMembersCache.Clear();
+        attributedTypeBehaviorCache.Clear();
+        immutableCollectionStatusCache.Clear();
         specialTypesCache.Clear();
         isTypeSafeHandleCache.Clear();
         anonymousTypeStatusCache.Clear();
@@ -306,6 +315,36 @@ internal static class FastClonerCache
         }
 
         public void Clear() => cache.Clear();
+    }
+
+    private readonly struct TypeNameKey : IEquatable<TypeNameKey>
+    {
+        public TypeNameKey(Type type, string name)
+        {
+            Type = type;
+            Name = name;
+        }
+
+        public Type Type { get; }
+        public string Name { get; }
+
+        public bool Equals(TypeNameKey other)
+        {
+            return ReferenceEquals(Type, other.Type) && Name == other.Name;
+        }
+
+        public override bool Equals(object? obj)
+        {
+            return obj is TypeNameKey other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                return (RuntimeHelpers.GetHashCode(Type) * 397) ^ Name.GetHashCode();
+            }
+        }
     }
     
     private sealed class ConcurrentLazyCache<TValue>

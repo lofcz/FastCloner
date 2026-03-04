@@ -6,7 +6,6 @@ using System.Collections.Frozen;
 using System.Collections.ObjectModel;
 using System.Dynamic;
 using System.Linq.Expressions;
-using System.Net;
 using System.Reflection;
 
 namespace FastCloner.Code;
@@ -16,6 +15,7 @@ internal static class FastClonerExprGenerator
     private const int AdaptiveDictionaryRebuildThreshold = 32;
     internal static readonly ConcurrentDictionary<Type, Func<Type, bool, ExpressionPosition, object>> CustomTypeHandlers = [];
     private static readonly ConcurrentDictionary<FieldInfo, bool> readonlyFields = new ConcurrentDictionary<FieldInfo, bool>();
+    private static readonly ConcurrentDictionary<AdaptiveDictionaryFactoryKey, Func<ExpressionPosition, object>> adaptiveDictionaryFactoryCache = new ConcurrentDictionary<AdaptiveDictionaryFactoryKey, Func<ExpressionPosition, object>>();
     private static readonly MethodInfo fieldSetMethod;
     private static readonly Lazy<MethodInfo> isTypeIgnoredMethodInfo = new Lazy<MethodInfo>(() => typeof(FastClonerCache).GetMethod(nameof(FastClonerCache.IsTypeIgnored), BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static, null, [typeof(Type)], null)!, LazyThreadSafetyMode.ExecutionAndPublication);
 
@@ -24,6 +24,23 @@ internal static class FastClonerExprGenerator
     static FastClonerExprGenerator()
     {
         fieldSetMethod = typeof(FieldInfo).GetMethod(nameof(FieldInfo.SetValue), [typeof(object), typeof(object)])!;
+    }
+
+    private static MethodInfo GetClassCloneMethod(bool useShallowClassClone, bool skipCycleTracking)
+    {
+        if (useShallowClassClone)
+            return StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassShallowAndTrack;
+
+        return skipCycleTracking
+            ? StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassInternalNoTracking
+            : StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassInternal;
+    }
+
+    private static MethodInfo GetDefaultCloneMethod(Type memberType)
+    {
+        return memberType.IsValueType()
+            ? StaticMethodInfos.DeepClonerGeneratorMethods.MakeStructCloneMethodInfo(memberType)
+            : StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassInternal;
     }
 
     internal static object? GenerateClonerInternal(Type realType, bool asObject, bool skipCycleTracking = false, bool useShallowClassClone = false)
@@ -37,11 +54,6 @@ internal static class FastClonerExprGenerator
     internal static bool MemberIsShallow(MemberInfo memberInfo)
     {
         return GetMemberBehavior(memberInfo) == CloneBehavior.Shallow;
-    }
-    
-    internal static bool MemberIsReference(MemberInfo memberInfo)
-    {
-        return GetMemberBehavior(memberInfo) == CloneBehavior.Reference;
     }
     
     /// <summary>
@@ -59,11 +71,14 @@ internal static class FastClonerExprGenerator
     /// </summary>
     internal static CloneBehavior? GetTypeBehavior(Type type)
     {
-        if (global::FastCloner.FastCloner.DisableOptionalFeatures)
+        if (FastCloner.DisableOptionalFeatures)
             return null;
 
-        FastClonerBehaviorAttribute? behaviorAttr = type.GetCustomAttribute<FastClonerBehaviorAttribute>();
-        return behaviorAttr?.Behavior;
+        return FastClonerCache.GetOrAddAttributedTypeBehavior(type, static t =>
+        {
+            FastClonerBehaviorAttribute? behaviorAttr = t.GetCustomAttribute<FastClonerBehaviorAttribute>();
+            return behaviorAttr?.Behavior;
+        });
     }
     
     /// <summary>
@@ -75,7 +90,7 @@ internal static class FastClonerExprGenerator
     /// </summary>
     internal static CloneBehavior? GetMemberBehavior(MemberInfo memberInfo)
     {
-        if (global::FastCloner.FastCloner.DisableOptionalFeatures)
+        if (FastCloner.DisableOptionalFeatures)
             return null;
 
         return FastClonerCache.GetOrAddMemberBehavior(memberInfo, mi =>
@@ -227,20 +242,16 @@ internal static class FastClonerExprGenerator
 
             if (memberType.IsValueType())
             {
-                MethodInfo structClone = typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(memberType);
+                MethodInfo structClone = StaticMethodInfos.DeepClonerGeneratorMethods.MakeStructCloneMethodInfo(memberType);
                 clonedValueExpression = Expression.Call(structClone, originalMemberValue, state);
             }
             else
             {
-                MethodInfo classCloneMethod = useShallowClassClone
-                    ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassShallowAndTrack))!
-                    : (skipCycleTracking
-                        ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternalNoTracking))!
-                        : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!);
+                MethodInfo classCloneMethod = GetClassCloneMethod(useShallowClassClone, skipCycleTracking);
 
                 if (!useShallowClassClone && !skipCycleTracking)
                 {
-                    MethodInfo classShallowTrack = typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassShallowAndTrack))!;
+                    MethodInfo classShallowTrack = StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassShallowAndTrack;
                     PropertyInfo useWorkListProp = FastCloneState.UseWorkListProp;
                     Expression deepCall = Expression.Call(classCloneMethod, originalMemberValue, state);
                     Expression shallowCall = Expression.Call(classShallowTrack, originalMemberValue, state);
@@ -604,20 +615,16 @@ internal static class FastClonerExprGenerator
 
                 if (memberType.IsValueType())
                 {
-                    MethodInfo structClone = typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(memberType);
+                    MethodInfo structClone = StaticMethodInfos.DeepClonerGeneratorMethods.MakeStructCloneMethodInfo(memberType);
                     clonedValueExpression = Expression.Call(structClone, originalMemberValue, state);
                 }
                 else
                 {
-                    MethodInfo classCloneMethod = useShallowClassClone
-                        ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassShallowAndTrack))!
-                        : (skipCycleTracking
-                            ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternalNoTracking))!
-                            : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!);
+                    MethodInfo classCloneMethod = GetClassCloneMethod(useShallowClassClone, skipCycleTracking);
 
                     if (!useShallowClassClone && !skipCycleTracking)
                     {
-                        MethodInfo classShallowTrack = typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassShallowAndTrack))!;
+                        MethodInfo classShallowTrack = StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassShallowAndTrack;
                         PropertyInfo useWorkListProp = FastCloneState.UseWorkListProp;
                         Expression deepCall = Expression.Call(classCloneMethod, originalMemberValue, state);
                         Expression shallowCall = Expression.Call(classShallowTrack, originalMemberValue, state);
@@ -674,7 +681,7 @@ internal static class FastClonerExprGenerator
 
         if (!type.IsValueType())
         {
-            MethodInfo methodInfo = typeof(object).GetPrivateMethod(nameof(MemberwiseClone))!;
+            MethodInfo methodInfo = StaticMethodInfos.CommonMethods.MemberwiseClone;
             expressionList.Add(Expression.Assign(toLocal, Expression.Convert(Expression.Call(from, methodInfo), type)));
             expressionList.Add(Expression.Assign(fromLocal, Expression.Convert(from, type)));
             expressionList.Add(Expression.Call(state, StaticMethodInfos.DeepCloneStateMethods.AddKnownRef, from, toLocal));
@@ -785,8 +792,24 @@ internal static class FastClonerExprGenerator
 
         while (currentType != null && currentType != typeof(ContextBoundObject))
         {
-            members.AddRange(currentType.GetDeclaredFields());
-            members.AddRange(currentType.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance).Where(p => p is { CanRead: true, CanWrite: true } && p.GetIndexParameters().Length == 0)); // Exclude indexers
+            FieldInfo[] fields = currentType.GetDeclaredFields();
+            for (int i = 0; i < fields.Length; i++)
+            {
+                members.Add(fields[i]);
+            }
+
+            PropertyInfo[] properties = currentType.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+            for (int i = 0; i < properties.Length; i++)
+            {
+                PropertyInfo property = properties[i];
+                if (!property.CanRead || !property.CanWrite || property.GetIndexParameters().Length != 0)
+                {
+                    continue;
+                }
+
+                members.Add(property);
+            }
+
             currentType = currentType.BaseType;
         }
 
@@ -906,7 +929,7 @@ internal static class FastClonerExprGenerator
 
         if (!type.IsValueType())
         {
-            MethodInfo methodInfo = typeof(object).GetPrivateMethod(nameof(MemberwiseClone))!;
+            MethodInfo methodInfo = StaticMethodInfos.CommonMethods.MemberwiseClone;
             expressionList.Add(Expression.Assign(toLocal, Expression.Convert(Expression.Call(from, methodInfo), type)));
             fromLocal = Expression.Variable(type);
             expressionList.Add(Expression.Assign(fromLocal, Expression.Convert(from, type)));
@@ -995,10 +1018,10 @@ internal static class FastClonerExprGenerator
             Expression.Assign(result, Expression.Property(tempMessage, "Options")),
             Expression.Call(state, StaticMethodInfos.DeepCloneStateMethods.AddKnownRef, from, result),
             Expression.Assign(result, Expression.Convert(
-                Expression.Call(fromOptions, typeof(object).GetMethod("MemberwiseClone", BindingFlags.NonPublic | BindingFlags.Instance)!),
+                Expression.Call(fromOptions, StaticMethodInfos.CommonMethods.MemberwiseClone),
                 typeof(HttpRequestOptions)
             )),
-            Expression.Call(tempMessage, typeof(IDisposable).GetMethod("Dispose")!),
+            Expression.Call(tempMessage, StaticMethodInfos.CommonMethods.Dispose),
             result
         );
 
@@ -1232,13 +1255,9 @@ internal static class FastClonerExprGenerator
         ParameterExpression enumerator = Expression.Variable(enumeratorType);
 
         // Get clone methods
-        MethodInfo keyCloneMethod = keyType.IsValueType()
-            ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(keyType)
-            : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
+        MethodInfo keyCloneMethod = GetDefaultCloneMethod(keyType);
 
-        MethodInfo valueCloneMethod = valueType.IsValueType()
-            ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(valueType)
-            : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
+        MethodInfo valueCloneMethod = GetDefaultCloneMethod(valueType);
 
         BlockExpression iterationBlock = isGeneric
             ? GenerateGenericDictionaryIteration(enumerator, keyType, valueType, keyCloneMethod, valueCloneMethod, innerDict, addMethod, state, position)
@@ -1355,13 +1374,9 @@ internal static class FastClonerExprGenerator
             }
         }
 
-        MethodInfo keyCloneMethod = keyType.IsValueType()
-            ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(keyType)
-            : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
+        MethodInfo keyCloneMethod = GetDefaultCloneMethod(keyType);
 
-        MethodInfo valueCloneMethod = valueType.IsValueType()
-            ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(valueType)
-            : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
+        MethodInfo valueCloneMethod = GetDefaultCloneMethod(valueType);
 
         Type enumeratorType = typeof(IEnumerator<>).MakeGenericType(
             typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType));
@@ -1436,7 +1451,7 @@ internal static class FastClonerExprGenerator
 
         LoopExpression loop = Expression.Loop(
             Expression.IfThenElse(
-                Expression.Call(enumerator, typeof(IEnumerator).GetMethod("MoveNext")),
+                Expression.Call(enumerator, StaticMethodInfos.CommonMethods.EnumeratorMoveNext),
                 loopBody,
                 Expression.Break(breakLabel)
             ),
@@ -1476,20 +1491,33 @@ internal static class FastClonerExprGenerator
     /// <returns></returns>
     private static bool IsImmutableCollection(Type type)
     {
-        if (type.Namespace == "System.Collections.Immutable")
+        return FastClonerCache.GetOrAddImmutableCollectionStatus(type, static t =>
         {
-            return true;
-        }
+            if (t.Namespace == "System.Collections.Immutable")
+            {
+                return true;
+            }
 
-        if (type.GetInterfaces().Any(x => x.Namespace == "System.Collections.Immutable"))
-        {
-            return true;
-        }
+            if (t.GetInterfaces().Any(x => x.Namespace == "System.Collections.Immutable"))
+            {
+                return true;
+            }
 
-        Attribute? immutableAttr = type.GetCustomAttributes().FirstOrDefault(attr => attr.GetType().Name.Contains("Immutable"));
-        return immutableAttr is not null || type.Name.Contains("Immutable");
+            IList<CustomAttributeData> attrs = CustomAttributeData.GetCustomAttributes(t);
+            for (int i = 0; i < attrs.Count; i++)
+            {
+                Type attrType = attrs[i].AttributeType;
+                string? attrNs = attrType.Namespace;
+                if ((attrNs is not null && attrNs.Contains("Immutable", StringComparison.Ordinal)) ||
+                    attrType.Name.Contains("Immutable", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return t.Name.Contains("Immutable", StringComparison.Ordinal);
+        });
     }
-
 
     private static BlockExpression GenerateGenericDictionaryIteration(ParameterExpression enumerator, Type keyType, Type valueType, MethodInfo keyCloneMethod, MethodInfo valueCloneMethod, ParameterExpression local, MethodInfo addMethod, ParameterExpression state, ExpressionPosition position)
     {
@@ -1542,7 +1570,7 @@ internal static class FastClonerExprGenerator
 
                 LoopExpression loop = Expression.Loop(
                     Expression.IfThenElse(
-                        Expression.Call(enumerator, typeof(IEnumerator).GetMethod(nameof(IEnumerator.MoveNext))!),
+                        Expression.Call(enumerator, StaticMethodInfos.CommonMethods.EnumeratorMoveNext),
                         Expression.Block([kvp], assignKvp, addKvp),
                         Expression.Break(breakLabel)),
                     breakLabel);
@@ -1595,7 +1623,7 @@ internal static class FastClonerExprGenerator
 
             LoopExpression loop = Expression.Loop(
                 Expression.IfThenElse(
-                    Expression.Call(enumerator, typeof(IEnumerator).GetMethod(nameof(IEnumerator.MoveNext))!),
+                    Expression.Call(enumerator, StaticMethodInfos.CommonMethods.EnumeratorMoveNext),
                     Expression.Block([kvp, key, value],
                         assignKvp,
                         assignKey,
@@ -1617,7 +1645,7 @@ internal static class FastClonerExprGenerator
         Expression originalKeyObject = Expression.Property(current, "Key");
         Expression clonedKeyCall = Expression.Call(keyCloneMethod, originalKeyObject, state);
 
-        Expression keyRuntimeType = Expression.Call(originalKeyObject, typeof(object).GetMethod(nameof(GetType))!);
+        Expression keyRuntimeType = Expression.Call(originalKeyObject, StaticMethodInfos.CommonMethods.ObjectGetType);
         Expression isKeyIgnored = Expression.Call(null, IsTypeIgnoredMethodInfo, keyRuntimeType);
 
         Expression keyToAssign = Expression.Condition(
@@ -1632,7 +1660,7 @@ internal static class FastClonerExprGenerator
         Expression originalValueObject = Expression.Property(current, "Value");
         Expression clonedValueCall = Expression.Call(valueCloneMethod, originalValueObject, state);
 
-        Expression valueRuntimeType = Expression.Call(originalValueObject, typeof(object).GetMethod(nameof(GetType))!);
+        Expression valueRuntimeType = Expression.Call(originalValueObject, StaticMethodInfos.CommonMethods.ObjectGetType);
         Expression isValueIgnored = Expression.Call(null, IsTypeIgnoredMethodInfo, valueRuntimeType);
 
         Expression valueToAssign = Expression.Condition(
@@ -1652,7 +1680,7 @@ internal static class FastClonerExprGenerator
 
         LoopExpression loop = Expression.Loop(
             Expression.IfThenElse(
-                Expression.Call(enumerator, typeof(IEnumerator).GetMethod(nameof(IEnumerator.MoveNext))!),
+                Expression.Call(enumerator, StaticMethodInfos.CommonMethods.EnumeratorMoveNext),
                 Expression.Block(
                     [key, value],
                     assignKey,
@@ -1666,16 +1694,56 @@ internal static class FastClonerExprGenerator
 
     private static object GenerateAdaptiveDictionaryProcessor(Type dictType, Type keyType, Type valueType, ExpressionPosition position)
     {
-        string methodName = FastClonerSafeTypes.CanReturnSameObject(valueType)
-            ? nameof(CreateAdaptiveDictionaryProcessorSafe)
+        byte variant = FastClonerSafeTypes.CanReturnSameObject(valueType)
+            ? (byte)0
             : valueType.IsValueType
-                ? nameof(CreateAdaptiveDictionaryProcessorStruct)
-                : nameof(CreateAdaptiveDictionaryProcessorClass);
+                ? (byte)1
+                : (byte)2;
 
-        MethodInfo method = typeof(FastClonerExprGenerator)
-            .GetPrivateStaticMethod(methodName)!
-            .MakeGenericMethod(keyType, valueType);
-        return method.Invoke(null, [position])!;
+        AdaptiveDictionaryFactoryKey key = new AdaptiveDictionaryFactoryKey(keyType.TypeHandle.Value, valueType.TypeHandle.Value, variant);
+        Func<ExpressionPosition, object> factory = adaptiveDictionaryFactoryCache.GetOrAdd(key, _ =>
+        {
+            string methodName = variant switch
+            {
+                0 => nameof(CreateAdaptiveDictionaryProcessorSafe),
+                1 => nameof(CreateAdaptiveDictionaryProcessorStruct),
+                _ => nameof(CreateAdaptiveDictionaryProcessorClass)
+            };
+
+            MethodInfo method = typeof(FastClonerExprGenerator)
+                .GetPrivateStaticMethod(methodName)!
+                .MakeGenericMethod(keyType, valueType);
+            return (Func<ExpressionPosition, object>)method.CreateDelegate(typeof(Func<ExpressionPosition, object>));
+        });
+
+        return factory(position);
+    }
+
+    private readonly struct AdaptiveDictionaryFactoryKey(IntPtr keyHandle, IntPtr valueHandle, byte variant) : IEquatable<AdaptiveDictionaryFactoryKey>
+    {
+        private readonly IntPtr keyHandle = keyHandle;
+        private readonly IntPtr valueHandle = valueHandle;
+        private readonly byte variant = variant;
+
+        public bool Equals(AdaptiveDictionaryFactoryKey other)
+        {
+            return keyHandle == other.keyHandle && valueHandle == other.valueHandle && variant == other.variant;
+        }
+
+        public override bool Equals(object? obj)
+        {
+            return obj is AdaptiveDictionaryFactoryKey other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = keyHandle.GetHashCode();
+                hash = (hash * 397) ^ valueHandle.GetHashCode();
+                return (hash * 397) ^ variant.GetHashCode();
+            }
+        }
     }
 
     private static object CreateAdaptiveDictionaryProcessorSafe<TKey, TValue>(ExpressionPosition position) where TKey : notnull
@@ -1733,9 +1801,7 @@ internal static class FastClonerExprGenerator
 
         Type elementType = type.GetGenericArguments()[0];
 
-        MethodInfo cloneElementMethod = elementType.IsValueType()
-            ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(elementType)
-            : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
+        MethodInfo cloneElementMethod = GetDefaultCloneMethod(elementType);
 
         ParameterExpression from = Expression.Parameter(typeof(object));
         ParameterExpression state = Expression.Parameter(typeof(FastCloneState));
@@ -1791,9 +1857,7 @@ internal static class FastClonerExprGenerator
         }
 
         // Now create expressions for immutable or slow path
-        MethodInfo cloneElementMethod = elementType.IsValueType()
-            ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(elementType)
-            : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
+        MethodInfo cloneElementMethod = GetDefaultCloneMethod(elementType);
 
         ParameterExpression from = Expression.Parameter(typeof(object));
         ParameterExpression state = Expression.Parameter(typeof(FastCloneState));
@@ -2005,9 +2069,7 @@ internal static class FastClonerExprGenerator
 
         LabelTarget breakLabel = Expression.Label("LoopBreak");
 
-        MethodInfo elementCloneMethod = elementType.IsValueType()
-            ? typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneStructInternal))!.MakeGenericMethod(elementType)
-            : typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.CloneClassInternal))!;
+        MethodInfo elementCloneMethod = GetDefaultCloneMethod(elementType);
 
         Expression originalElementProperty = Expression.Property(enumerator, current!);
         Expression clonedElementCall = Expression.Call(elementCloneMethod, originalElementProperty, state);
@@ -2036,7 +2098,7 @@ internal static class FastClonerExprGenerator
 
         LoopExpression loop = Expression.Loop(
             Expression.IfThenElse(
-                Expression.Call(enumerator, typeof(IEnumerator).GetMethod("MoveNext")!),
+                Expression.Call(enumerator, StaticMethodInfos.CommonMethods.EnumeratorMoveNext),
                 loopBody,
                 Expression.Break(breakLabel)
             ),
@@ -2127,7 +2189,7 @@ internal static class FastClonerExprGenerator
         Type enumeratorType = typeof(IEnumerator<>).MakeGenericType(valueType == null ? keyType : typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType));
 
         ParameterExpression enumerator = Expression.Variable(enumeratorType);
-        MethodInfo moveNext = typeof(IEnumerator).GetMethod(nameof(IEnumerator.MoveNext))!;
+        MethodInfo moveNext = StaticMethodInfos.CommonMethods.EnumeratorMoveNext;
         PropertyInfo current = enumeratorType.GetProperty(nameof(IEnumerator.Current))!;
 
         MethodInfo getEnumerator = typeof(IEnumerable).GetMethod(nameof(IEnumerable.GetEnumerator))!;

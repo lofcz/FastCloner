@@ -5,6 +5,16 @@ internal static class Extensions
     #if MODERN
     
     #else 
+    public static bool Contains(this string source, string value, StringComparison comparisonType)
+    {
+        if (source is null)
+            throw new ArgumentNullException(nameof(source));
+        if (value is null)
+            throw new ArgumentNullException(nameof(value));
+
+        return source.IndexOf(value, comparisonType) >= 0;
+    }
+
     public static TValue GetValueOrDefault<TKey, TValue>(this Dictionary<TKey, TValue> dictionary, TKey key, TValue defaultValue = default(TValue))
     {
         return dictionary.TryGetValue(key, out TValue value) ? value : defaultValue;
