@@ -10,7 +10,7 @@
 
     <ItemGroup>
       <PackageReference Include="AnyClone" Version="1.1.6" />
-      <PackageReference Include="AutoMapper" Version="16.0.0" />
+      <PackageReference Include="AutoMapper" Version="16.1.0" />
       <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
       <PackageReference Include="DeepCloner" Version="0.10.4" />
       <PackageReference Include="DeepCopier" Version="1.0.4" />

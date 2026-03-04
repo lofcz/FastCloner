@@ -647,6 +647,43 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Assert.That(arrTo[3], Is.Null);
     }
 
+    public struct StructWithRef
+    {
+        public C1 Ref;
+        public int Marker;
+    }
+
+    [Test]
+    public void Deep_Array_Of_Struct_With_Ref_Should_Use_Source_Values()
+    {
+        StructWithRef[] arrFrom =
+        [
+            new StructWithRef { Ref = new C1 { A = 10, B = "from-1", C = [1] }, Marker = 101 },
+            new StructWithRef { Ref = new C1 { A = 20, B = "from-2", C = [2] }, Marker = 202 }
+        ];
+
+        // Pre-populate target with different values; old bug cloned from target instead of source.
+        StructWithRef[] arrTo =
+        [
+            new StructWithRef { Ref = new C1 { A = -1, B = "to-1", C = [9] }, Marker = -101 },
+            new StructWithRef { Ref = new C1 { A = -2, B = "to-2", C = [8] }, Marker = -202 }
+        ];
+
+        arrFrom.DeepCloneTo(arrTo);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(arrTo[0].Marker, Is.EqualTo(101));
+            Assert.That(arrTo[1].Marker, Is.EqualTo(202));
+            Assert.That(arrTo[0].Ref.A, Is.EqualTo(10));
+            Assert.That(arrTo[1].Ref.A, Is.EqualTo(20));
+            Assert.That(arrTo[0].Ref.B, Is.EqualTo("from-1"));
+            Assert.That(arrTo[1].Ref.B, Is.EqualTo("from-2"));
+            Assert.That(arrTo[0].Ref, Is.Not.SameAs(arrFrom[0].Ref));
+            Assert.That(arrTo[1].Ref, Is.Not.SameAs(arrFrom[1].Ref));
+        });
+    }
+
     [Test]
     [TestCase(false)]
     [TestCase(true)]

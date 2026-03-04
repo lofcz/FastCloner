@@ -1,4 +1,4 @@
-﻿using System.Linq.Expressions;
+using System.Linq.Expressions;
 using System.Reflection;
 
 namespace FastCloner.Code;
@@ -40,25 +40,11 @@ internal static class ClonerToExprGenerator
                 // added from -> to binding to ensure reference loop handling
                 // structs cannot loop here
                 // state.AddKnownRef(from, to)
-                expressionList.Add(Expression.Call(state, typeof(FastCloneState).GetMethod(nameof(FastCloneState.AddKnownRef))!, from, to));
+                expressionList.Add(Expression.Call(state, StaticMethodInfos.DeepCloneStateMethods.AddKnownRef, from, to));
             }
         }
 
-        List<FieldInfo> fi = [];
-        Type? tp = type;
-        do
-        {
-            if (tp == typeof(ContextBoundObject))
-            {
-                break;
-            }
-
-            fi.AddRange(tp.GetDeclaredFields());
-            tp = tp.BaseType();
-        }
-        while (tp != null);
-
-        foreach (FieldInfo fieldInfo in fi)
+        foreach (FieldInfo fieldInfo in EnumerateFields(type))
         {
             // Check if member should be shallow cloned (copy reference directly)
             if (FastClonerExprGenerator.MemberIsShallow(fieldInfo))
@@ -82,9 +68,7 @@ internal static class ClonerToExprGenerator
             }
             else if (isDeepClone && !FastClonerSafeTypes.CanReturnSameObject(fieldInfo.FieldType))
             {
-                MethodInfo methodInfo = fieldInfo.FieldType.IsValueType()
-                    ? StaticMethodInfos.DeepClonerGeneratorMethods.CloneStructInternal.MakeGenericMethod(fieldInfo.FieldType)
-                    : StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassInternal;
+                MethodInfo methodInfo = StaticMethodInfos.DeepClonerGeneratorMethods.MakeFieldCloneMethodInfo(fieldInfo.FieldType);
 
                 MemberExpression get = Expression.Field(fromLocal, fieldInfo);
 
@@ -139,6 +123,20 @@ internal static class ClonerToExprGenerator
         if (to != toLocal) blockParams.Add(toLocal);
 
         return Expression.Lambda(funcType, Expression.Block(blockParams, expressionList), from, to, state).Compile();
+
+        static IEnumerable<FieldInfo> EnumerateFields(Type sourceType)
+        {
+            Type? tp = sourceType;
+            while (tp != null && tp != typeof(ContextBoundObject))
+            {
+                foreach (FieldInfo field in tp.GetDeclaredFields())
+                {
+                    yield return field;
+                }
+
+                tp = tp.BaseType();
+            }
+        }
     }
 
     private static object GenerateProcessArrayMethod(Type type, bool isDeep)
@@ -171,7 +169,7 @@ internal static class ClonerToExprGenerator
                 return Expression.Lambda(funcType, callS, from, to, state).Compile();
             }
         }
-        else
+
         {
             // multidim or not zero-based arrays
             MethodInfo methodInfo;
@@ -214,7 +212,7 @@ internal static class ClonerToExprGenerator
         {
             for (int i = 0; i < l; i++)
             {
-                objTo[i] = cloner(objTo[i], state);
+                objTo[i] = cloner(objFrom[i], state);
             }   
         }
 
@@ -237,18 +235,32 @@ internal static class ClonerToExprGenerator
     {
         // not null from called method, but will check it anyway
         if (objFrom == null || objTo == null) return null;
-        if (objFrom.GetLowerBound(0) != 0 || objFrom.GetLowerBound(1) != 0
-                                          || objTo.GetLowerBound(0) != 0 || objTo.GetLowerBound(1) != 0)
+
+        int fromLower0 = objFrom.GetLowerBound(0);
+        int fromLower1 = objFrom.GetLowerBound(1);
+        int toLower0 = objTo.GetLowerBound(0);
+        int toLower1 = objTo.GetLowerBound(1);
+        if (fromLower0 != 0 || fromLower1 != 0 || toLower0 != 0 || toLower1 != 0)
             return (T[,]?) CloneAbstractArrayInternal(objFrom, objTo, state, isDeep);
 
-        int l1 = Math.Min(objFrom.GetLength(0), objTo.GetLength(0));
-        int l2 = Math.Min(objFrom.GetLength(1), objTo.GetLength(1));
+        int fromLength0 = objFrom.GetLength(0);
+        int fromLength1 = objFrom.GetLength(1);
+        int toLength0 = objTo.GetLength(0);
+        int toLength1 = objTo.GetLength(1);
+
+        int l1 = Math.Min(fromLength0, toLength0);
+        int l2 = Math.Min(fromLength1, toLength1);
+
         state.AddKnownRef(objFrom, objTo);
-        if ((!isDeep || FastClonerSafeTypes.CanReturnSameObject(typeof(T)))
-            && objFrom.GetLength(0) == objTo.GetLength(0)
-            && objFrom.GetLength(1) == objTo.GetLength(1))
+
+        bool isValueType = typeof(T).IsValueType();
+        bool canReturnSame = FastClonerSafeTypes.CanReturnSameObject(typeof(T));
+        bool canShallowCopyValues = !isDeep || canReturnSame;
+
+        // 2D arrays are row-major - copy row prefix as one contiguous block
+        if (canShallowCopyValues && fromLength1 == toLength1)
         {
-            Array.Copy(objFrom, objTo, objFrom.Length);
+            Array.Copy(objFrom, objTo, l1 * fromLength1);
             return objTo;
         }
 
@@ -260,7 +272,7 @@ internal static class ClonerToExprGenerator
             return objTo;
         }
 
-        if (typeof(T).IsValueType())
+        if (isValueType)
         {
             Func<T, FastCloneState, T>? cloner = FastClonerGenerator.GetClonerForValueType<T>();
 
@@ -288,18 +300,30 @@ internal static class ClonerToExprGenerator
         if (objFrom == null || objTo == null) return null;
         int rank = objFrom.Rank;
 
-        if (objTo.Rank != rank)
-            throw new InvalidOperationException("Invalid rank of target array");
-        int[] lowerBoundsFrom = Enumerable.Range(0, rank).Select(objFrom.GetLowerBound).ToArray();
-        int[] lowerBoundsTo = Enumerable.Range(0, rank).Select(objTo.GetLowerBound).ToArray();
-        int[] lengths = Enumerable.Range(0, rank).Select(x => Math.Min(objFrom.GetLength(x), objTo.GetLength(x))).ToArray();
-        int[] idxesFrom = Enumerable.Range(0, rank).Select(objFrom.GetLowerBound).ToArray();
-        int[] idxesTo = Enumerable.Range(0, rank).Select(objTo.GetLowerBound).ToArray();
+        int[] lowerBoundsFrom = new int[rank];
+        int[] lowerBoundsTo = new int[rank];
+        int[] lengths = new int[rank];
+        int[] idxesFrom = new int[rank];
+        int[] idxesTo = new int[rank];
+        bool hasZeroLength = false;
+        for (int i = 0; i < rank; i++)
+        {
+            int lowerBoundFrom = objFrom.GetLowerBound(i);
+            int lowerBoundTo = objTo.GetLowerBound(i);
+            int length = Math.Min(objFrom.GetLength(i), objTo.GetLength(i));
+
+            lowerBoundsFrom[i] = lowerBoundFrom;
+            lowerBoundsTo[i] = lowerBoundTo;
+            lengths[i] = length;
+            idxesFrom[i] = lowerBoundFrom;
+            idxesTo[i] = lowerBoundTo;
+            hasZeroLength |= length == 0;
+        }
 
         state.AddKnownRef(objFrom, objTo);
 
         // unable to copy any element
-        if (lengths.Any(x => x == 0))
+        if (hasZeroLength)
             return objTo;
 
         while (true)

@@ -8,26 +8,9 @@ public static class LargeExpandoProfiler
 {
     public static void Run(string[] args)
     {
-        Console.WriteLine("Large ExpandoObject Performance Analysis");
-        Console.WriteLine("=========================================");
-        Console.WriteLine();
-
-        // Parse arguments
-        bool interactive = !args.Contains("--no-interactive", StringComparer.OrdinalIgnoreCase);
-        int iterations = 100_000;
-        int propertyCount = 100;
-        
-        foreach (string arg in args)
-        {
-            if (arg.StartsWith("--iterations="))
-                int.TryParse(arg[13..], out iterations);
-            else if (arg.StartsWith("--properties="))
-                int.TryParse(arg[13..], out propertyCount);
-        }
-
-        Console.WriteLine($"Iterations: {iterations:N0}");
-        Console.WriteLine($"Property count: {propertyCount}");
-        Console.WriteLine();
+        ProfileSessionOptions options = ProfilingCore.ParseSessionOptions(args, defaultWarmupIterations: 1000, defaultIterations: 100_000);
+        int propertyCount = ProfilingCore.ParseIntArg(args, "--properties=", 100);
+        ProfilingCore.PrintHeader("Large ExpandoObject Performance Analysis", options, ("Property count", propertyCount.ToString()));
 
         // Create test objects
         dynamic largeExpando = CreateLargeExpando(propertyCount);
@@ -35,55 +18,43 @@ public static class LargeExpandoProfiler
         dynamic onlyNested = CreateNestedOnlyExpando(propertyCount);
         dynamic onlyStrings = CreateStringOnlyExpando(propertyCount);
 
-        // Warmup
-        Console.WriteLine("Warming up (1000 iterations each)...");
-        for (int i = 0; i < 1000; i++)
-        {
-            _ = Cloner.DeepClone(largeExpando);
-            _ = Cloner.DeepClone(onlyPrimitives);
-            _ = Cloner.DeepClone(onlyNested);
-            _ = Cloner.DeepClone(onlyStrings);
-        }
-        Console.WriteLine("Warmup complete.");
-        Console.WriteLine();
-
-        if (interactive)
-        {
-            Console.WriteLine(">>> ATTACH PROFILER NOW <<<");
-            Console.WriteLine("Press any key to start profiling...");
-            Console.ReadKey(true);
-            Console.WriteLine();
-        }
+        ProfilingCore.RunWarmupPhase(
+            options.WarmupIterations,
+            () => _ = Cloner.DeepClone(largeExpando),
+            () => _ = Cloner.DeepClone(onlyPrimitives),
+            () => _ = Cloner.DeepClone(onlyNested),
+            () => _ = Cloner.DeepClone(onlyStrings));
+        ProfilingCore.WaitForProfilerIfInteractive(options.Interactive);
 
         // Profile different ExpandoObject configurations
         Console.WriteLine("=== Mixed Properties (Original Benchmark) ===");
-        ProfileExpando("Mixed large", largeExpando, iterations);
+        ProfileExpando("Mixed large", largeExpando, options.Iterations);
         Console.WriteLine();
 
         Console.WriteLine("=== Primitives Only (int/double/decimal) ===");
-        ProfileExpando("Primitives only", onlyPrimitives, iterations);
+        ProfileExpando("Primitives only", onlyPrimitives, options.Iterations);
         Console.WriteLine();
 
         Console.WriteLine("=== Strings Only ===");
-        ProfileExpando("Strings only", onlyStrings, iterations);
+        ProfileExpando("Strings only", onlyStrings, options.Iterations);
         Console.WriteLine();
 
         Console.WriteLine("=== Nested ExpandoObjects Only ===");
-        ProfileExpando("Nested only", onlyNested, iterations);
+        ProfileExpando("Nested only", onlyNested, options.Iterations);
         Console.WriteLine();
 
         // Profile with different property counts
         Console.WriteLine("=== Scaling by Property Count ===");
-        ProfileScaling(iterations / 10);
+        ProfileScaling(options.Iterations / 10);
         Console.WriteLine();
 
         // Focused micro-benchmark for loop overhead
         Console.WriteLine("=== Loop Overhead Analysis ===");
-        ProfileLoopOverhead(largeExpando, iterations);
+        ProfileLoopOverhead(largeExpando, options.Iterations);
         Console.WriteLine();
 
         Console.WriteLine("Profiling complete.");
-        if (interactive)
+        if (options.Interactive)
         {
             Console.WriteLine("Press any key to exit...");
             Console.ReadKey(true);
@@ -92,26 +63,7 @@ public static class LargeExpandoProfiler
 
     private static void ProfileExpando(string name, dynamic expando, int iterations)
     {
-        // Force GC to get clean memory measurements
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-
-        long memBefore = GC.GetTotalMemory(true);
-        var sw = Stopwatch.StartNew();
-
-        for (int i = 0; i < iterations; i++)
-        {
-            _ = Cloner.DeepClone(expando);
-        }
-
-        sw.Stop();
-        long memAfter = GC.GetTotalMemory(false);
-
-        double usPerOp = sw.Elapsed.TotalMicroseconds / iterations;
-        double bytesPerOp = (double)(memAfter - memBefore) / iterations;
-
-        Console.WriteLine($"  {name,-20} {iterations:N0} iters in {sw.ElapsedMilliseconds:N0}ms ({usPerOp:F2}μs/op, ~{bytesPerOp:F0}B/op)");
+        _ = ProfilingCore.MeasureAndPrint(name, iterations, () => _ = Cloner.DeepClone(expando));
     }
 
     private static void ProfileScaling(int iterationsPerTest)
@@ -122,9 +74,7 @@ public static class LargeExpandoProfiler
         {
             dynamic expando = CreateLargeExpando(count);
             
-            // Warmup
-            for (int i = 0; i < 100; i++)
-                _ = Cloner.DeepClone(expando);
+            ProfilingCore.Warmup(100, () => _ = Cloner.DeepClone(expando));
 
             var sw = Stopwatch.StartNew();
             for (int i = 0; i < iterationsPerTest; i++)
