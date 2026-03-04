@@ -23,7 +23,7 @@ The fastest deep cloning library, supporting anything from <code>.NET 4.6</code>
 - **Embeddable** - FastCloner has no dependencies outside the standard library. Source generator and reflection parts can be installed independently
 - **Gentle & Caring** - FastCloner detects standard attributes like `[NonSerialized]` making it easy to try without polluting codebase with custom attributes. Type usage graph for generics is built automatically producing performant cloning code without manual annotations
 - **Easy Integration** - `FastDeepClone()` for AOT cloning, `DeepClone()` for reflection cloning. That's it!
-- **Production Ready** - Used by projects like [Jobbr](https://jobbr.readthedocs.io/en/latest), [TarkovSP](https://sp-tarkov.com), and [WinPaletter](https://github.com/Abdelrhman-AK/WinPaletter), with over [200K downloads on NuGet](https://www.nuget.org/packages/fastCloner#usedby-body-tab)
+- **Production Ready** - Used by projects like [Jobbr](https://jobbr.readthedocs.io/en/latest), [TarkovSP](https://sp-tarkov.com), [SnapX](https://github.com/SnapXL/SnapX), and [WinPaletter](https://github.com/Abdelrhman-AK/WinPaletter), with over [300K downloads on NuGet](https://www.nuget.org/packages/fastCloner#usedby-body-tab)
 ## Getting Started
 
 Install the package via NuGet:
