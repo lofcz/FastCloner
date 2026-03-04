@@ -7,6 +7,7 @@ using NHibernate.Cfg.MappingSchema;
 using NHibernate.Collection;
 using NHibernate.Mapping.ByCode;
 using NHibernate.Tool.hbm2ddl;
+using System.Runtime.InteropServices;
 
 namespace FastCloner.Tests;
 
@@ -23,6 +24,11 @@ public class DbTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
     [OneTimeSetUp]
     public void SetUp()
     {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            Assert.Ignore("DbTests are skipped on macOS due to System.Data.SQLite native SQLite.Interop dependency.");
+        }
+
         if (File.Exists(DbFile))
         {
             File.Delete(DbFile);
