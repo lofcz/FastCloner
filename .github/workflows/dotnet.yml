@@ -1,4 +1,4 @@
-name: .NET - Ubuntu
+name: .NET CI
 
 on:
   push:
@@ -6,16 +6,20 @@ on:
   pull_request:
     branches: [ "next" ]
 
+env:
+  DOTNET_VERSION: '10.0.103'
+  NODE_VERSION: '24'
+
 permissions:
   contents: read
   statuses: write
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        dotnet-version: ['10.0.100'] 
+        os: [ubuntu-latest, macos-latest]
 
     steps:
     - name: Checkout repository
@@ -24,12 +28,12 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: ${{ matrix.dotnet-version }}
+        dotnet-version: ${{ env.DOTNET_VERSION }}
 
     - name: Setup Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: '22'
+        node-version: ${{ env.NODE_VERSION }}
         
     - name: Restore dependencies
       run: dotnet restore src/FastClonerCi.slnf
@@ -45,8 +49,8 @@ jobs:
       uses: Sibz/github-status-action@v1
       with: 
         authToken: ${{secrets.GITHUB_TOKEN}}
-        context: 'Tests'
-        description: "The tests ${{ job.status == 'success' && 'passed' || 'failed' }}"
+        context: "Tests (${{ matrix.os }})"
+        description: "The tests on ${{ matrix.os }} ${{ job.status == 'success' && 'passed' || 'failed' }}"
         state: ${{ job.status == 'success' && 'success' || 'failure' }}
         sha: ${{ github.event.pull_request.head.sha || github.sha }}
         target_url: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -61,12 +65,12 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '10.0.100'
+        dotnet-version: ${{ env.DOTNET_VERSION }}
 
     - name: Setup Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: '22'
+        node-version: ${{ env.NODE_VERSION }}
         
     - name: Build FastCloner for netstandard2.0
       run: dotnet build src/FastCloner/ --framework netstandard2.0
@@ -92,12 +96,12 @@ jobs:
     - name: Setup .NET Framework
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '10.0.100'
+        dotnet-version: ${{ env.DOTNET_VERSION }}
 
     - name: Setup Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: '22'
+        node-version: ${{ env.NODE_VERSION }}
         
     - name: Build FastCloner for net46
       run: dotnet build src/FastCloner/ --framework net46
