@@ -976,7 +976,10 @@ internal static class FastClonerGenerator
             }
 
             Type runtimeType = item.GetType();
-            if (!hasOptionalTypeOverrides && FastClonerSafeTypes.CanReturnSameObject(runtimeType))
+            if (!hasOptionalTypeOverrides &&
+                ((!runtimeType.IsValueType && FastClonerSafeTypes.CanReturnSameObject(runtimeType)) ||
+                 runtimeType.IsPrimitive ||
+                 runtimeType.IsEnum))
             {
                 outArray[i] = item;
                 continue;
