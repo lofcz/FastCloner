@@ -17,7 +17,7 @@ The fastest deep cloning library, supporting anything from <code>.NET 4.6</code>
 ## ✨ Features
 
 - **The Fastest** - [Benchmarked](https://github.com/lofcz/FastCloner?tab=readme-ov-file#performance) to beat all other libraries with third-party independent benchmarks verifying the performance. **300x** speed-up vs `Newtonsoft.Json` and **160x** vs `System.Text.Json`
-- **The Most Correct** - Cloning objects is hard: `<T>`, `abstract`, immutables, read-only, pointers, circular dependencies, deeply nested graphs.. we have over [700 tests](https://github.com/lofcz/FastCloner/tree/next/FastCloner.Tests) verifying correct behavior in these cases and we are transparent about the [limitations](https://github.com/lofcz/FastCloner?tab=readme-ov-file#limitations)
+- **The Most Correct** - Cloning objects is hard: `<T>`, `abstract`, immutables, read-only, pointers, circular dependencies, deeply nested graphs.. we have over [800 tests](https://github.com/lofcz/FastCloner/tree/next/FastCloner.Tests) verifying correct behavior in these cases and we are transparent about the [limitations](https://github.com/lofcz/FastCloner?tab=readme-ov-file#limitations)
 - **Novel Algorithm** - FastCloner recognizes that certain cloning code cannot be generated in certain scenarios and uses highly optimized reflection-based approach instead for these types - this only happens for the members that need this, not entire objects
 - **Zero-Overhead Abstractions** - The generator uses call site analysis to eliminate indirection via inlining of generated methods. This ensures the generated code behaves like a single optimized block, just as if you hand-wrote it for maximum performance.
 - **Embeddable** - FastCloner has no dependencies outside the standard library. Source generator and reflection parts can be installed independently
@@ -365,7 +365,7 @@ FastCloner's source generator is carefully engineered for zero impact on IDE res
 
 ## Internalization
 
-For consumers who wish to embed FastCloner directly, without adding a dependency, use the [internalization builder project](LINK).
+For consumers who wish to embed FastCloner directly without adding a dependency, use the [internalization builder project](https://github.com/lofcz/FastCloner/tree/next/src/FastCloner.Internalization.Builder).
 
 Example command:
 
@@ -380,7 +380,7 @@ dotnet run --project src/FastCloner.Internalization.Builder/FastCloner.Internali
   --self-check
 ```
 
-Important options:
+CLI options:
 
 - `--root-namespace <ns>`: Rewrites `FastCloner` namespaces to your target root namespace.
 - `--preprocessor <SYMBOL=VALUE;...>`: Per-symbol preprocessor transformation input.
@@ -397,7 +397,7 @@ Important options:
 
 ## Contributing
 
-If you are looking to add new functionality, please open an issue first to verify your intent is aligned with the scope of the project. The library is covered by over [700 tests](https://github.com/lofcz/FastCloner/tree/next/src/FastCloner.Tests), please run them against your work before proposing changes. When reporting issues, providing a minimal reproduction we can plug in as a new test greatly reduces turnaround time.
+If you are looking to add new functionality, please open an issue first to verify your intent is aligned with the scope of the project. The library is covered by over [800 tests](https://github.com/lofcz/FastCloner/tree/next/src/FastCloner.Tests), please run them against your work before proposing changes. When reporting issues, providing a minimal reproduction we can plug in as a new test greatly reduces turnaround time.
 
 ## License
 
