@@ -608,22 +608,6 @@ internal static class FastClonerGenerator
         return CloneClassInternalTyped(obj, runtimeType, state, metadata);
     }
 
-    internal static T? CloneClassInternalExact<T>(T? obj, FastCloneState state) where T : class
-    {
-        if (obj is null)
-            return null;
-
-        ClonerCache<T>.CacheEntry cacheEntry = ClonerCache<T>.GetCurrent();
-        if (!FastClonerCache.HasActiveTypeBehaviorOverrides && cacheEntry.IsSafe)
-            return obj;
-
-        Type objType = typeof(T);
-        FastClonerCache.TypeCloneMetadata metadata = cacheEntry.Metadata ?? GetTypeMetadata(objType, state);
-
-        // Keep exact and polymorphic class cloning on the same decision path.
-        return (T?)CloneClassInternalTyped(obj, objType, state, metadata);
-    }
-
     internal static object? CloneClassInternalNoTracking(object? obj, FastCloneState state)
     {
         if (obj is null)

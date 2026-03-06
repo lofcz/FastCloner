@@ -169,7 +169,7 @@ public class DynamicMaxRecursionDepthTests
     }
 
     [Test]
-    public void Internal_CloneClassInternalExact_Should_Reset_CallDepth_After_WorkList_Switch()
+    public void Internal_CloneClassInternal_Should_Reset_CallDepth_After_WorkList_Switch()
     {
         ExactNode root = new ExactNode
         {
@@ -186,7 +186,7 @@ public class DynamicMaxRecursionDepthTests
         FastCloneState state = FastCloneState.Rent();
         try
         {
-            ExactNode? clone = FastClonerGenerator.CloneClassInternalExact(root, state);
+            ExactNode? clone = (ExactNode?)FastClonerGenerator.CloneClassInternal(root, state);
 
             Assert.That(clone, Is.Not.Null);
             Assert.That(state.UseWorkList, Is.True);

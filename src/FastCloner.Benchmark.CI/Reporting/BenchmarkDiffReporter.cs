@@ -222,20 +222,18 @@ internal static class BenchmarkDiffReporter
             return sb.ToString().TrimEnd();
         }
 
-        sb.AppendLine("### Relative FastCloner vs DeepCloner change from latest `next` baseline");
+        sb.AppendLine("### FastCloner vs latest `next` baseline");
         sb.AppendLine();
         sb.AppendLine($"- Baseline generated (UTC): `{baseline.GeneratedAtUtc:yyyy-MM-dd HH:mm:ss}`");
         sb.AppendLine($"- Regression thresholds: time > `{FormatPercent(options.TimeThreshold)}`, alloc > `{FormatPercent(options.AllocThreshold)}`");
-        sb.AppendLine("- Anchor: compare the `FastCloner / DeepCloner` ratio from the baseline run to the current run, so hosted runner speed changes do not count as regressions by themselves.");
-        sb.AppendLine("- Score guide: values below `1.00x` are better than DeepCloner, above `1.00x` are worse.");
         sb.AppendLine();
-        sb.AppendLine("| Status | Benchmark | Time Score (Baseline) | Time Score (Current) | Delta Time Score | Alloc Score (Baseline) | Alloc Score (Current) | Delta Alloc Score |");
-        sb.AppendLine("|---|---|---:|---:|---|---:|---:|---|");
+        sb.AppendLine("| Status | Benchmark | Delta Time | Delta Alloc |");
+        sb.AppendLine("|---|---|---|---|");
 
         foreach (BaselineDiffItem item in diff.Items)
         {
             sb.AppendLine(
-                $"| {FormatStatus(item.Status)} | {item.Benchmark} | {FormatScore(item.BaselineTimeScore)} | {FormatScore(item.CurrentTimeScore)} | {FormatCurrentDelta(item.TimeScoreDeltaRatio, options.SameThreshold, "closer to DeepCloner", "farther from DeepCloner")} | {FormatScore(item.BaselineAllocScore)} | {FormatScore(item.CurrentAllocScore)} | {FormatCurrentDelta(item.AllocScoreDeltaRatio, options.SameThreshold, "closer to DeepCloner", "farther from DeepCloner")} |");
+                $"| {FormatStatus(item.Status)} | {item.Benchmark} | {FormatCurrentDelta(item.TimeScoreDeltaRatio, options.SameThreshold, "faster", "slower")} | {FormatCurrentDelta(item.AllocScoreDeltaRatio, options.SameThreshold, "less", "more")} |");
         }
 
         AppendStatusSection(sb, "Regressions", diff.Items.Where(item => item.Status == DiffStatus.Regression).ToList(), options.SameThreshold);
@@ -296,8 +294,8 @@ internal static class BenchmarkDiffReporter
         sb.AppendLine();
         foreach (BaselineDiffItem item in items)
         {
-            string timeDelta = FormatCurrentDelta(item.TimeScoreDeltaRatio, sameThreshold, "closer to DeepCloner", "farther from DeepCloner");
-            string allocDelta = FormatCurrentDelta(item.AllocScoreDeltaRatio, sameThreshold, "closer to DeepCloner", "farther from DeepCloner");
+            string timeDelta = FormatCurrentDelta(item.TimeScoreDeltaRatio, sameThreshold, "faster", "slower");
+            string allocDelta = FormatCurrentDelta(item.AllocScoreDeltaRatio, sameThreshold, "less", "more");
             sb.AppendLine($"- `{item.Benchmark}`: time {timeDelta}, alloc {allocDelta}");
         }
     }
