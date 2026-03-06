@@ -10,7 +10,7 @@
 [![FastCloner](https://shields.io/nuget/v/FastCloner.SourceGenerator?v=304&icon=nuget&label=FastCloner.SourceGenerator)](https://www.nuget.org/packages/FastCloner.SourceGenerator)
 [![License:MIT](https://img.shields.io/badge/License-MIT-34D058.svg)](https://opensource.org/license/mit)
 
-The fastest deep cloning library, supporting anything from <code>.NET 4.6</code> to modern <code>.NET 10+</code> with no dependencies. FastCloner uses a unique source generator capable of analyzing object graphs and cloning objects without explicit annotations. For types that cannot be cloned, such as <code>HttpClient</code>, FastCloner uses a highly optimized reflection-based fallback. Zero dependencies, blazingly fast, built for developers who need cloning that _just works_.
+FastCloner is a high-performance, zero-dependency deep cloning library for real-world .NET object graphs, from <code>.NET 4.6</code> all the way to <code>.NET 10+</code>. It combines source generation with optimized reflection fallback, so deep cloning _just works_.
  
 </div>
 
@@ -23,7 +23,7 @@ The fastest deep cloning library, supporting anything from <code>.NET 4.6</code>
 - **Embeddable** - FastCloner has no dependencies outside the standard library. Source generator and reflection parts can be installed independently
 - **Gentle & Caring** - FastCloner detects standard attributes like `[NonSerialized]` making it easy to try without polluting codebase with custom attributes. Type usage graph for generics is built automatically producing performant cloning code without manual annotations
 - **Easy Integration** - `FastDeepClone()` for AOT cloning, `DeepClone()` for reflection cloning. That's it!
-- **Production Ready** - Used by projects like [Jobbr](https://jobbr.readthedocs.io/en/latest), [TarkovSP](https://sp-tarkov.com), [SnapX](https://github.com/SnapXL/SnapX), and [WinPaletter](https://github.com/Abdelrhman-AK/WinPaletter), with over [300K downloads on NuGet](https://www.nuget.org/packages/fastCloner#usedby-body-tab)
+- **Production Ready** - Used by projects like [Foundatio](https://github.com/FoundatioFx/Foundatio), [Jobbr](https://jobbr.readthedocs.io/en/latest), [TarkovSP](https://sp-tarkov.com), [SnapX](https://github.com/SnapXL/SnapX), and [WinPaletter](https://github.com/Abdelrhman-AK/WinPaletter), with over [300K downloads on NuGet](https://www.nuget.org/packages/fastCloner#usedby-body-tab)
 ## Getting Started
 
 Install the package via NuGet:
@@ -328,7 +328,7 @@ public class Graph
 
 ## Performance
 
-FastCloner is the _fastest_ deep cloning library. It was benchmarked against every library capable of cloning objects I've been able to find:
+FastCloner is the _fastest_ deep cloning library across both reflection-based and AOT workloads. It was benchmarked against every library capable of cloning objects I've been able to find:
 ```md
 BenchmarkDotNet v0.15.8, Windows 11 (10.0.26220.7271)
 Intel Core i7-8700 CPU 3.20GHz (Max: 3.19GHz) (Coffee Lake), 1 CPU, 12 logical and 6 physical cores
@@ -352,7 +352,7 @@ Intel Core i7-8700 CPU 3.20GHz (Max: 3.19GHz) (Coffee Lake), 1 CPU, 12 logical a
 | AnyCloneBenchmark  | 5,102.40 ns | 239.089 ns | 704.959 ns | 5,370.93 ns | 497.81 |   68.98 |   13 | 0.9003 |      - |    5656 B |       78.56 |
 ```
 
-You can run the benchmark [locally](https://github.com/lofcz/FastCloner/blob/next/src/FastCloner.Benchmark/BenchMinimal.cs) to verify the results. For CI regression tracking focused on DeepCloner vs FastCloner, see [FastCloner.Benchmark.CI](src/FastCloner.Benchmark.CI/README.md). There are also [third-party benchmarks](https://github.com/AnderssonPeter/Dolly?tab=readme-ov-file#benchmarks) in some of the competing libraries confirming these results.
+You can run the benchmark [locally](https://github.com/lofcz/FastCloner/blob/next/src/FastCloner.Benchmark/BenchMinimal.cs) to verify the results.
 
 ### Build Times & IDE Performance
 
@@ -374,6 +374,7 @@ dotnet run --project src/FastCloner.Internalization.Builder/FastCloner.Internali
   --root-namespace MyLibrary.FastCloner \
   --output ../MyLibrary/FastCloner \
   --preprocessor "MODERN=true;" \
+  --fqn all \
   --visibility internal \
   --public-api none \
   --runtime-only true \
@@ -386,6 +387,10 @@ CLI options:
 - `--preprocessor <SYMBOL=VALUE;...>`: Per-symbol preprocessor transformation input.
   - `VALUE=true|false` is recognized as boolean and enables full condition resolution/removal where possible.
   - any other value is used as direct replacement in `#if` expressions (e.g., `SOMETHING=random_text`).
+- `--fqn <prefix1|prefix2|...>`: Fully qualifies matching external metadata types in generated code.
+  - Use `all` to qualify all external metadata types.
+  - Use prefixes such as `System|System.Collections` to limit qualification to selected namespaces.
+  - This is useful when embedding FastCloner into a project that already defines colliding namespaces or type names.
 - `--implicit-usings <ns1;ns2;...>`: Namespaces the target project already imports implicitly.  
   Generated global usings for these namespaces are omitted.  
   Default is empty, so generated code carries explicit usings.
@@ -397,7 +402,29 @@ CLI options:
 
 ## Contributing
 
-If you are looking to add new functionality, please open an issue first to verify your intent is aligned with the scope of the project. The library is covered by over [800 tests](https://github.com/lofcz/FastCloner/tree/next/src/FastCloner.Tests), please run them against your work before proposing changes. When reporting issues, providing a minimal reproduction we can plug in as a new test greatly reduces turnaround time.
+If you are looking to add new functionality, please open an issue first to verify your intent is aligned with the scope of the project. The library is covered by over [800 tests](https://github.com/lofcz/FastCloner/tree/next/src/FastCloner.Tests), please run them against your work before proposing changes. We also run benchmark regression analysis on every pull request to `next`; if a change causes a measurable performance regression, the PR should clearly justify that trade-off. When reporting issues, providing a minimal reproduction we can plug in as a new test greatly reduces turnaround time.
+
+Each PR gets an updated benchmark report comment from `github-actions`, so you can spot regressions early and iterate before merge.
+
+<details>
+<summary>Example benchmark report</summary>
+
+| Status | Benchmark | Delta Time | Delta Alloc |
+|---|---|---|---|
+| 🟢 | DynamicWithArray | -15% faster | ~same |
+| ⚪ | DynamicWithDictionary | +5% slower | ~same |
+| ⚪ | DynamicWithNestedObject | ~same | ~same |
+| ⚪ | FileSpec | -4% faster | ~same |
+| 🟢 | LargeEventDocument_10MB | -7% faster | ~same |
+| ⚪ | LargeLogBatch_10MB | ~same | ~same |
+| ⚪ | MediumNestedObject | ~same | ~same |
+| ⚪ | ObjectDictionary_50 | ~same | ~same |
+| ⚪ | ObjectList_100 | -2% faster | ~same |
+| 🟢 | SmallObject | -6% faster | ~same |
+| ⚪ | SmallObjectWithCollections | -2% faster | ~same |
+| ⚪ | StringArray_1000 | ~same | ~same |
+
+</details>
 
 ## License
 

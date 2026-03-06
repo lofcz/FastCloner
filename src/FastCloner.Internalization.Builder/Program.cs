@@ -1,6 +1,7 @@
 using System.Text;
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Text;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -46,7 +47,7 @@ FastCloner is licensed under the MIT licence. https://github.com/lofcz/FastClone
         string[] files = RuntimeManifest.DiscoverRuntimeFiles(options.InputRoot, options.RuntimeOnly);
         BuildReport report = new(options, files.Length);
         HashSet<string> symbols = options.GetPreprocessorSymbols();
-        CSharpParseOptions parseOptions = new(languageVersion: LanguageVersion.Preview);
+        CSharpParseOptions parseOptions = new(languageVersion: LanguageVersion.Preview, preprocessorSymbols: symbols);
 
         // Pass 1: transform all files, collect the union of all usings across every source file.
         Dictionary<string, CompilationUnitSyntax> transformed = new(StringComparer.Ordinal);
@@ -93,10 +94,15 @@ FastCloner is licensed under the MIT licence. https://github.com/lofcz/FastClone
         foreach (string path in transformed.Keys.ToList())
             transformed[path] = AddAllCandidateUsings(transformed[path], allUsings, options.ImplicitUsings);
 
-        // Pass 2: compile all files together, ask the compiler which usings are unnecessary (CS8019).
+        // Pass 2: optionally qualify selected external metadata type references so generated code
+        // cannot collide with consumer-defined namespaces/types.
+        if (options.FullyQualifiedMetadataPrefixes.Count > 0)
+            transformed = QualifyMetadataTypeReferences(transformed, parseOptions, options.ImplicitUsings, options.FullyQualifiedMetadataPrefixes);
+
+        // Pass 3: compile all files together, ask the compiler which usings are unnecessary (CS8019).
         Dictionary<string, HashSet<int>> unnecessaryUsingSpans = FindUnnecessaryUsings(transformed, parseOptions, options.ImplicitUsings);
 
-        // Pass 3: strip compiler-flagged usings + implicit usings, normalize, apply global:: rewrites, add header.
+        // Pass 4: strip compiler-flagged usings + implicit usings, normalize, apply global:: rewrites, add header.
         Dictionary<string, string> generated = new(StringComparer.Ordinal);
         foreach ((string relativePath, CompilationUnitSyntax unit) in transformed)
         {
@@ -148,7 +154,7 @@ FastCloner is licensed under the MIT licence. https://github.com/lofcz/FastClone
         }
 
         if (options.SelfCheck)
-            report.CompilationErrors = SelfCheckCompiler.Check(generated, symbols, options.ImplicitUsings);
+            report.CompilationErrors = SelfCheckCompiler.Check(generated, symbols, options.ImplicitUsings, options.RootNamespace, options.FullyQualifiedMetadataPrefixes);
 
         return report;
     }
@@ -221,20 +227,90 @@ FastCloner is licensed under the MIT licence. https://github.com/lofcz/FastClone
         return additions.Count == 0 ? unit : unit.WithUsings(unit.Usings.AddRange(additions));
     }
 
-    private static Dictionary<string, HashSet<int>> FindUnnecessaryUsings(
+    private static Dictionary<string, CompilationUnitSyntax> QualifyMetadataTypeReferences(
         Dictionary<string, CompilationUnitSyntax> allFiles,
-        CSharpParseOptions parseOptions,
-        HashSet<string> implicitUsings)
+        CSharpParseOptions finalParseOptions,
+        HashSet<string> implicitUsings,
+        HashSet<string> fullyQualifiedMetadataPrefixes)
     {
-        List<MetadataReference> references = [];
-        string? tpa = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string;
-        if (!String.IsNullOrWhiteSpace(tpa))
+        Dictionary<string, string> sourceTexts = allFiles.ToDictionary(
+            static kv => kv.Key,
+            static kv => kv.Value.NormalizeWhitespace(eol: "\n").ToFullString() + "\n",
+            StringComparer.Ordinal);
+
+        Dictionary<string, string> rewrittenTexts = QualifyMetadataTypeReferencesInText(sourceTexts, implicitUsings, fullyQualifiedMetadataPrefixes);
+        return rewrittenTexts.ToDictionary(
+            static kv => kv.Key,
+            kv => CSharpSyntaxTree.ParseText(kv.Value, finalParseOptions, kv.Key).GetCompilationUnitRoot(),
+            StringComparer.Ordinal);
+    }
+
+    private static Dictionary<string, string> QualifyMetadataTypeReferencesInText(
+        Dictionary<string, string> sourceTexts,
+        HashSet<string> implicitUsings,
+        HashSet<string> fullyQualifiedMetadataPrefixes)
+    {
+        Dictionary<string, Dictionary<TextSpan, string>> editsByPath = sourceTexts.Keys.ToDictionary(
+            static path => path,
+            static _ => new Dictionary<TextSpan, string>(),
+            StringComparer.Ordinal);
+
+        List<HashSet<string>> passSymbols = PreprocessorPruner.CollectBranchActivationSymbolSets(sourceTexts.Values);
+
+        foreach (HashSet<string> symbols in passSymbols)
         {
-            foreach (string assemblyPath in tpa.Split(Path.PathSeparator))
-                references.Add(MetadataReference.CreateFromFile(assemblyPath));
+            CSharpParseOptions passParseOptions = new(languageVersion: LanguageVersion.Preview, preprocessorSymbols: symbols);
+            CSharpCompilation compilation = CreateCompilation(sourceTexts, passParseOptions, implicitUsings, out Dictionary<string, SyntaxTree> treeLookup);
+
+            foreach (string path in sourceTexts.Keys)
+            {
+                SyntaxTree syntaxTree = treeLookup[path];
+                SemanticModel semanticModel = compilation.GetSemanticModel(syntaxTree);
+                var collector = new MetadataTypeQualificationCollector(semanticModel, compilation.Assembly, fullyQualifiedMetadataPrefixes);
+                collector.Visit(syntaxTree.GetCompilationUnitRoot());
+
+                foreach ((TextSpan span, string replacement) in collector.Edits)
+                {
+                    if (editsByPath[path].TryGetValue(span, out string? existing))
+                    {
+                        if (!String.Equals(existing, replacement, StringComparison.Ordinal))
+                            throw new InvalidOperationException($"Conflicting qualification edits detected for {path} at span {span}.");
+                    }
+                    else
+                    {
+                        editsByPath[path][span] = replacement;
+                    }
+                }
+            }
         }
 
-        Dictionary<string, SyntaxTree> treeLookup = new(StringComparer.Ordinal);
+        Dictionary<string, string> rewritten = new(StringComparer.Ordinal);
+        foreach ((string path, string source) in sourceTexts)
+            rewritten[path] = ApplyTextEdits(source, editsByPath[path]);
+
+        return rewritten;
+    }
+
+    private static string ApplyTextEdits(string source, IReadOnlyDictionary<TextSpan, string> edits)
+    {
+        if (edits.Count == 0)
+            return source;
+
+        StringBuilder sb = new(source);
+        foreach ((TextSpan span, string replacement) in edits.OrderByDescending(kv => kv.Key.Start))
+            sb.Remove(span.Start, span.Length).Insert(span.Start, replacement);
+
+        return sb.ToString();
+    }
+
+    private static CSharpCompilation CreateCompilation(
+        Dictionary<string, CompilationUnitSyntax> allFiles,
+        CSharpParseOptions parseOptions,
+        HashSet<string> implicitUsings,
+        out Dictionary<string, SyntaxTree> treeLookup,
+        bool includeUnnecessaryUsingDiagnostics = false)
+    {
+        treeLookup = new Dictionary<string, SyntaxTree>(StringComparer.Ordinal);
         List<SyntaxTree> trees = [];
 
         if (implicitUsings.Count > 0)
@@ -252,15 +328,82 @@ FastCloner is licensed under the MIT licence. https://github.com/lofcz/FastClone
             treeLookup[path] = tree;
         }
 
-        CSharpCompilation compilation = CSharpCompilation.Create(
-            "__using_resolution",
+        CSharpCompilationOptions compilationOptions = new(OutputKind.DynamicallyLinkedLibrary);
+        if (includeUnnecessaryUsingDiagnostics)
+        {
+            compilationOptions = compilationOptions.WithSpecificDiagnosticOptions(new Dictionary<string, ReportDiagnostic>
+            {
+                ["CS8019"] = ReportDiagnostic.Warn
+            });
+        }
+
+        return CSharpCompilation.Create(
+            "__internalization",
             trees,
-            references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)
-                .WithSpecificDiagnosticOptions(new Dictionary<string, ReportDiagnostic>
-                {
-                    ["CS8019"] = ReportDiagnostic.Warn
-                }));
+            CreateMetadataReferences(),
+            compilationOptions);
+    }
+
+    private static CSharpCompilation CreateCompilation(
+        IReadOnlyDictionary<string, string> sourceTexts,
+        CSharpParseOptions parseOptions,
+        HashSet<string> implicitUsings,
+        out Dictionary<string, SyntaxTree> treeLookup,
+        bool includeUnnecessaryUsingDiagnostics = false)
+    {
+        treeLookup = new Dictionary<string, SyntaxTree>(StringComparer.Ordinal);
+        List<SyntaxTree> trees = [];
+
+        if (implicitUsings.Count > 0)
+        {
+            StringBuilder implicitSb = new();
+            foreach (string ns in implicitUsings.OrderBy(x => x, StringComparer.Ordinal))
+                implicitSb.AppendLine($"global using {ns};");
+            trees.Add(CSharpSyntaxTree.ParseText(implicitSb.ToString(), parseOptions, "__implicit_usings.g.cs"));
+        }
+
+        foreach ((string path, string source) in sourceTexts)
+        {
+            SyntaxTree tree = CSharpSyntaxTree.ParseText(source, parseOptions, path, Encoding.UTF8);
+            trees.Add(tree);
+            treeLookup[path] = tree;
+        }
+
+        CSharpCompilationOptions compilationOptions = new(OutputKind.DynamicallyLinkedLibrary);
+        if (includeUnnecessaryUsingDiagnostics)
+        {
+            compilationOptions = compilationOptions.WithSpecificDiagnosticOptions(new Dictionary<string, ReportDiagnostic>
+            {
+                ["CS8019"] = ReportDiagnostic.Warn
+            });
+        }
+
+        return CSharpCompilation.Create(
+            "__internalization",
+            trees,
+            CreateMetadataReferences(),
+            compilationOptions);
+    }
+
+    private static List<MetadataReference> CreateMetadataReferences()
+    {
+        List<MetadataReference> references = [];
+        string? tpa = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string;
+        if (!String.IsNullOrWhiteSpace(tpa))
+        {
+            foreach (string assemblyPath in tpa.Split(Path.PathSeparator))
+                references.Add(MetadataReference.CreateFromFile(assemblyPath));
+        }
+
+        return references;
+    }
+
+    private static Dictionary<string, HashSet<int>> FindUnnecessaryUsings(
+        Dictionary<string, CompilationUnitSyntax> allFiles,
+        CSharpParseOptions parseOptions,
+        HashSet<string> implicitUsings)
+    {
+        CSharpCompilation compilation = CreateCompilation(allFiles, parseOptions, implicitUsings, out Dictionary<string, SyntaxTree> treeLookup, includeUnnecessaryUsingDiagnostics: true);
 
         Dictionary<string, HashSet<int>> result = new(StringComparer.Ordinal);
         ImmutableArray<Diagnostic> diagnostics = compilation.GetDiagnostics();
@@ -361,6 +504,11 @@ Optional:
                                             Non-boolean values are used as direct token replacement in #if expressions.
   --implicit-usings <ns1;ns2;...>          List of namespaces assumed implicit in target project.
                                             When provided, matching global usings are omitted from generated code.
+  --fqn <prefix1|prefix2|...>               Fully qualify matching external metadata types.
+                                            Examples:
+                                              all
+                                              System
+                                              System|System.Collections
   --visibility <public|internal>            Top-level visibility rewrite mode (default: internal).
   --public-api <none|fastcloner|extensions|behaviors|all>
                                             Exceptions to keep public when visibility=internal (default: none).
@@ -391,6 +539,8 @@ internal enum PublicApiMode
 
 internal sealed class BuildOptions
 {
+    public const string FullyQualifyAll = "all";
+
     private static readonly IReadOnlyDictionary<string, string> DefaultPreprocessor = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["MODERN_10"] = "NET10_0_OR_GREATER"
@@ -401,6 +551,7 @@ internal sealed class BuildOptions
     public required string InputRoot { get; init; }
     public required Dictionary<string, string> Preprocessor { get; init; }
     public required HashSet<string> ImplicitUsings { get; init; }
+    public required HashSet<string> FullyQualifiedMetadataPrefixes { get; init; }
     public required VisibilityMode Visibility { get; init; }
     public required PublicApiMode PublicApi { get; init; }
     public required bool RuntimeOnly { get; init; }
@@ -425,6 +576,7 @@ internal sealed class BuildOptions
         string inputRoot = Get(kv, "--input-root", defaultInputRoot);
         Dictionary<string, string> preprocessor = ParsePreprocessor(Get(kv, "--preprocessor", String.Empty));
         HashSet<string> implicitUsings = ParseNamespaceList(Get(kv, "--implicit-usings", String.Empty));
+        HashSet<string> fullyQualifiedMetadataPrefixes = ParseFqnPrefixes(Get(kv, "--fqn", String.Empty));
 
         VisibilityMode visibility = ParseEnum(Get(kv, "--visibility", "internal"), new Dictionary<string, VisibilityMode>(StringComparer.OrdinalIgnoreCase)
         {
@@ -457,6 +609,7 @@ internal sealed class BuildOptions
             InputRoot = Path.GetFullPath(inputRoot),
             Preprocessor = preprocessor,
             ImplicitUsings = implicitUsings,
+            FullyQualifiedMetadataPrefixes = fullyQualifiedMetadataPrefixes,
             Visibility = visibility,
             PublicApi = publicApi,
             RuntimeOnly = runtimeOnly,
@@ -475,9 +628,36 @@ internal sealed class BuildOptions
         {
             if (StringComparer.OrdinalIgnoreCase.Equals(value, "true"))
                 symbols.Add(key);
+            else if (TryGetSinglePreprocessorIdentifier(value, out string referencedSymbol))
+                symbols.Add(referencedSymbol);
         }
 
         return symbols;
+    }
+
+    private static bool TryGetSinglePreprocessorIdentifier(string value, out string identifier)
+    {
+        identifier = String.Empty;
+        if (String.IsNullOrWhiteSpace(value))
+            return false;
+
+        ExpressionSyntax expression = SyntaxFactory.ParseExpression(value);
+        if (expression.ContainsDiagnostics)
+            return false;
+
+        if (expression is not IdentifierNameSyntax identifierName)
+            return false;
+
+        if (!String.Equals(identifierName.Identifier.ValueText, value, StringComparison.Ordinal))
+            return false;
+
+        if (identifierName.GetLastToken().TrailingTrivia.Count > 0 || identifierName.GetFirstToken().LeadingTrivia.Count > 0)
+        {
+            return false;
+        }
+
+        identifier = identifierName.Identifier.ValueText;
+        return true;
     }
 
     private static Dictionary<string, string> ParsePreprocessor(string raw)
@@ -519,6 +699,38 @@ internal sealed class BuildOptions
         return set;
     }
 
+    private static HashSet<string> ParseFqnPrefixes(string raw)
+    {
+        HashSet<string> set = new(StringComparer.Ordinal);
+        if (String.IsNullOrWhiteSpace(raw))
+            return set;
+
+        foreach (string value in raw.Split(['|', ';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            string normalized = value.StartsWith("global::", StringComparison.Ordinal) ? value["global::".Length..] : value;
+            if (!String.IsNullOrWhiteSpace(normalized))
+                set.Add(normalized);
+        }
+
+        return set;
+    }
+
+    public static bool ShouldFullyQualifyMetadataType(ITypeSymbol typeSymbol, IAssemblySymbol generatedAssembly, HashSet<string> fullyQualifiedMetadataPrefixes)
+    {
+        if (fullyQualifiedMetadataPrefixes.Count == 0)
+            return false;
+        if (SymbolEqualityComparer.Default.Equals(typeSymbol.ContainingAssembly, generatedAssembly))
+            return false;
+
+        if (fullyQualifiedMetadataPrefixes.Contains(FullyQualifyAll))
+            return true;
+
+        string displayName = typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        string normalizedDisplayName = displayName.StartsWith("global::", StringComparison.Ordinal) ? displayName["global::".Length..] : displayName;
+        return fullyQualifiedMetadataPrefixes.Any(prefix => normalizedDisplayName.Equals(prefix, StringComparison.Ordinal) ||
+                                                            normalizedDisplayName.StartsWith(prefix + ".", StringComparison.Ordinal));
+    }
+
     private static Dictionary<string, string?> ParseArgs(string[] args)
     {
         Dictionary<string, string?> parsed = new(StringComparer.OrdinalIgnoreCase);
@@ -527,6 +739,15 @@ internal sealed class BuildOptions
             string current = args[i];
             if (!current.StartsWith('-'))
                 continue;
+
+            int equalsIndex = current.IndexOf('=');
+            if (equalsIndex > 0)
+            {
+                string key = current[..equalsIndex];
+                string value = current[(equalsIndex + 1)..];
+                parsed[key] = value.Length == 0 ? null : value;
+                continue;
+            }
 
             if (i + 1 < args.Length && !args[i + 1].StartsWith('-'))
             {
@@ -665,6 +886,239 @@ internal static class PreprocessorPruner
             return new PruneResult(String.Join('\n', rewrittenLines), 0, 0);
 
         return PruneResolved(String.Join('\n', rewrittenLines));
+    }
+
+    public static HashSet<string> CollectReferencedIdentifiers(string source)
+    {
+        HashSet<string> identifiers = new(StringComparer.Ordinal);
+        foreach (string line in source.Replace("\r\n", "\n").Split('\n'))
+        {
+            string trimmed = line.TrimStart();
+            if (!TryParseDirective(trimmed, out string directive, out string expression) || directive is not ("if" or "elif"))
+                continue;
+
+            ExpressionSyntax parsed = SyntaxFactory.ParseExpression(expression);
+            if (parsed.ContainsDiagnostics)
+                continue;
+
+            foreach (IdentifierNameSyntax identifier in parsed.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>())
+                identifiers.Add(identifier.Identifier.ValueText);
+        }
+
+        return identifiers;
+    }
+
+    public static List<HashSet<string>> CollectBranchActivationSymbolSets(IEnumerable<string> sources)
+    {
+        Dictionary<string, HashSet<string>> unique = new(StringComparer.Ordinal);
+
+        foreach (string source in sources)
+        {
+            foreach (HashSet<string> symbols in CollectBranchActivationSymbolSets(source))
+            {
+                string key = symbols.Count == 0 ? String.Empty : String.Join("|", symbols.OrderBy(x => x, StringComparer.Ordinal));
+                if (!unique.ContainsKey(key))
+                    unique[key] = symbols;
+            }
+        }
+
+        return unique.Count == 0
+            ? [new HashSet<string>(StringComparer.Ordinal)]
+            : unique.Values.ToList();
+    }
+
+    private static IEnumerable<HashSet<string>> CollectBranchActivationSymbolSets(string source)
+    {
+        Stack<BranchExplorationFrame> stack = new();
+
+        foreach (string line in source.Replace("\r\n", "\n").Split('\n'))
+        {
+            string trimmed = line.TrimStart();
+            if (!TryParseDirective(trimmed, out string directive, out string expression))
+                continue;
+
+            switch (directive)
+            {
+                case "if":
+                {
+                    BoolExpr condition = ParseBoolExpr(expression);
+                    BoolExpr parentCondition = stack.Count == 0 ? BoolExpr.True : stack.Peek().CurrentBranchCondition;
+                    BoolExpr branchCondition = BoolExpr.And(parentCondition, condition);
+                    stack.Push(new BranchExplorationFrame(parentCondition, branchCondition, [condition]));
+                    break;
+                }
+                case "elif":
+                {
+                    BranchExplorationFrame frame = stack.Pop();
+                    BoolExpr condition = ParseBoolExpr(expression);
+                    BoolExpr branchCondition = BoolExpr.And(frame.ParentCondition, BoolExpr.And(BuildNoPreviousBranchMatched(frame.BranchConditions), condition));
+                    frame.BranchConditions.Add(condition);
+                    frame.CurrentBranchCondition = branchCondition;
+                    stack.Push(frame);
+                    break;
+                }
+                case "else":
+                {
+                    BranchExplorationFrame frame = stack.Pop();
+                    frame.CurrentBranchCondition = BoolExpr.And(frame.ParentCondition, BuildNoPreviousBranchMatched(frame.BranchConditions));
+                    stack.Push(frame);
+                    break;
+                }
+                case "endif":
+                    _ = stack.Pop();
+                    break;
+            }
+
+            if (directive is "if" or "elif" or "else")
+            {
+                BranchExplorationFrame current = stack.Peek();
+                SymbolAssignment? assignment = Solve(current.CurrentBranchCondition, desired: true);
+                if (assignment is not null)
+                    yield return assignment.TrueSymbols;
+            }
+        }
+    }
+
+    private static BoolExpr BuildNoPreviousBranchMatched(IEnumerable<BoolExpr> branchConditions)
+    {
+        BoolExpr result = BoolExpr.True;
+        foreach (BoolExpr condition in branchConditions)
+            result = BoolExpr.And(result, BoolExpr.Not(condition));
+
+        return result;
+    }
+
+    private static BoolExpr ParseBoolExpr(string expression)
+    {
+        ExpressionSyntax parsed = SyntaxFactory.ParseExpression(expression);
+        if (parsed.ContainsDiagnostics)
+            return BoolExpr.False;
+
+        return ConvertBoolExpr(parsed);
+    }
+
+    private static BoolExpr ConvertBoolExpr(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            ParenthesizedExpressionSyntax paren => ConvertBoolExpr(paren.Expression),
+            PrefixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.LogicalNotExpression } unary => BoolExpr.Not(ConvertBoolExpr(unary.Operand)),
+            BinaryExpressionSyntax { RawKind: (int)SyntaxKind.LogicalAndExpression } binary => BoolExpr.And(ConvertBoolExpr(binary.Left), ConvertBoolExpr(binary.Right)),
+            BinaryExpressionSyntax { RawKind: (int)SyntaxKind.LogicalOrExpression } binary => BoolExpr.Or(ConvertBoolExpr(binary.Left), ConvertBoolExpr(binary.Right)),
+            LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.TrueLiteralExpression) => BoolExpr.True,
+            LiteralExpressionSyntax literal when literal.IsKind(SyntaxKind.FalseLiteralExpression) => BoolExpr.False,
+            IdentifierNameSyntax identifier => new BoolExpr.Symbol(identifier.Identifier.ValueText),
+            _ => BoolExpr.False
+        };
+    }
+
+    private static SymbolAssignment? Solve(BoolExpr expression, bool desired)
+    {
+        return expression switch
+        {
+            BoolExpr.Literal literal => literal.Value == desired ? SymbolAssignment.Empty() : null,
+            BoolExpr.Symbol symbol => desired ? SymbolAssignment.WithTrue(symbol.Name) : SymbolAssignment.WithFalse(symbol.Name),
+            BoolExpr.NotExpr not => Solve(not.Operand, !desired),
+            BoolExpr.AndExpr and => desired
+                ? Merge(Solve(and.Left, true), Solve(and.Right, true))
+                : ChooseBetter(Solve(and.Left, false), Solve(and.Right, false)),
+            BoolExpr.OrExpr or => desired
+                ? ChooseBetter(Solve(or.Left, true), Solve(or.Right, true))
+                : Merge(Solve(or.Left, false), Solve(or.Right, false)),
+            _ => null
+        };
+    }
+
+    private static SymbolAssignment? Merge(SymbolAssignment? left, SymbolAssignment? right)
+    {
+        if (left is null || right is null)
+            return null;
+        if (left.TrueSymbols.Overlaps(right.FalseSymbols) || left.FalseSymbols.Overlaps(right.TrueSymbols))
+            return null;
+
+        return new SymbolAssignment(
+            [.. left.TrueSymbols, .. right.TrueSymbols],
+            [.. left.FalseSymbols, .. right.FalseSymbols]);
+    }
+
+    private static SymbolAssignment? ChooseBetter(SymbolAssignment? first, SymbolAssignment? second)
+    {
+        if (first is null)
+            return second;
+        if (second is null)
+            return first;
+
+        int firstTrueCount = first.TrueSymbols.Count;
+        int secondTrueCount = second.TrueSymbols.Count;
+        if (firstTrueCount != secondTrueCount)
+            return firstTrueCount < secondTrueCount ? first : second;
+
+        int firstSpecifiedCount = firstTrueCount + first.FalseSymbols.Count;
+        int secondSpecifiedCount = secondTrueCount + second.FalseSymbols.Count;
+        if (firstSpecifiedCount != secondSpecifiedCount)
+            return firstSpecifiedCount < secondSpecifiedCount ? first : second;
+
+        string firstKey = String.Join("|", first.TrueSymbols.OrderBy(x => x, StringComparer.Ordinal));
+        string secondKey = String.Join("|", second.TrueSymbols.OrderBy(x => x, StringComparer.Ordinal));
+        return StringComparer.Ordinal.Compare(firstKey, secondKey) <= 0 ? first : second;
+    }
+
+    private sealed class BranchExplorationFrame(BoolExpr parentCondition, BoolExpr currentBranchCondition, List<BoolExpr> branchConditions)
+    {
+        public BoolExpr ParentCondition { get; } = parentCondition;
+        public BoolExpr CurrentBranchCondition { get; set; } = currentBranchCondition;
+        public List<BoolExpr> BranchConditions { get; } = branchConditions;
+    }
+
+    private sealed class SymbolAssignment(HashSet<string> trueSymbols, HashSet<string> falseSymbols)
+    {
+        public HashSet<string> TrueSymbols { get; } = trueSymbols;
+        public HashSet<string> FalseSymbols { get; } = falseSymbols;
+
+        public static SymbolAssignment Empty() => new(new HashSet<string>(StringComparer.Ordinal), new HashSet<string>(StringComparer.Ordinal));
+        public static SymbolAssignment WithTrue(string name) => new(new HashSet<string>(StringComparer.Ordinal) { name }, new HashSet<string>(StringComparer.Ordinal));
+        public static SymbolAssignment WithFalse(string name) => new(new HashSet<string>(StringComparer.Ordinal), new HashSet<string>(StringComparer.Ordinal) { name });
+    }
+
+    private abstract record BoolExpr
+    {
+        public static readonly Literal True = new(true);
+        public static readonly Literal False = new(false);
+
+        public static BoolExpr Not(BoolExpr operand) => operand switch
+        {
+            Literal literal => literal.Value ? False : True,
+            NotExpr not => not.Operand,
+            _ => new NotExpr(operand)
+        };
+
+        public static BoolExpr And(BoolExpr left, BoolExpr right)
+        {
+            if (left == False || right == False)
+                return False;
+            if (left == True)
+                return right;
+            if (right == True)
+                return left;
+            return new AndExpr(left, right);
+        }
+
+        public static BoolExpr Or(BoolExpr left, BoolExpr right)
+        {
+            if (left == True || right == True)
+                return True;
+            if (left == False)
+                return right;
+            if (right == False)
+                return left;
+            return new OrExpr(left, right);
+        }
+
+        public sealed record Literal(bool Value) : BoolExpr;
+        public sealed record Symbol(string Name) : BoolExpr;
+        public sealed record NotExpr(BoolExpr Operand) : BoolExpr;
+        public sealed record AndExpr(BoolExpr Left, BoolExpr Right) : BoolExpr;
+        public sealed record OrExpr(BoolExpr Left, BoolExpr Right) : BoolExpr;
     }
 
     private static PruneResult PruneResolved(string source)
@@ -1097,9 +1551,158 @@ internal sealed class InternalizationRewriter(BuildOptions options, BuildReport 
     }
 }
 
+internal sealed class MetadataTypeQualificationCollector(
+    SemanticModel semanticModel,
+    IAssemblySymbol generatedAssembly,
+    HashSet<string> fullyQualifiedMetadataPrefixes) : CSharpSyntaxWalker
+{
+    private static readonly SymbolDisplayFormat FullyQualifiedTypeFormat = new(
+        globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Included,
+        typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
+        genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
+        miscellaneousOptions: SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers |
+                              SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
+
+    private readonly Dictionary<TextSpan, string> edits = new();
+
+    public IReadOnlyDictionary<TextSpan, string> Edits => edits;
+
+    public override void VisitIdentifierName(IdentifierNameSyntax node)
+    {
+        if (!TryCollectEdit(node))
+            base.VisitIdentifierName(node);
+    }
+
+    public override void VisitGenericName(GenericNameSyntax node)
+    {
+        if (!TryCollectEdit(node))
+            base.VisitGenericName(node);
+    }
+
+    public override void VisitQualifiedName(QualifiedNameSyntax node)
+    {
+        if (!TryCollectEdit(node))
+            base.VisitQualifiedName(node);
+    }
+
+    public override void VisitAliasQualifiedName(AliasQualifiedNameSyntax node)
+    {
+        if (!TryCollectEdit(node))
+            base.VisitAliasQualifiedName(node);
+    }
+
+    private bool TryCollectEdit(NameSyntax node)
+    {
+        if (!ShouldConsider(node))
+            return false;
+
+        ITypeSymbol? typeSymbol = ResolveTypeSymbol(node);
+        if (!ShouldQualify(typeSymbol))
+            return false;
+
+        string fullyQualifiedName = typeSymbol!.ToDisplayString(FullyQualifiedTypeFormat);
+        if (String.Equals(fullyQualifiedName, node.ToString(), StringComparison.Ordinal))
+            return false;
+
+        edits.TryAdd(node.Span, fullyQualifiedName);
+        return true;
+    }
+
+    private ITypeSymbol? ResolveTypeSymbol(NameSyntax node)
+    {
+        if (node.Parent is AttributeSyntax attribute && attribute.Name == node)
+            return semanticModel.GetTypeInfo(attribute).Type;
+
+        if (IsDirectTypeContext(node))
+        {
+            ITypeSymbol? typeFromInfo = semanticModel.GetTypeInfo(node).Type;
+            if (typeFromInfo is not null)
+                return typeFromInfo;
+        }
+
+        SymbolInfo symbolInfo = semanticModel.GetSymbolInfo(node);
+        ISymbol? symbol = symbolInfo.Symbol ?? symbolInfo.CandidateSymbols.FirstOrDefault();
+        if (symbol is IAliasSymbol alias)
+            symbol = alias.Target;
+
+        return symbol switch
+        {
+            ITypeSymbol typeSymbol => typeSymbol,
+            IMethodSymbol { MethodKind: MethodKind.Constructor } ctor => ctor.ContainingType,
+            _ => null
+        };
+    }
+
+    private bool ShouldQualify(ITypeSymbol? typeSymbol)
+    {
+        if (typeSymbol is null)
+            return false;
+        if (typeSymbol.TypeKind is TypeKind.Error or TypeKind.TypeParameter)
+            return false;
+        if (typeSymbol.SpecialType != SpecialType.None || typeSymbol.TypeKind == TypeKind.Dynamic)
+            return false;
+
+        return BuildOptions.ShouldFullyQualifyMetadataType(typeSymbol, generatedAssembly, fullyQualifiedMetadataPrefixes);
+    }
+
+    private static bool ShouldConsider(NameSyntax node)
+    {
+        if (node.Parent is NameSyntax)
+            return false;
+        if (node is AliasQualifiedNameSyntax { Alias.Identifier.ValueText: "global" })
+            return false;
+        if (node.Parent is MemberAccessExpressionSyntax memberAccess && memberAccess.Name == node)
+            return false;
+        if (node.Parent is MemberBindingExpressionSyntax memberBinding && memberBinding.Name == node)
+            return false;
+
+        return node.Parent is not (
+            UsingDirectiveSyntax or
+            NamespaceDeclarationSyntax or
+            FileScopedNamespaceDeclarationSyntax or
+            ExternAliasDirectiveSyntax or
+            NameEqualsSyntax or
+            NameColonSyntax or
+            QualifiedCrefSyntax or
+            XmlCrefAttributeSyntax);
+    }
+
+    private static bool IsDirectTypeContext(NameSyntax node)
+    {
+        return node.Parent switch
+        {
+            AttributeSyntax { Name: var name } => name == node,
+            VariableDeclarationSyntax { Type: var type } => type == node,
+            ParameterSyntax { Type: var type } => type == node,
+            PropertyDeclarationSyntax { Type: var type } => type == node,
+            EventDeclarationSyntax { Type: var type } => type == node,
+            MethodDeclarationSyntax { ReturnType: var type } => type == node,
+            LocalFunctionStatementSyntax { ReturnType: var type } => type == node,
+            DelegateDeclarationSyntax { ReturnType: var type } => type == node,
+            ObjectCreationExpressionSyntax { Type: var type } => type == node,
+            CastExpressionSyntax { Type: var type } => type == node,
+            TypeOfExpressionSyntax { Type: var type } => type == node,
+            DefaultExpressionSyntax { Type: var type } => type == node,
+            SizeOfExpressionSyntax { Type: var type } => type == node,
+            ArrayTypeSyntax { ElementType: var type } => type == node,
+            NullableTypeSyntax { ElementType: var type } => type == node,
+            BaseTypeSyntax { Type: var type } => type == node,
+            TupleElementSyntax { Type: var type } => type == node,
+            TypeArgumentListSyntax => true,
+            TypeConstraintSyntax => true,
+            _ => false
+        };
+    }
+}
+
 internal static class SelfCheckCompiler
 {
-    public static int Check(IReadOnlyDictionary<string, string> sources, HashSet<string> symbols, HashSet<string> implicitUsings)
+    public static int Check(
+        IReadOnlyDictionary<string, string> sources,
+        HashSet<string> symbols,
+        HashSet<string> implicitUsings,
+        string rootNamespace,
+        HashSet<string> fullyQualifiedMetadataPrefixes)
     {
         CSharpParseOptions parseOptions = new(languageVersion: LanguageVersion.Preview, preprocessorSymbols: symbols);
         List<SyntaxTree> trees = [];
@@ -1128,11 +1731,233 @@ internal static class SelfCheckCompiler
             references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
-        ImmutableArray<Diagnostic> diagnostics = compilation.GetDiagnostics();
+        int errors = ReportErrors(compilation.GetDiagnostics());
+        if (errors > 0)
+            return errors;
+        if (fullyQualifiedMetadataPrefixes.Count == 0)
+            return 0;
+
+        Dictionary<string, string> sourceTexts = sources.ToDictionary(static kv => kv.Key, static kv => kv.Value, StringComparer.Ordinal);
+        HashSet<string> unqualifiedMetadataTypeNames = FindUnqualifiedMetadataTypeNames(sourceTexts, implicitUsings, fullyQualifiedMetadataPrefixes);
+        if (unqualifiedMetadataTypeNames.Count == 0)
+            return 0;
+
+        List<SyntaxTree> collisionTrees = CreateCollisionProbeTrees(rootNamespace, parseOptions, unqualifiedMetadataTypeNames);
+        CSharpCompilation collisionCompilation = compilation.AddSyntaxTrees(collisionTrees);
+        return ReportErrors(collisionCompilation.GetDiagnostics());
+    }
+
+    private static int ReportErrors(ImmutableArray<Diagnostic> diagnostics)
+    {
         int errors = diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error);
         foreach (Diagnostic diagnostic in diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error))
             Console.Error.WriteLine(diagnostic.ToString());
 
         return errors;
+    }
+
+    private static HashSet<string> FindUnqualifiedMetadataTypeNames(
+        IReadOnlyDictionary<string, string> sourceTexts,
+        HashSet<string> implicitUsings,
+        HashSet<string> fullyQualifiedMetadataPrefixes)
+    {
+        HashSet<string> names = new(StringComparer.Ordinal);
+
+        List<HashSet<string>> passSymbols = PreprocessorPruner.CollectBranchActivationSymbolSets(sourceTexts.Values);
+
+        foreach (HashSet<string> symbols in passSymbols)
+        {
+            CSharpParseOptions passParseOptions = new(languageVersion: LanguageVersion.Preview, preprocessorSymbols: symbols);
+            CSharpCompilation compilation = CreateCompilation(sourceTexts, passParseOptions, implicitUsings, out Dictionary<string, SyntaxTree> treeLookup);
+
+            foreach (SyntaxTree tree in treeLookup.Values)
+            {
+                SemanticModel semanticModel = compilation.GetSemanticModel(tree);
+                foreach (NameSyntax node in tree.GetRoot().DescendantNodes().OfType<NameSyntax>())
+                {
+                    if (!ShouldCheckCollision(node))
+                        continue;
+
+                    ITypeSymbol? typeSymbol = ResolveTypeSymbol(semanticModel, node);
+                    if (!ShouldQualify(typeSymbol, compilation.Assembly, fullyQualifiedMetadataPrefixes))
+                        continue;
+
+                    if (!SyntaxFacts.IsValidIdentifier(typeSymbol!.Name))
+                        continue;
+
+                    names.Add(typeSymbol.Name);
+                }
+            }
+        }
+
+        return names;
+    }
+
+    private static CSharpCompilation CreateCompilation(
+        IReadOnlyDictionary<string, string> sourceTexts,
+        CSharpParseOptions parseOptions,
+        HashSet<string> implicitUsings,
+        out Dictionary<string, SyntaxTree> treeLookup)
+    {
+        treeLookup = new Dictionary<string, SyntaxTree>(StringComparer.Ordinal);
+        List<SyntaxTree> trees = [];
+
+        if (implicitUsings.Count > 0)
+        {
+            StringBuilder implicitUsingsBuilder = new();
+            foreach (string ns in implicitUsings.OrderBy(x => x, StringComparer.Ordinal))
+                implicitUsingsBuilder.AppendLine($"global using {ns};");
+            trees.Add(CSharpSyntaxTree.ParseText(implicitUsingsBuilder.ToString(), parseOptions, "__implicit_usings.g.cs"));
+        }
+
+        foreach ((string path, string content) in sourceTexts)
+        {
+            SyntaxTree tree = CSharpSyntaxTree.ParseText(content, parseOptions, path);
+            trees.Add(tree);
+            treeLookup[path] = tree;
+        }
+
+        return CSharpCompilation.Create(
+            "FastCloner.Internalized.Check",
+            trees,
+            CreateMetadataReferences(),
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+    }
+
+    private static List<MetadataReference> CreateMetadataReferences()
+    {
+        List<MetadataReference> references = [];
+        string? tpa = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string;
+        if (!String.IsNullOrWhiteSpace(tpa))
+        {
+            foreach (string assemblyPath in tpa.Split(Path.PathSeparator))
+                references.Add(MetadataReference.CreateFromFile(assemblyPath));
+        }
+
+        return references;
+    }
+
+    private static List<SyntaxTree> CreateCollisionProbeTrees(string rootNamespace, CSharpParseOptions parseOptions, HashSet<string> names)
+    {
+        List<SyntaxTree> trees = [];
+        string[] prefixes = GetNamespacePrefixes(rootNamespace);
+        int index = 0;
+
+        foreach (string prefix in prefixes)
+        {
+            foreach (string name in names.OrderBy(x => x, StringComparer.Ordinal))
+            {
+                string source = $$"""
+namespace {{prefix}}
+{
+    namespace {{name}}
+    {
+    }
+}
+""";
+                trees.Add(CSharpSyntaxTree.ParseText(source, parseOptions, $"__collision_probe_{index++}.g.cs"));
+            }
+        }
+
+        return trees;
+    }
+
+    private static string[] GetNamespacePrefixes(string rootNamespace)
+    {
+        string[] parts = rootNamespace.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        List<string> prefixes = new(parts.Length);
+        for (int i = 0; i < parts.Length; i++)
+            prefixes.Add(String.Join(".", parts.Take(i + 1)));
+
+        return prefixes.ToArray();
+    }
+
+    private static ITypeSymbol? ResolveTypeSymbol(SemanticModel semanticModel, NameSyntax node)
+    {
+        if (node.Parent is AttributeSyntax attribute && attribute.Name == node)
+            return semanticModel.GetTypeInfo(attribute).Type;
+
+        if (IsDirectTypeContext(node))
+        {
+            ITypeSymbol? typeFromInfo = semanticModel.GetTypeInfo(node).Type;
+            if (typeFromInfo is not null)
+                return typeFromInfo;
+        }
+
+        SymbolInfo symbolInfo = semanticModel.GetSymbolInfo(node);
+        ISymbol? symbol = symbolInfo.Symbol ?? symbolInfo.CandidateSymbols.FirstOrDefault();
+        if (symbol is IAliasSymbol alias)
+            symbol = alias.Target;
+
+        return symbol switch
+        {
+            ITypeSymbol typeSymbol => typeSymbol,
+            IMethodSymbol { MethodKind: MethodKind.Constructor } ctor => ctor.ContainingType,
+            _ => null
+        };
+    }
+
+    private static bool ShouldQualify(
+        ITypeSymbol? typeSymbol,
+        IAssemblySymbol generatedAssembly,
+        HashSet<string> fullyQualifiedMetadataPrefixes)
+    {
+        if (typeSymbol is null)
+            return false;
+        if (typeSymbol.TypeKind is TypeKind.Error or TypeKind.TypeParameter)
+            return false;
+        if (typeSymbol.SpecialType != SpecialType.None || typeSymbol.TypeKind == TypeKind.Dynamic)
+            return false;
+
+        return BuildOptions.ShouldFullyQualifyMetadataType(typeSymbol, generatedAssembly, fullyQualifiedMetadataPrefixes);
+    }
+
+    private static bool ShouldCheckCollision(NameSyntax node)
+    {
+        if (node is not IdentifierNameSyntax and not GenericNameSyntax)
+            return false;
+        if (node.Parent is NameSyntax)
+            return false;
+        if (node.Parent is MemberAccessExpressionSyntax memberAccess && memberAccess.Name == node)
+            return false;
+        if (node.Parent is MemberBindingExpressionSyntax memberBinding && memberBinding.Name == node)
+            return false;
+
+        return node.Parent is not (
+            UsingDirectiveSyntax or
+            NamespaceDeclarationSyntax or
+            FileScopedNamespaceDeclarationSyntax or
+            ExternAliasDirectiveSyntax or
+            NameEqualsSyntax or
+            NameColonSyntax or
+            QualifiedCrefSyntax or
+            XmlCrefAttributeSyntax);
+    }
+
+    private static bool IsDirectTypeContext(NameSyntax node)
+    {
+        return node.Parent switch
+        {
+            AttributeSyntax { Name: var name } => name == node,
+            VariableDeclarationSyntax { Type: var type } => type == node,
+            ParameterSyntax { Type: var type } => type == node,
+            PropertyDeclarationSyntax { Type: var type } => type == node,
+            EventDeclarationSyntax { Type: var type } => type == node,
+            MethodDeclarationSyntax { ReturnType: var type } => type == node,
+            LocalFunctionStatementSyntax { ReturnType: var type } => type == node,
+            DelegateDeclarationSyntax { ReturnType: var type } => type == node,
+            ObjectCreationExpressionSyntax { Type: var type } => type == node,
+            CastExpressionSyntax { Type: var type } => type == node,
+            TypeOfExpressionSyntax { Type: var type } => type == node,
+            DefaultExpressionSyntax { Type: var type } => type == node,
+            SizeOfExpressionSyntax { Type: var type } => type == node,
+            ArrayTypeSyntax { ElementType: var type } => type == node,
+            NullableTypeSyntax { ElementType: var type } => type == node,
+            BaseTypeSyntax { Type: var type } => type == node,
+            TupleElementSyntax { Type: var type } => type == node,
+            TypeArgumentListSyntax => true,
+            TypeConstraintSyntax => true,
+            _ => false
+        };
     }
 }
