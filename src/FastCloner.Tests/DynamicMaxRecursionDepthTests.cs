@@ -1,8 +1,16 @@
+using FastCloner.Code;
+
 namespace FastCloner.Tests;
 
 [TestFixture]
 public class DynamicMaxRecursionDepthTests
 {
+    public sealed class ExactNode
+    {
+        public int Value { get; set; }
+        public ExactNode? Child { get; set; }
+    }
+
     public class A
     {
         public List<B> Bs = [];
@@ -119,5 +127,73 @@ public class DynamicMaxRecursionDepthTests
         }
         
         Assert.That(level, Is.GreaterThan(maxRecursionDepth), $"Verified {level} levels");
+    }
+
+    [Test]
+    public void TestDeepExactObjectGraph_1500Levels_WithMRD1()
+    {
+        const int nestLevel = 1500;
+
+        ExactNode root = new ExactNode { Value = 0 };
+        ExactNode current = root;
+
+        for (int i = 1; i <= nestLevel; i++)
+        {
+            ExactNode next = new ExactNode { Value = i };
+            current.Child = next;
+            current = next;
+        }
+
+        FastCloner.MaxRecursionDepth = 1;
+        ExactNode? clone = FastCloner.DeepClone(root);
+
+        Assert.That(clone, Is.Not.Null);
+        Assert.That(clone, Is.Not.SameAs(root));
+
+        ExactNode? originalCurrent = root;
+        ExactNode? cloneCurrent = clone;
+        int verifiedLevels = 0;
+        while (originalCurrent is not null && cloneCurrent is not null)
+        {
+            Assert.That(cloneCurrent, Is.Not.SameAs(originalCurrent), $"Node at level {verifiedLevels} should be cloned");
+            Assert.That(cloneCurrent.Value, Is.EqualTo(originalCurrent.Value), $"Value at level {verifiedLevels} should match");
+
+            originalCurrent = originalCurrent.Child;
+            cloneCurrent = cloneCurrent.Child;
+            verifiedLevels++;
+        }
+
+        Assert.That(verifiedLevels, Is.EqualTo(nestLevel + 1));
+        Assert.That(cloneCurrent, Is.Null);
+        Assert.That(originalCurrent, Is.Null);
+    }
+
+    [Test]
+    public void Internal_CloneClassInternalExact_Should_Reset_CallDepth_After_WorkList_Switch()
+    {
+        ExactNode root = new ExactNode
+        {
+            Value = 1,
+            Child = new ExactNode
+            {
+                Value = 2,
+                Child = new ExactNode { Value = 3 }
+            }
+        };
+
+        FastCloner.MaxRecursionDepth = 1;
+        FastCloneState state = FastCloneState.Rent();
+        try
+        {
+            ExactNode? clone = FastClonerGenerator.CloneClassInternalExact(root, state);
+
+            Assert.That(clone, Is.Not.Null);
+            Assert.That(state.UseWorkList, Is.True);
+            Assert.That(state.CurrentDepth, Is.EqualTo(0));
+        }
+        finally
+        {
+            FastCloneState.Return(state);
+        }
     }
 }

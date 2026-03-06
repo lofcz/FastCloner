@@ -25,6 +25,7 @@
 
   <PropertyGroup>
     <DefineConstants Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">$(DefineConstants);MODERN</DefineConstants>
+    <DefineConstants Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net10.0'))">$(DefineConstants);MODERN_10</DefineConstants>
   </PropertyGroup>
 
   <PropertyGroup>

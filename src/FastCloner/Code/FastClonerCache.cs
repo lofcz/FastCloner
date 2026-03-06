@@ -52,7 +52,11 @@ internal static class ClonerCache<T>
         public long Version { get; } = version;
     }
 
+    #if MODERN_10
+    private static readonly Lock sync = new Lock();
+    #else
     private static readonly object sync = new object();
+    #endif
     private static Func<T, FastCloneState, T>? cloner;
     private static bool isSafe;
     private static bool canUseNoTrackingState;
@@ -83,8 +87,7 @@ internal static class ClonerCache<T>
         bool computedIsSafe = FastClonerSafeTypes.CanReturnSameObject(type);
         bool computedCanUseNoTrackingState =
             !type.IsValueType &&
-            typeMetadata.CyclePolicy == FastClonerCache.CyclePolicy.None &&
-            !typeMetadata.HasBehaviorSensitiveMembers &&
+            typeMetadata is { CyclePolicy: FastClonerCache.CyclePolicy.None, HasBehaviorSensitiveMembers: false } &&
             !FastClonerCache.HasActiveTypeBehaviorOverrides;
         Func<T, FastCloneState, T>? computedCloner = null;
 
@@ -97,8 +100,7 @@ internal static class ClonerCache<T>
             }
             else
             {
-                Func<object, FastCloneState, object>? objectCloner = clonerObj as Func<object, FastCloneState, object>;
-                if (objectCloner is not null)
+                if (clonerObj is Func<object, FastCloneState, object> objectCloner)
                 {
                     computedCloner = (obj, state) => (T)objectCloner(obj!, state);
                 }
@@ -158,13 +160,12 @@ internal static class FastClonerCache
         public CloneExecutionMode ExecutionMode { get; set; }
         public CyclePolicy CyclePolicy { get; set; }
         public Func<object, FastCloneState, object>? RecursiveCloner { get; set; }
-        public Func<object, FastCloneState, object>? WorklistCloner { get; set; }
     }
 
     internal sealed class TypeShape
     {
-        public List<MemberInfo> Members { get; init; } = [];
-        public Dictionary<string, Type> IgnoredEventDetails { get; init; } = [];
+        public MemberInfo[] Members { get; init; } = [];
+        public Dictionary<string, Type>? IgnoredEventDetails { get; init; }
         public Type[] CycleFieldTypes { get; init; } = [];
         public bool HasReadonlyFields { get; init; }
         public bool ContainsIgnoredMembers { get; init; }
@@ -199,7 +200,7 @@ internal static class FastClonerCache
     internal static void RecalculateTypeBehaviorState()
     {
         HasTypeBehaviorOverrides = !TypeBehaviors.IsEmpty;
-        HasActiveTypeBehaviorOverrides = HasTypeBehaviorOverrides && !global::FastCloner.FastCloner.DisableOptionalFeatures;
+        HasActiveTypeBehaviorOverrides = HasTypeBehaviorOverrides && !FastCloner.DisableOptionalFeatures;
         HasSafeTypeOverrides = CalculateHasSafeTypeOverrides();
     }
 
@@ -286,18 +287,15 @@ internal static class FastClonerCache
         compilerGeneratedTypeCache.Clear();
         BumpCacheVersion();
     }
-    
-    internal sealed class ClrCache<TValue>
+
+    private sealed class ClrCache<TValue>
     {
         private readonly ConcurrentDictionary<IntPtr, TValue> cache = new ConcurrentDictionary<IntPtr, TValue>();
         
         public TValue GetOrAdd(Type type, Func<Type, TValue> valueFactory)
         {
             IntPtr handle = type.TypeHandle.Value;
-            if (cache.TryGetValue(handle, out TValue? existing))
-                return existing;
-
-            return cache.GetOrAdd(handle, _ => valueFactory(type));
+            return cache.TryGetValue(handle, out TValue? existing) ? existing : cache.GetOrAdd(handle, _ => valueFactory(type));
         }
 
         public void Clear() => cache.Clear();
@@ -315,16 +313,10 @@ internal static class FastClonerCache
         public void Clear() => cache.Clear();
     }
 
-    private readonly struct TypeNameKey : IEquatable<TypeNameKey>
+    private readonly struct TypeNameKey(Type type, string name) : IEquatable<TypeNameKey>
     {
-        public TypeNameKey(Type type, string name)
-        {
-            Type = type;
-            Name = name;
-        }
-
-        public Type Type { get; }
-        public string Name { get; }
+        public Type Type { get; } = type;
+        public string Name { get; } = name;
 
         public bool Equals(TypeNameKey other)
         {

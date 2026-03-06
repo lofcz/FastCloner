@@ -171,8 +171,8 @@ internal static class FastClonerExprGenerator
         bool skipCycleTracking = false)
     {
         FastClonerCache.TypeShape typeShape = GetTypeShape(type);
-        IEnumerable<MemberInfo> members = typeShape.Members;
-        Dictionary<string, Type> ignoredEventDetails = typeShape.IgnoredEventDetails;
+        MemberInfo[] members = typeShape.Members;
+        Dictionary<string, Type>? ignoredEventDetails = typeShape.IgnoredEventDetails;
 
         foreach (MemberInfo member in members)
         {
@@ -188,7 +188,7 @@ internal static class FastClonerExprGenerator
             {
                 shouldBeIgnored = true;
             }
-            else if (ignoredEventDetails.TryGetValue(fieldInfo.Name, out Type? evtType))
+            else if (ignoredEventDetails is not null && ignoredEventDetails.TryGetValue(fieldInfo.Name, out Type? evtType))
             {
                 if (evtType == memberType)
                 {
@@ -453,8 +453,8 @@ internal static class FastClonerExprGenerator
     {
         ExpressionPosition currentPosition = new ExpressionPosition(0, 0);
         FastClonerCache.TypeShape typeShape = GetTypeShape(type);
-        IEnumerable<MemberInfo> members = typeShape.Members;
-        Dictionary<string, Type> ignoredEventDetails = typeShape.IgnoredEventDetails;
+        MemberInfo[] members = typeShape.Members;
+        Dictionary<string, Type>? ignoredEventDetails = typeShape.IgnoredEventDetails;
 
         foreach (MemberInfo member in members)
         {
@@ -485,7 +485,9 @@ internal static class FastClonerExprGenerator
                 continue;
             }
 
-            if (member is FieldInfo fieldInfoForEventCheck && ignoredEventDetails.TryGetValue(fieldInfoForEventCheck.Name, out Type? evtType))
+            if (member is FieldInfo fieldInfoForEventCheck &&
+                ignoredEventDetails is not null &&
+                ignoredEventDetails.TryGetValue(fieldInfoForEventCheck.Name, out Type? evtType))
             {
                 if (evtType == memberType)
                 {
@@ -537,7 +539,7 @@ internal static class FastClonerExprGenerator
                 }
                 else if (member is FieldInfo fi)
                 {
-                    if (ignoredEventDetails.TryGetValue(fi.Name, out Type? eventHandlerTypeFromCache))
+                    if (ignoredEventDetails is not null && ignoredEventDetails.TryGetValue(fi.Name, out Type? eventHandlerTypeFromCache))
                     {
                         if (eventHandlerTypeFromCache == fi.FieldType)
                         {
@@ -778,7 +780,7 @@ internal static class FastClonerExprGenerator
     private static FastClonerCache.TypeShape BuildTypeShape(Type type)
     {
         List<MemberInfo> members = [];
-        Dictionary<string, Type> ignoredEventDetails = new Dictionary<string, Type>();
+        Dictionary<string, Type>? ignoredEventDetails = null;
         List<Type> cycleFieldTypes = new List<Type>();
         bool hasReadonlyFields = false;
         bool containsIgnoredMembers = false;
@@ -840,6 +842,7 @@ internal static class FastClonerExprGenerator
                     EventInfo evtInfo = events[i];
                     if (MemberIsIgnored(evtInfo) && evtInfo.EventHandlerType is not null)
                     {
+                        ignoredEventDetails ??= new Dictionary<string, Type>();
                         ignoredEventDetails[evtInfo.Name] = evtInfo.EventHandlerType;
                     }
                 }
@@ -850,7 +853,7 @@ internal static class FastClonerExprGenerator
 
         return new FastClonerCache.TypeShape
         {
-            Members = members,
+            Members = members.ToArray(),
             IgnoredEventDetails = ignoredEventDetails,
             CycleFieldTypes = cycleFieldTypes.ToArray(),
             HasReadonlyFields = hasReadonlyFields,

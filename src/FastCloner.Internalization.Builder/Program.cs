@@ -354,6 +354,8 @@ Optional:
                                             Example:
                                               MODERN=true;NET8_0_OR_GREATER=true
                                               MODERN=true;SOMETHING=random_text
+                                            Default replacements:
+                                              MODERN_10=NET10_0_OR_GREATER
                                             Special values:
                                               true / false (recognized booleans)
                                             Non-boolean values are used as direct token replacement in #if expressions.
@@ -389,6 +391,11 @@ internal enum PublicApiMode
 
 internal sealed class BuildOptions
 {
+    private static readonly IReadOnlyDictionary<string, string> DefaultPreprocessor = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["MODERN_10"] = "NET10_0_OR_GREATER"
+    };
+
     public required string RootNamespace { get; init; }
     public required string Output { get; init; }
     public required string InputRoot { get; init; }
@@ -475,7 +482,7 @@ internal sealed class BuildOptions
 
     private static Dictionary<string, string> ParsePreprocessor(string raw)
     {
-        Dictionary<string, string> map = new(StringComparer.Ordinal);
+        Dictionary<string, string> map = new(DefaultPreprocessor, StringComparer.Ordinal);
         if (String.IsNullOrWhiteSpace(raw))
             return map;
 

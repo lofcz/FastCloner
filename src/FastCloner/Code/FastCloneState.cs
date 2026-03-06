@@ -96,6 +96,7 @@ internal sealed class FastCloneState
     private int workCount;
     public bool UseWorkList { get; set; }
     private int callDepth;
+    internal int CurrentDepth => callDepth;
     private readonly Type?[] metadataTypes = new Type?[MetadataCacheSize];
     private readonly FastClonerCache.TypeCloneMetadata[] metadataValues = new FastClonerCache.TypeCloneMetadata[MetadataCacheSize];
     private int metadataWriteIndex;
