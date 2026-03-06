@@ -210,6 +210,24 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         // Assert
         Assert.That(cloned, Is.Null, "Cloning an object of an globally ignored type should return null.");
     }
+
+    [Test]
+    public void Internal_CloneClassInternalExact_IgnoreTypeBehavior_ReturnsNull()
+    {
+        ClassToBeIgnored original = new ClassToBeIgnored { Data = "Important Data" };
+        FastCloner.SetTypeBehavior<ClassToBeIgnored>(CloneBehavior.Ignore);
+
+        FastCloneState state = FastCloneState.Rent();
+        try
+        {
+            ClassToBeIgnored? cloned = FastClonerGenerator.CloneClassInternalExact(original, state);
+            Assert.That(cloned, Is.Null);
+        }
+        finally
+        {
+            FastCloneState.Return(state);
+        }
+    }
     
     [Test]
     public void SetTypeBehavior_Ignore_ForPrimitiveIntProperty_SetsToDefault()

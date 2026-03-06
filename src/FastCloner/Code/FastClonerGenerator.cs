@@ -624,79 +624,14 @@ internal static class FastClonerGenerator
             return null;
 
         ClonerCache<T>.CacheEntry cacheEntry = ClonerCache<T>.GetCurrent();
-        bool hasOptionalTypeOverrides = FastClonerCache.HasActiveTypeBehaviorOverrides;
-        if (!hasOptionalTypeOverrides)
-        {
-            if (cacheEntry.IsSafe || cacheEntry.Cloner is null)
-                return obj;
-        }
-        else
-        {
-            Type objType = typeof(T);
-            if (!FastClonerCache.HasSafeTypeOverrides)
-            {
-                if (FastClonerSafeTypes.DefaultKnownTypes.ContainsKey(objType))
-                    return obj;
-
-                if (FastClonerCache.IsTypeIgnored(objType))
-                    return null;
-            }
-            else
-            {
-                if (FastClonerCache.IsTypeIgnored(objType))
-                    return null;
-
-                if (FastClonerSafeTypes.DefaultKnownTypes.ContainsKey(objType))
-                    return obj;
-            }
-        }
-
-        Func<T, FastCloneState, T>? recursiveCloner = cacheEntry.Cloner;
-        if (recursiveCloner is null)
+        if (!FastClonerCache.HasActiveTypeBehaviorOverrides && cacheEntry.IsSafe)
             return obj;
 
-        if (state.UseWorkList)
-        {
-            object? knownA = state.GetKnownRef(obj);
-            if (knownA is not null)
-            {
-                return (T)knownA;
-            }
+        Type objType = typeof(T);
+        FastClonerCache.TypeCloneMetadata metadata = cacheEntry.Metadata ?? GetTypeMetadata(objType, state);
 
-            return (T?)CloneClassShallowAndTrack(obj, state);
-        }
-
-        bool depthIncremented = false;
-        try
-        {
-            depthIncremented = true;
-            int current = state.IncrementDepth();
-
-            if (current >= FastCloner.MaxRecursionDepth)
-            {
-                state.DecrementDepth();
-                depthIncremented = false;
-                state.UseWorkList = true;
-                object? knownB = state.GetKnownRef(obj);
-                if (knownB is not null)
-                {
-                    return (T)knownB;
-                }
-
-                return (T?)CloneClassShallowAndTrack(obj, state);
-            }
-
-            object? knownRef = state.GetKnownRef(obj);
-            if (knownRef is not null)
-                return (T)knownRef;
-
-            return recursiveCloner(obj, state);
-        }
-        finally
-        {
-            if (depthIncremented)
-                state.DecrementDepth();
-        }
+        // Keep exact and polymorphic class cloning on the same decision path.
+        return (T?)CloneClassInternalTyped(obj, objType, state, metadata);
     }
 
     internal static object? CloneClassInternalNoTracking(object? obj, FastCloneState state)

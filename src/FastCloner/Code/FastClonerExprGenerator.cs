@@ -31,9 +31,6 @@ internal static class FastClonerExprGenerator
         if (useShallowClassClone)
             return StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassShallowAndTrack;
 
-        if (!skipCycleTracking && memberType.IsSealed)
-            return StaticMethodInfos.DeepClonerGeneratorMethods.MakeExactClassCloneMethodInfo(memberType);
-
         return skipCycleTracking
             ? StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassInternalNoTracking
             : StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassInternal;
@@ -43,9 +40,7 @@ internal static class FastClonerExprGenerator
     {
         return memberType.IsValueType()
             ? StaticMethodInfos.DeepClonerGeneratorMethods.MakeStructCloneMethodInfo(memberType)
-            : memberType.IsSealed
-                ? StaticMethodInfos.DeepClonerGeneratorMethods.MakeExactClassCloneMethodInfo(memberType)
-                : StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassInternal;
+            : StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassInternal;
     }
 
     internal static object? GenerateClonerInternal(Type realType, bool asObject, bool skipCycleTracking = false, bool useShallowClassClone = false)
@@ -241,12 +236,7 @@ internal static class FastClonerExprGenerator
             else
             {
                 MethodInfo classCloneMethod = GetClassCloneMethod(memberType, useShallowClassClone, skipCycleTracking);
-                if (!useShallowClassClone && !skipCycleTracking && memberType.IsSealed)
-                {
-                    Expression call = Expression.Call(classCloneMethod, originalMemberValue, state);
-                    clonedValueExpression = Expression.Convert(call, memberType);
-                }
-                else if (!useShallowClassClone && !skipCycleTracking)
+                if (!useShallowClassClone && !skipCycleTracking)
                 {
                     Expression deepCall = Expression.Call(classCloneMethod, originalMemberValue, state);
                     Expression shallowCall = Expression.Call(StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassShallowAndTrack, originalMemberValue, state);
@@ -608,12 +598,7 @@ internal static class FastClonerExprGenerator
                 else
                 {
                     MethodInfo classCloneMethod = GetClassCloneMethod(memberType, useShallowClassClone, skipCycleTracking);
-                    if (!useShallowClassClone && !skipCycleTracking && memberType.IsSealed)
-                    {
-                        Expression call = Expression.Call(classCloneMethod, originalMemberValue, state);
-                        clonedValueExpression = Expression.Convert(call, memberType);
-                    }
-                    else if (!useShallowClassClone && !skipCycleTracking)
+                    if (!useShallowClassClone && !skipCycleTracking)
                     {
                         Expression deepCall = Expression.Call(classCloneMethod, originalMemberValue, state);
                         Expression shallowCall = Expression.Call(StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassShallowAndTrack, originalMemberValue, state);
