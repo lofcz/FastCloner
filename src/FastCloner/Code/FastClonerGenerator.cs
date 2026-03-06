@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -384,7 +383,7 @@ internal static class FastClonerGenerator
         }
 
         if (metadata.CanSkipReferenceTracking ||
-            (metadata.CyclePolicy == FastClonerCache.CyclePolicy.None && !metadata.HasBehaviorSensitiveMembers && !rootType.IsValueType))
+            (metadata is { CyclePolicy: FastClonerCache.CyclePolicy.None, HasBehaviorSensitiveMembers: false } && !rootType.IsValueType))
             return cloner(obj, FastCloneState.GetSimpleState());
 
         return CloneRootWithTrackedState(obj, cloner, metadata);
@@ -395,10 +394,9 @@ internal static class FastClonerGenerator
         FastCloneState state = FastCloneState.Rent();
         state.UseWorkList = metadata.CyclePolicy == FastClonerCache.CyclePolicy.Worklist;
 
-        T result;
-
         try
         {
+            T result;
             if (!state.UseWorkList)
             {
                 int current = state.IncrementDepth();
@@ -814,7 +812,7 @@ internal static class FastClonerGenerator
             }
         }
 
-        object? shallow = ShallowObjectCloner.CloneObject(obj);
+        object shallow = ShallowObjectCloner.CloneObject(obj);
         state.AddKnownRef(obj, shallow);
 
         if (state.UseWorkList)
@@ -823,13 +821,6 @@ internal static class FastClonerGenerator
         }
 
         return shallow;
-    }
-    
-    private static bool RequiresSpecializedCloner(Type type)
-    {
-        return type.IsArray || 
-               FastClonerExprGenerator.IsDictionaryType(type) || 
-               FastClonerExprGenerator.IsSetType(type);
     }
 
     internal static T CloneStructInternal<T>(T obj, FastCloneState state)
@@ -974,7 +965,7 @@ internal static class FastClonerGenerator
     {
         if (obj is null) return null;
         int count = obj.Count;
-        List<T> result = new(count);
+        List<T> result = new List<T>(count);
         state.AddKnownRef(obj, result);
 
 #if NET5_0_OR_GREATER
@@ -993,7 +984,7 @@ internal static class FastClonerGenerator
     {
         if (obj is null) return null;
         int count = obj.Count;
-        List<T> result = new(count);
+        List<T> result = new List<T>(count);
         state.AddKnownRef(obj, result);
 
         Func<T, FastCloneState, T>? cloner = GetClonerForValueType<T>();
@@ -1030,7 +1021,7 @@ internal static class FastClonerGenerator
         state.EnsureKnownRefCapacity(count + 1);
         if (state.UseWorkList)
             state.EnsureWorkQueueCapacity(count);
-        List<T?> result = new(count);
+        List<T?> result = new List<T?>(count);
         state.AddKnownRef(obj, result);
         Type declaredType = typeof(T);
 
@@ -1140,7 +1131,7 @@ internal static class FastClonerGenerator
         Dictionary<TKey, TValue>? obj, FastCloneState state) where TKey : notnull
     {
         if (obj is null) return null;
-        Dictionary<TKey, TValue> result = new(obj.Count, obj.Comparer);
+        Dictionary<TKey, TValue> result = new Dictionary<TKey, TValue>(obj.Count, obj.Comparer);
         state.AddKnownRef(obj, result);
         bool ignoreValues = FastClonerCache.HasActiveTypeBehaviorOverrides &&
                             FastClonerCache.IsTypeIgnored(typeof(TValue));
@@ -1162,7 +1153,7 @@ internal static class FastClonerGenerator
         Dictionary<TKey, TValue>? obj, FastCloneState state) where TKey : notnull where TValue : struct
     {
         if (obj is null) return null;
-        Dictionary<TKey, TValue> result = new(obj.Count, obj.Comparer);
+        Dictionary<TKey, TValue> result = new Dictionary<TKey, TValue>(obj.Count, obj.Comparer);
         state.AddKnownRef(obj, result);
         bool ignoreValues = FastClonerCache.HasActiveTypeBehaviorOverrides &&
                             FastClonerCache.IsTypeIgnored(typeof(TValue));
@@ -1224,7 +1215,7 @@ internal static class FastClonerGenerator
         if (declaredType == typeof(object))
             return (Dictionary<TKey, TValue?>?)(object?)CloneDictionaryObjectValueInternal((Dictionary<TKey, object?>)(object)obj, state);
 
-        Dictionary<TKey, TValue?> result = new(obj.Count, obj.Comparer);
+        Dictionary<TKey, TValue?> result = new Dictionary<TKey, TValue?>(obj.Count, obj.Comparer);
         state.AddKnownRef(obj, result);
 
         if (declaredType.IsSealed)
@@ -1320,7 +1311,7 @@ internal static class FastClonerGenerator
     private static Dictionary<TKey, object?> CloneDictionaryObjectValueInternal<TKey>(
         Dictionary<TKey, object?> obj, FastCloneState state) where TKey : notnull
     {
-        Dictionary<TKey, object?> result = new(obj.Count, obj.Comparer);
+        Dictionary<TKey, object?> result = new Dictionary<TKey, object?>(obj.Count, obj.Comparer);
         state.AddKnownRef(obj, result);
         TypeCloneDispatchCache dispatch = default;
         Type? lastType = null;
@@ -1394,7 +1385,7 @@ internal static class FastClonerGenerator
         int lb1 = obj.GetLowerBound(0);
         int lb2 = obj.GetLowerBound(1);
         if (lb1 != 0 || lb2 != 0)
-            return (T[,]) CloneAbstractArrayInternal(obj, state);
+            return (T[,]) CloneAbstractArrayInternal(obj, state)!;
 
         int l1 = obj.GetLength(0);
         int l2 = obj.GetLength(1);
@@ -1422,7 +1413,7 @@ internal static class FastClonerGenerator
         {
             for (int i = 0; i < l1; i++)
                 for (int k = 0; k < l2; k++)
-                    outArray[i, k] = (T)CloneClassInternal(obj[i, k], state);
+                    outArray[i, k] = (T)CloneClassInternal(obj[i, k], state)!;
         }
 
         return outArray;
@@ -1445,7 +1436,7 @@ internal static class FastClonerGenerator
             hasZeroLength |= length == 0;
         }
 
-        Type? elementType = obj.GetType().GetElementType();
+        Type elementType = obj.GetType().GetElementType()!;
         Array outArray = Array.CreateInstance(elementType, lengths, lowerBounds);
 
         state.AddKnownRef(obj, outArray);
@@ -1550,28 +1541,30 @@ internal static class FastClonerGenerator
         try
         {
             object result = cloner(objFrom, objTo, state);
-            
-            if (isDeep)
+
+            if (!isDeep)
             {
-                Type? lastWorkType = null;
-                Func<object, object, FastCloneState, object>? lastClonerTo = null;
-                while (state.TryPop(out object from, out object to, out Type workItemType))
-                {
-                    Func<object, object, FastCloneState, object> clonerTo;
-                    if (workItemType == lastWorkType && lastClonerTo is not null)
-                    {
-                        clonerTo = lastClonerTo;
-                    }
-                    else
-                    {
-                        clonerTo = (Func<object, object, FastCloneState, object>)FastClonerCache.GetOrAddDeepClassTo(workItemType, t => ClonerToExprGenerator.GenerateClonerInternal(t, true));
-                        lastWorkType = workItemType;
-                        lastClonerTo = clonerTo;
-                    }
-                    clonerTo(from, to, state);
-                }
+                return result;
             }
             
+            Type? lastWorkType = null;
+            Func<object, object, FastCloneState, object>? lastClonerTo = null;
+            while (state.TryPop(out object from, out object to, out Type workItemType))
+            {
+                Func<object, object, FastCloneState, object> clonerTo;
+                if (workItemType == lastWorkType && lastClonerTo is not null)
+                {
+                    clonerTo = lastClonerTo;
+                }
+                else
+                {
+                    clonerTo = (Func<object, object, FastCloneState, object>)FastClonerCache.GetOrAddDeepClassTo(workItemType, t => ClonerToExprGenerator.GenerateClonerInternal(t, true));
+                    lastWorkType = workItemType;
+                    lastClonerTo = clonerTo;
+                }
+                clonerTo(from, to, state);
+            }
+
             return result;
         }
         finally

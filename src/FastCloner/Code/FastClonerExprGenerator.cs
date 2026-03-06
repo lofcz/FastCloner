@@ -271,7 +271,6 @@ internal static class FastClonerExprGenerator
     internal readonly record struct ExpressionPosition(int Depth, int Index)
     {
         public ExpressionPosition Next() => this with { Index = Index + 1 };
-        public ExpressionPosition Nested() => new ExpressionPosition(Depth + 1, 0);
     }
 #else
     internal readonly struct ExpressionPosition : IEquatable<ExpressionPosition>
@@ -286,7 +285,6 @@ internal static class FastClonerExprGenerator
         }
 
         public ExpressionPosition Next() => new ExpressionPosition(Depth, Index + 1);
-        public ExpressionPosition Nested() => new ExpressionPosition(Depth + 1, 0);
 
         public bool Equals(ExpressionPosition other)
         {
@@ -335,25 +333,13 @@ internal static class FastClonerExprGenerator
         {
             return true;
         }
-
-        // Some namespaces use structs as opaque handles to internal static state or singletons.
-        // Clone cloning these handles breaks their identity (e.g. they no longer match the static singletons),
-        // causing equality checks and lookups to fail.
-        // For these specific namespaces, we assume structs with readonly fields are intended to be "Safe Handles"
-        // and should have their readonly references preserved (shallow copied), not deep cloned.
-        // We append "." to ensuring we match full namespace segments (e.g. "System.Net" matches "System.Net." but not "System.Network.")
+        
         if (readonlyStructSafeHandleNamespaces.ContainsAnyPattern(type.Namespace + "."))
         {
             return false;
         }
-
-        // Check for the user-defined safe handle attribute
-        if (FastClonerCache.GetOrAddIsTypeSafeHandle(type, t => t.GetCustomAttribute<FastClonerSafeHandleAttribute>() != null))
-        {
-            return false;
-        }
-
-        return true;
+        
+        return !FastClonerCache.GetOrAddIsTypeSafeHandle(type, t => t.GetCustomAttribute<FastClonerSafeHandleAttribute>() != null);
     }
 
     internal static object? GenerateProcessMethod(Type realType, bool asObject) => GenerateProcessMethod(realType, asObject && realType.IsValueType(), new ExpressionPosition(0, 0));
@@ -658,8 +644,8 @@ internal static class FastClonerExprGenerator
 
         if (!type.IsValueType())
         {
-            MethodInfo methodInfo = StaticMethodInfos.CommonMethods.MemberwiseClone;
-            expressionList.Add(Expression.Assign(toLocal, Expression.Convert(Expression.Call(from, methodInfo), type)));
+            MethodInfo methodInfo = StaticMethodInfos.CommonMethods.DirectCloneObject;
+            expressionList.Add(Expression.Assign(toLocal, Expression.Convert(Expression.Call(methodInfo, from), type)));
             expressionList.Add(Expression.Assign(fromLocal, Expression.Convert(from, type)));
             expressionList.Add(Expression.Call(state, StaticMethodInfos.DeepCloneStateMethods.AddKnownRef, from, toLocal));
 
@@ -967,8 +953,8 @@ internal static class FastClonerExprGenerator
 
         if (!type.IsValueType())
         {
-            MethodInfo methodInfo = StaticMethodInfos.CommonMethods.MemberwiseClone;
-            expressionList.Add(Expression.Assign(toLocal, Expression.Convert(Expression.Call(from, methodInfo), type)));
+            MethodInfo methodInfo = StaticMethodInfos.CommonMethods.DirectCloneObject;
+            expressionList.Add(Expression.Assign(toLocal, Expression.Convert(Expression.Call(methodInfo, from), type)));
             fromLocal = Expression.Variable(type);
             expressionList.Add(Expression.Assign(fromLocal, Expression.Convert(from, type)));
             if (!skipCycleTracking)
@@ -1056,7 +1042,7 @@ internal static class FastClonerExprGenerator
             Expression.Assign(result, Expression.Property(tempMessage, "Options")),
             Expression.Call(state, StaticMethodInfos.DeepCloneStateMethods.AddKnownRef, from, result),
             Expression.Assign(result, Expression.Convert(
-                Expression.Call(fromOptions, StaticMethodInfos.CommonMethods.MemberwiseClone),
+                Expression.Call(StaticMethodInfos.CommonMethods.DirectCloneObject, fromOptions),
                 typeof(HttpRequestOptions)
             )),
             Expression.Call(tempMessage, StaticMethodInfos.CommonMethods.Dispose),
@@ -1151,20 +1137,18 @@ internal static class FastClonerExprGenerator
     {
         bool isImmutable = IsImmutableCollection(dictType);
 
-        if (!isImmutable &&
-            dictType.IsGenericType &&
-            dictType.GetGenericTypeDefinition() == typeof(Dictionary<,>) &&
-            FastClonerSafeTypes.HasStableHashSemantics(keyType) &&
-            (keyType.IsValueType || FastClonerSafeTypes.CanReturnSameObject(keyType)))
+        switch (isImmutable)
         {
-            return GenerateAdaptiveDictionaryProcessor(dictType, keyType, valueType, position);
+            case false when
+                dictType.IsGenericType &&
+                dictType.GetGenericTypeDefinition() == typeof(Dictionary<,>) &&
+                FastClonerSafeTypes.HasStableHashSemantics(keyType) &&
+                (keyType.IsValueType || FastClonerSafeTypes.CanReturnSameObject(keyType)):
+                return GenerateAdaptiveDictionaryProcessor(dictType, keyType, valueType, position);
+            case false when FastClonerSafeTypes.HasStableHashSemantics(keyType) && !FastClonerCache.IsTypeIgnored(keyType) && !FastClonerCache.IsTypeIgnored(valueType):
+                return GenerateMemberwiseCloner(dictType, position);
         }
 
-        if (!isImmutable && FastClonerSafeTypes.HasStableHashSemantics(keyType) && !FastClonerCache.IsTypeIgnored(keyType) && !FastClonerCache.IsTypeIgnored(valueType))
-        {
-            return GenerateMemberwiseCloner(dictType, position);
-        }
-        
         ParameterExpression from = Expression.Parameter(typeof(object));
         ParameterExpression state = Expression.Parameter(typeof(FastCloneState));
         LabelTarget returnNullLabel = Expression.Label(typeof(object));
@@ -1781,7 +1765,7 @@ internal static class FastClonerExprGenerator
             if (typed is null)
                 return null!;
             return typed.Count <= AdaptiveDictionaryRebuildThreshold
-                ? FastClonerGenerator.CloneDictionarySafeInternal<TKey, TValue>(typed, state)!
+                ? FastClonerGenerator.CloneDictionarySafeInternal(typed, state)!
                 : memberwise(obj, state);
         });
     }
@@ -1796,7 +1780,7 @@ internal static class FastClonerExprGenerator
             if (typed is null)
                 return null!;
             return typed.Count <= AdaptiveDictionaryRebuildThreshold
-                ? FastClonerGenerator.CloneDictionaryStructValueInternal<TKey, TValue>(typed, state)!
+                ? FastClonerGenerator.CloneDictionaryStructValueInternal(typed, state)!
                 : memberwise(obj, state);
         });
     }
@@ -1811,7 +1795,7 @@ internal static class FastClonerExprGenerator
             if (typed is null)
                 return null!;
             return typed.Count <= AdaptiveDictionaryRebuildThreshold
-                ? FastClonerGenerator.CloneDictionaryClassValueInternal<TKey, TValue>(typed, state)!
+                ? FastClonerGenerator.CloneDictionaryClassValueInternal(typed, state)!
                 : memberwise(obj, state);
         });
     }
@@ -2168,7 +2152,6 @@ internal static class FastClonerExprGenerator
         {
             if (rank == 2 && type == elementType?.MakeArrayType(2))
             {
-                // small optimization for 2 dim arrays
                 methodInfo = typeof(FastClonerGenerator).GetPrivateStaticMethod(nameof(FastClonerGenerator.Clone2DimArrayInternal))!.MakeGenericMethod(elementType);
             }
             else

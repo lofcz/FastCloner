@@ -1,26 +1,23 @@
-﻿namespace FastCloner.Code;
+namespace FastCloner.Code;
 
 internal static class ShallowClonerGenerator
 {
     public static T? CloneObject<T>(T obj)
     {
-        // this is faster than typeof(T).IsValueType
-        if (obj is ValueType)
-        {
-            if (typeof(T) == obj.GetType())
-                return obj;
-
-            // we're here so, we clone value type obj as object type T
-            // so, we need to copy it, bcs we have a reference, not real object.
-            return (T)ShallowObjectCloner.CloneObject(obj);
-        }
-
-        if (ReferenceEquals(obj, null))
-            return (T?)(object?)null;
-
-        if (FastClonerSafeTypes.CanReturnSameObject(obj.GetType()))
+        if (typeof(T).IsValueType)
             return obj;
 
-        return (T)ShallowObjectCloner.CloneObject(obj);
+        if (obj is null)
+            return default;
+
+        Type runtimeType = obj.GetType();
+        
+        if (runtimeType.IsValueType)
+            return (T)ShallowObjectCloner.DirectCloneObject(obj);
+
+        if (FastClonerSafeTypes.CanReturnSameObject(runtimeType))
+            return obj;
+
+        return (T)ShallowObjectCloner.DirectCloneObject(obj);
     }
 }
