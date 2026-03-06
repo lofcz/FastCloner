@@ -181,6 +181,7 @@ public class DynamicMaxRecursionDepthTests
             }
         };
 
+        int previousMaxRecursionDepth = FastCloner.MaxRecursionDepth;
         FastCloner.MaxRecursionDepth = 1;
         FastCloneState state = FastCloneState.Rent();
         try
@@ -194,6 +195,7 @@ public class DynamicMaxRecursionDepthTests
         finally
         {
             FastCloneState.Return(state);
+            FastCloner.MaxRecursionDepth = previousMaxRecursionDepth;
         }
     }
 }

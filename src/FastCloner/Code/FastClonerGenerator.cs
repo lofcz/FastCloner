@@ -280,10 +280,9 @@ internal static class FastClonerGenerator
 
             if (cacheEntry.Cloner is not null)
             {
-                if (cacheEntry.CanUseNoTrackingState)
-                    return cacheEntry.Cloner(obj, FastCloneState.GetSimpleState());
-
-                return CloneRootWithTrackedState(obj, cacheEntry.Cloner, concreteTypeOfObj, cacheEntry.Metadata);
+                return cacheEntry.CanUseNoTrackingState ? 
+                    cacheEntry.Cloner(obj, FastCloneState.GetSimpleState()) : 
+                    CloneRootWithTrackedState(obj, cacheEntry.Cloner, concreteTypeOfObj, cacheEntry.Metadata);
             }
         }
 

@@ -770,17 +770,23 @@ internal static class FastClonerExprGenerator
         bool hasReadonlyFields = false;
         bool containsIgnoredMembers = false;
         bool hasDirectSelfReference = false;
+        bool includeMemberMetadata = true;
         Type? currentType = type;
 
         while (currentType != null && currentType != typeof(object))
         {
+            if (currentType == typeof(ContextBoundObject))
+            {
+                includeMemberMetadata = false;
+            }
+
             FieldInfo[] fields = currentType.GetDeclaredFields();
             for (int i = 0; i < fields.Length; i++)
             {
                 FieldInfo field = fields[i];
                 cycleFieldTypes.Add(field.FieldType);
 
-                if (currentType == typeof(ContextBoundObject))
+                if (!includeMemberMetadata)
                 {
                     continue;
                 }
@@ -803,7 +809,7 @@ internal static class FastClonerExprGenerator
                 }
             }
 
-            if (currentType != typeof(ContextBoundObject))
+            if (includeMemberMetadata)
             {
                 PropertyInfo[] properties = currentType.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
                 for (int i = 0; i < properties.Length; i++)
@@ -827,6 +833,7 @@ internal static class FastClonerExprGenerator
                     EventInfo evtInfo = events[i];
                     if (MemberIsIgnored(evtInfo) && evtInfo.EventHandlerType is not null)
                     {
+                        containsIgnoredMembers = true;
                         ignoredEventDetails ??= new Dictionary<string, Type>();
                         ignoredEventDetails[evtInfo.Name] = evtInfo.EventHandlerType;
                     }

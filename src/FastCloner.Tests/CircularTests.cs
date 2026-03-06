@@ -132,6 +132,7 @@ public class CircularTests(int maxRecursionDepth) : BaseTestFixture(maxRecursion
             }
         };
 
+        int previousMaxRecursionDepth = FastCloner.MaxRecursionDepth;
         FastCloner.MaxRecursionDepth = 1;
         FastCloneState state = FastCloneState.Rent();
         try
@@ -145,6 +146,7 @@ public class CircularTests(int maxRecursionDepth) : BaseTestFixture(maxRecursion
         finally
         {
             FastCloneState.Return(state);
+            FastCloner.MaxRecursionDepth = previousMaxRecursionDepth;
         }
     }
 }
