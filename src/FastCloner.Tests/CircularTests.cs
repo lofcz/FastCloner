@@ -1,3 +1,5 @@
+using FastCloner.Code;
+
 namespace FastCloner.Tests;
 
 [TestFixture(Low)]
@@ -19,6 +21,12 @@ public class CircularTests(int maxRecursionDepth) : BaseTestFixture(maxRecursion
         public int F { get; set; }
 
         public C1 A { get; set; }
+    }
+
+    public sealed class SealedLoop
+    {
+        public int Value { get; set; }
+        public SealedLoop? Next { get; set; }
     }
 
     [Test]
@@ -72,6 +80,19 @@ public class CircularTests(int maxRecursionDepth) : BaseTestFixture(maxRecursion
     }
 
     [Test]
+    public void Sealed_Object_Own_Loop_Should_Be_Handled()
+    {
+        SealedLoop root = new SealedLoop { Value = 1 };
+        root.Next = root;
+
+        SealedLoop cloned = root.DeepClone();
+
+        Assert.That(cloned, Is.Not.SameAs(root));
+        Assert.That(cloned.Next, Is.SameAs(cloned));
+        Assert.That(cloned.Value, Is.EqualTo(1));
+    }
+
+    [Test]
     public void Array_Of_Same_Objects_Should_Be_Cloned()
     {
         C1 c1 = new C1();
@@ -96,5 +117,36 @@ public class CircularTests(int maxRecursionDepth) : BaseTestFixture(maxRecursion
         Assert.That(cloned, Is.Not.SameAs(root));
         Assert.That(cloned.W.Ref, Is.Not.Null);
         Assert.That(cloned.W.Ref, Is.EqualTo(cloned));
+    }
+
+    [Test]
+    public void Internal_CloneClassInternal_Should_Reset_CallDepth_After_WorkList_Switch()
+    {
+        C1 root = new C1
+        {
+            F = 1,
+            A = new C1
+            {
+                F = 2,
+                A = new C1 { F = 3 }
+            }
+        };
+
+        int previousMaxRecursionDepth = FastCloner.MaxRecursionDepth;
+        FastCloner.MaxRecursionDepth = 1;
+        FastCloneState state = FastCloneState.Rent();
+        try
+        {
+            C1? clone = (C1?)FastClonerGenerator.CloneClassInternal(root, state);
+
+            Assert.That(clone, Is.Not.Null);
+            Assert.That(state.UseWorkList, Is.True);
+            Assert.That(state.CurrentDepth, Is.EqualTo(0));
+        }
+        finally
+        {
+            FastCloneState.Return(state);
+            FastCloner.MaxRecursionDepth = previousMaxRecursionDepth;
+        }
     }
 }

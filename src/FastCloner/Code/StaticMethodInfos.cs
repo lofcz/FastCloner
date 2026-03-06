@@ -36,15 +36,15 @@ internal static class StaticMethodInfos
             fieldType.IsValueType
                 ? MakeStructCloneMethodInfo(fieldType)
                 : CloneClassInternal;
-
+        
         internal static MethodInfo MakeStructCloneMethodInfo(Type valueType)
             => structCloneMethodCache.GetOrAdd(valueType.TypeHandle.Value, _ => CloneStructInternal.MakeGenericMethod(valueType));
     }
 
     internal static class CommonMethods
     {
-        internal static readonly MethodInfo MemberwiseClone =
-            typeof(object).GetMethod("MemberwiseClone", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        internal static readonly MethodInfo DirectCloneObject =
+            typeof(ShallowObjectCloner).GetMethod(nameof(ShallowObjectCloner.DirectCloneObject))!;
         internal static readonly MethodInfo Dispose =
             typeof(IDisposable).GetMethod(nameof(IDisposable.Dispose))!;
         internal static readonly MethodInfo EnumeratorMoveNext =

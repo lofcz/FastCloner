@@ -13,26 +13,9 @@ internal static class ReflectionHelper
         public FieldInfo[] GetAllFields() => t.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
         public PropertyInfo[] GetPublicProperties() => t.GetProperties(BindingFlags.Instance | BindingFlags.Public);
         public FieldInfo[] GetDeclaredFields() => t.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly);
-        public ConstructorInfo[] GetPrivateConstructors() => t.GetConstructors(BindingFlags.NonPublic | BindingFlags.Instance);
         public ConstructorInfo[] GetPublicConstructors() => t.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
         public MethodInfo? GetPrivateMethod(string methodName) => t.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Instance);
-        public MethodInfo? GetMethod(string methodName) => t.GetMethod(methodName);
         public MethodInfo? GetPrivateStaticMethod(string methodName) => t.GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static);
-        public FieldInfo? GetPrivateField(string fieldName) => t.GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Instance);
-        public FieldInfo? GetPrivateStaticField(string fieldName) => t.GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Static);
-
-        public bool IsSubclassOfTypeByName(string typeName)
-        {
-            while (t != null)
-            {
-                if (t.Name == typeName)
-                    return true;
-                t = t.BaseType();
-            }
-
-            return false;
-        }
-
         public Type[] GenericArguments() => t.GetGenericArguments();
     }
 }

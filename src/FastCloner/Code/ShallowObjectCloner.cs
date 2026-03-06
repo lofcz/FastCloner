@@ -1,39 +1,34 @@
-﻿using System.Linq.Expressions;
+using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace FastCloner.Code;
 
 /// <summary>
-/// Internal class but due implementation restriction should be public
+/// Internal helper class used to perform shallow object cloning
 /// </summary>
-public abstract class ShallowObjectCloner
+internal static class ShallowObjectCloner
 {
-    /// <summary>
-    /// Abstract method for real object cloning
-    /// </summary>
-    protected abstract object DoCloneObject(object obj);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static object CloneObject(object obj)
+        => DirectCloneObject(obj);
 
-    private static readonly ShallowObjectCloner instance;
-
-    /// <summary>
-    /// Performs real shallow object clone
-    /// </summary>
-    public static object CloneObject(object obj) => instance.DoCloneObject(obj);
-
-    static ShallowObjectCloner() => instance = new ShallowSafeObjectCloner();
-
-    private class ShallowSafeObjectCloner : ShallowObjectCloner
+#if MODERN
+    [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "MemberwiseClone")]
+    public static extern object DirectCloneObject(object obj);
+#else
+    public static object DirectCloneObject(object obj)
     {
-        private static readonly Func<object, object> cloneFunc;
-
-        static ShallowSafeObjectCloner()
-        {
-            MethodInfo? methodInfo = typeof(object).GetPrivateMethod(nameof(MemberwiseClone));
-            ParameterExpression p = Expression.Parameter(typeof(object));
-            MethodCallExpression mce = Expression.Call(p, methodInfo);
-            cloneFunc = Expression.Lambda<Func<object, object>>(mce, p).Compile();
-        }
-
-        protected override object DoCloneObject(object obj) => cloneFunc(obj);
+        return cloneFunc(obj);
     }
+    private static readonly Func<object, object> cloneFunc = CreateCloneFunc();
+
+    private static Func<object, object> CreateCloneFunc()
+    {
+        MethodInfo methodInfo = typeof(object).GetPrivateMethod(nameof(MemberwiseClone))!;
+        ParameterExpression p = Expression.Parameter(typeof(object));
+        MethodCallExpression mce = Expression.Call(p, methodInfo);
+        return Expression.Lambda<Func<object, object>>(mce, p).Compile();
+    }
+#endif
 }

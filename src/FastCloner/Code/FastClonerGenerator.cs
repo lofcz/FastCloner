@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -58,37 +57,31 @@ internal static class FastClonerGenerator
     private static readonly Type DictionaryInterfaceDefinition = typeof(IDictionary<,>);
     private static readonly Type EnumerableInterfaceDefinition = typeof(IEnumerable<>);
 
-    private struct TypeCloneDispatchCache2
+    private struct TypeCloneDispatchCache
     {
         private Type? typeA;
         private FastClonerCache.TypeCloneMetadata? metadataA;
         private Func<object, FastCloneState, object>? recursiveA;
-        private Func<object, FastCloneState, object>? worklistA;
         private Type? typeB;
         private FastClonerCache.TypeCloneMetadata? metadataB;
         private Func<object, FastCloneState, object>? recursiveB;
-        private Func<object, FastCloneState, object>? worklistB;
         private Type? typeC;
         private FastClonerCache.TypeCloneMetadata? metadataC;
         private Func<object, FastCloneState, object>? recursiveC;
-        private Func<object, FastCloneState, object>? worklistC;
         private Type? typeD;
         private FastClonerCache.TypeCloneMetadata? metadataD;
         private Func<object, FastCloneState, object>? recursiveD;
-        private Func<object, FastCloneState, object>? worklistD;
         
         public void Resolve(
             Type runtimeType,
             FastCloneState state,
             out FastClonerCache.TypeCloneMetadata metadata,
-            out Func<object, FastCloneState, object>? recursiveCloner,
-            out Func<object, FastCloneState, object>? worklistCloner)
+            out Func<object, FastCloneState, object>? recursiveCloner)
         {
             if (runtimeType == typeA && metadataA is not null)
             {
                 metadata = metadataA;
                 recursiveCloner = recursiveA;
-                worklistCloner = worklistA;
                 return;
             }
 
@@ -96,7 +89,6 @@ internal static class FastClonerGenerator
             {
                 metadata = metadataB;
                 recursiveCloner = recursiveB;
-                worklistCloner = worklistB;
                 PromoteSecondToFirst();
                 return;
             }
@@ -105,7 +97,6 @@ internal static class FastClonerGenerator
             {
                 metadata = metadataC;
                 recursiveCloner = recursiveC;
-                worklistCloner = worklistC;
                 PromoteThirdToFirst();
                 return;
             }
@@ -114,34 +105,28 @@ internal static class FastClonerGenerator
             {
                 metadata = metadataD;
                 recursiveCloner = recursiveD;
-                worklistCloner = worklistD;
                 PromoteFourthToFirst();
                 return;
             }
 
             metadata = GetTypeMetadata(runtimeType, state);
             recursiveCloner = metadata.RecursiveCloner;
-            worklistCloner = metadata.WorklistCloner ?? recursiveCloner;
 
             typeD = typeC;
             metadataD = metadataC;
             recursiveD = recursiveC;
-            worklistD = worklistC;
             
             typeC = typeB;
             metadataC = metadataB;
             recursiveC = recursiveB;
-            worklistC = worklistB;
 
             typeB = typeA;
             metadataB = metadataA;
             recursiveB = recursiveA;
-            worklistB = worklistA;
 
             typeA = runtimeType;
             metadataA = metadata;
             recursiveA = recursiveCloner;
-            worklistA = worklistCloner;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -159,10 +144,6 @@ internal static class FastClonerGenerator
             Func<object, FastCloneState, object>? previousRecursiveA = recursiveA;
             recursiveA = recursiveB;
             recursiveB = previousRecursiveA;
-
-            Func<object, FastCloneState, object>? previousWorklistA = worklistA;
-            worklistA = worklistB;
-            worklistB = previousWorklistA;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -186,12 +167,6 @@ internal static class FastClonerGenerator
             recursiveA = recursiveC;
             recursiveB = previousRecursiveA;
             recursiveC = previousRecursiveB;
-
-            Func<object, FastCloneState, object>? previousWorklistA = worklistA;
-            Func<object, FastCloneState, object>? previousWorklistB = worklistB;
-            worklistA = worklistC;
-            worklistB = previousWorklistA;
-            worklistC = previousWorklistB;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -221,14 +196,6 @@ internal static class FastClonerGenerator
             recursiveB = previousRecursiveA;
             recursiveC = previousRecursiveB;
             recursiveD = previousRecursiveC;
-
-            Func<object, FastCloneState, object>? previousWorklistA = worklistA;
-            Func<object, FastCloneState, object>? previousWorklistB = worklistB;
-            Func<object, FastCloneState, object>? previousWorklistC = worklistC;
-            worklistA = worklistD;
-            worklistB = previousWorklistA;
-            worklistC = previousWorklistB;
-            worklistD = previousWorklistC;
         }
     }
 
@@ -247,12 +214,12 @@ internal static class FastClonerGenerator
 
     private static FastClonerCache.TypeCloneMetadata BuildTypeMetadata(Type type)
     {
+        FastClonerCache.TypeShape typeShape = FastClonerExprGenerator.GetTypeShape(type);
         bool isSafe = FastClonerSafeTypes.CanReturnSameObject(type) && (!type.IsValueType || type.IsPrimitive || type.IsEnum);
         bool canHaveCycles = !type.IsValueType && FastClonerCache.GetOrAddCanHaveCycles(type, CalculateCanHaveCycles);
         bool canSkipReferenceTracking = type.IsValueType && !ValueTypeContainsReferenceFieldsCached(type);
-        bool hasDirectSelfReference = canHaveCycles && TypeHasDirectSelfReference(type);
-        bool hasBehaviorSensitiveMembers = !FastCloner.DisableOptionalFeatures &&
-                                           FastClonerCache.GetOrAddTypeContainsIgnoredMembers(type, FastClonerExprGenerator.CalculateTypeContainsIgnoredMembers);
+        bool hasDirectSelfReference = canHaveCycles && typeShape.HasDirectSelfReference;
+        bool hasBehaviorSensitiveMembers = !FastCloner.DisableOptionalFeatures && typeShape.ContainsIgnoredMembers;
         bool requiresSpecializedCloner = type.IsArray ||
                                          FastClonerExprGenerator.IsDictionaryType(type) ||
                                          FastClonerExprGenerator.IsSetType(type) ||
@@ -261,9 +228,6 @@ internal static class FastClonerGenerator
         Func<object, FastCloneState, object>? recursive = isSafe
             ? null
             : (Func<object, FastCloneState, object>?)FastClonerCache.GetOrAddClass(type, t => GenerateClonerRecursive(t, canSkipReferenceTracking));
-        Func<object, FastCloneState, object>? worklist = isSafe
-            ? null
-            : GenerateClonerWorklist(type);
 
         FastClonerCache.CyclePolicy cyclePolicy = !canHaveCycles
             ? FastClonerCache.CyclePolicy.None
@@ -287,8 +251,7 @@ internal static class FastClonerGenerator
                 ? FastClonerCache.CloneExecutionMode.SafeReturn
                 : FastClonerCache.CloneExecutionMode.MemberwiseThenPatch,
             CyclePolicy = cyclePolicy,
-            RecursiveCloner = recursive,
-            WorklistCloner = worklist ?? recursive
+            RecursiveCloner = recursive
         };
     }
 
@@ -316,10 +279,9 @@ internal static class FastClonerGenerator
 
             if (cacheEntry.Cloner is not null)
             {
-                if (cacheEntry.CanUseNoTrackingState)
-                    return cacheEntry.Cloner(obj, FastCloneState.GetSimpleState());
-
-                return CloneRootWithTrackedState(obj, cacheEntry.Cloner, concreteTypeOfObj, cacheEntry.Metadata);
+                return cacheEntry.CanUseNoTrackingState ? 
+                    cacheEntry.Cloner(obj, FastCloneState.GetSimpleState()) : 
+                    CloneRootWithTrackedState(obj, cacheEntry.Cloner, cacheEntry.Metadata!);
             }
         }
 
@@ -348,7 +310,7 @@ internal static class FastClonerGenerator
             {
                 if (typeOfT == concreteTypeOfObj)
                 {
-                    bool hasIgnoredMembers = FastClonerCache.GetOrAddTypeContainsIgnoredMembers(concreteTypeOfObj, FastClonerExprGenerator.CalculateTypeContainsIgnoredMembers);
+                    bool hasIgnoredMembers = FastClonerExprGenerator.GetTypeShape(concreteTypeOfObj).ContainsIgnoredMembers;
 
                     if (hasIgnoredMembers || !FastClonerSafeTypes.CanReturnSameObject(concreteTypeOfObj))
                     {
@@ -421,23 +383,20 @@ internal static class FastClonerGenerator
         }
 
         if (metadata.CanSkipReferenceTracking ||
-            (metadata.CyclePolicy == FastClonerCache.CyclePolicy.None && !metadata.HasBehaviorSensitiveMembers && !rootType.IsValueType))
+            (metadata is { CyclePolicy: FastClonerCache.CyclePolicy.None, HasBehaviorSensitiveMembers: false } && !rootType.IsValueType))
             return cloner(obj, FastCloneState.GetSimpleState());
 
-        return CloneRootWithTrackedState(obj, cloner, rootType, metadata);
+        return CloneRootWithTrackedState(obj, cloner, metadata);
     }
 
-    private static T CloneRootWithTrackedState<T>(T obj, Func<T, FastCloneState, T> cloner, Type rootType, FastClonerCache.TypeCloneMetadata? metadata = null)
+    private static T CloneRootWithTrackedState<T>(T obj, Func<T, FastCloneState, T> cloner, FastClonerCache.TypeCloneMetadata metadata)
     {
         FastCloneState state = FastCloneState.Rent();
-        state.UseWorkList = (metadata?.CyclePolicy ?? FastClonerCache.CyclePolicy.TrackReferences) == FastClonerCache.CyclePolicy.Worklist;
-        if (!state.UseWorkList && metadata is null)
-            state.UseWorkList = TypeHasDirectSelfReference(rootType);
-
-        T result;
+        state.UseWorkList = metadata.CyclePolicy == FastClonerCache.CyclePolicy.Worklist;
 
         try
         {
+            T result;
             if (!state.UseWorkList)
             {
                 int current = state.IncrementDepth();
@@ -495,28 +454,6 @@ internal static class FastClonerGenerator
         {
             FastCloneState.Return(state);
         }
-    }
-
-    private static bool TypeHasDirectSelfReference(Type type)
-    {
-        Type? tp = type;
-        while (tp != null && tp != typeof(ContextBoundObject))
-        {
-            foreach (FieldInfo fi in tp.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly))
-            {
-                Type ft = fi.FieldType;
-                if (ft == type)
-                {
-                    return true;
-                }
-                if (ft.IsArray && ft.GetElementType() == type)
-                {
-                    return true;
-                }
-            }
-            tp = tp.BaseType;
-        }
-        return false;
     }
 
     private static bool CalculateCanHaveCycles(Type type)
@@ -608,23 +545,7 @@ internal static class FastClonerGenerator
 
     private static Type[] GetCycleFieldTypes(Type type)
     {
-        return FastClonerCache.GetOrAddCycleFieldTypes(type, static t =>
-        {
-            List<Type> fieldTypes = new List<Type>();
-            Type? currentType = t;
-            while (currentType != null && currentType != typeof(object))
-            {
-                FieldInfo[] fields = currentType.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly);
-                for (int i = 0; i < fields.Length; i++)
-                {
-                    fieldTypes.Add(fields[i].FieldType);
-                }
-
-                currentType = currentType.BaseType;
-            }
-
-            return fieldTypes.ToArray();
-        });
+        return FastClonerExprGenerator.GetTypeShape(type).CycleFieldTypes;
     }
 
     private static Type? GetCollectionPayloadType(Type type)
@@ -714,8 +635,7 @@ internal static class FastClonerGenerator
             state,
             objType,
             metadata,
-            metadata.RecursiveCloner,
-            metadata.WorklistCloner ?? metadata.RecursiveCloner
+            metadata.RecursiveCloner
         );
     }
 
@@ -724,49 +644,19 @@ internal static class FastClonerGenerator
         FastCloneState state,
         Type objType,
         FastClonerCache.TypeCloneMetadata metadata,
-        Func<object, FastCloneState, object>? recursiveCloner,
-        Func<object, FastCloneState, object>? worklistCloner)
+        Func<object, FastCloneState, object>? recursiveCloner)
     {
-        bool hasOptionalTypeOverrides = FastClonerCache.HasActiveTypeBehaviorOverrides;
-        if (!hasOptionalTypeOverrides)
+        if (TryGetNonCloningResult(obj, objType, metadata, recursiveCloner, out object? nonCloningResult))
         {
-            if (metadata.IsSafe || recursiveCloner is null)
-                return obj;
-        }
-        else
-        {
-            if (!FastClonerCache.HasSafeTypeOverrides)
-            {
-                if (FastClonerSafeTypes.DefaultKnownTypes.ContainsKey(objType))
-                    return obj;
-                
-                if (FastClonerCache.IsTypeIgnored(objType))
-                    return null;
-            }
-            else
-            {
-                if (FastClonerCache.IsTypeIgnored(objType))
-                    return null;
-                
-                if (FastClonerSafeTypes.DefaultKnownTypes.ContainsKey(objType))
-                    return obj;
-            }
+            return nonCloningResult;
         }
 
-        // safe object
-        if (recursiveCloner is null)
-        {
-            return obj;
-        }
-        
+        object? knownRef = state.GetKnownRef(obj);
+        if (knownRef is not null)
+            return knownRef;
+
         if (state.UseWorkList)
         {
-            object? knownA = state.GetKnownRef(obj);
-            if (knownA is not null)
-            {
-                return knownA;
-            }
-            
             // value types: avoid the worklist because ClonerToExprGenerator.GenerateClonerInternal doesn't support value types
             if (objType.IsValueType())
             {
@@ -778,20 +668,18 @@ internal static class FastClonerGenerator
             return CloneClassShallowAndTrack(obj, state);
         }
 
+        bool depthIncremented = false;
         try
         {
+            depthIncremented = true;
             int current = state.IncrementDepth();
             
             if (current >= FastCloner.MaxRecursionDepth)
             {
                 state.DecrementDepth();
+                depthIncremented = false;
                 state.UseWorkList = true;
-                object? knownB = state.GetKnownRef(obj);
-                if (knownB is not null)
-                {
-                    return knownB;
-                }
-                
+
                 // value types: avoid the worklist because ClonerToExprGenerator.GenerateClonerInternal doesn't support value types
                 if (objType.IsValueType())
                 {
@@ -803,16 +691,71 @@ internal static class FastClonerGenerator
                 return CloneClassShallowAndTrack(obj, state);
             }
 
-            object? knownRef = state.GetKnownRef(obj);
-            if (knownRef is not null)
-                return knownRef;
-
             return recursiveCloner(obj, state);
         }
         finally
         {
-            state.DecrementDepth();
+            if (depthIncremented)
+                state.DecrementDepth();
         }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool TryGetNonCloningResult(
+        object obj,
+        Type objType,
+        FastClonerCache.TypeCloneMetadata metadata,
+        Func<object, FastCloneState, object>? recursiveCloner,
+        out object? result)
+    {
+        if (!FastClonerCache.HasActiveTypeBehaviorOverrides)
+        {
+            if (metadata.IsSafe || recursiveCloner is null)
+            {
+                result = obj;
+                return true;
+            }
+        }
+        else
+        {
+            if (!FastClonerCache.HasSafeTypeOverrides)
+            {
+                if (FastClonerSafeTypes.DefaultKnownTypes.ContainsKey(objType))
+                {
+                    result = obj;
+                    return true;
+                }
+
+                if (FastClonerCache.IsTypeIgnored(objType))
+                {
+                    result = null;
+                    return true;
+                }
+            }
+            else
+            {
+                if (FastClonerCache.IsTypeIgnored(objType))
+                {
+                    result = null;
+                    return true;
+                }
+
+                if (FastClonerSafeTypes.DefaultKnownTypes.ContainsKey(objType))
+                {
+                    result = obj;
+                    return true;
+                }
+            }
+
+            if (recursiveCloner is null)
+            {
+                result = obj;
+                return true;
+            }
+        }
+
+        result = null;
+        return false;
     }
     
     internal static object? CloneClassShallowAndTrack(object? obj, FastCloneState state)
@@ -853,7 +796,7 @@ internal static class FastClonerGenerator
             }
         }
 
-        object? shallow = ShallowObjectCloner.CloneObject(obj);
+        object shallow = ShallowObjectCloner.CloneObject(obj);
         state.AddKnownRef(obj, shallow);
 
         if (state.UseWorkList)
@@ -862,13 +805,6 @@ internal static class FastClonerGenerator
         }
 
         return shallow;
-    }
-    
-    private static bool RequiresSpecializedCloner(Type type)
-    {
-        return type.IsArray || 
-               FastClonerExprGenerator.IsDictionaryType(type) || 
-               FastClonerExprGenerator.IsSetType(type);
     }
 
     internal static T CloneStructInternal<T>(T obj, FastCloneState state)
@@ -965,7 +901,10 @@ internal static class FastClonerGenerator
         }
 
         bool hasOptionalTypeOverrides = FastClonerCache.HasActiveTypeBehaviorOverrides;
-        TypeCloneDispatchCache2 dispatch = default;
+        TypeCloneDispatchCache dispatch = default;
+        Type? lastType = null;
+        FastClonerCache.TypeCloneMetadata? lastMetadata = null;
+        Func<object, FastCloneState, object>? lastRecursiveCloner = null;
         for (int i = 0; i < l; i++)
         {
             T? item = obj[i];
@@ -985,9 +924,22 @@ internal static class FastClonerGenerator
                 continue;
             }
 
-            dispatch.Resolve(runtimeType, state, out FastClonerCache.TypeCloneMetadata metadata, out Func<object, FastCloneState, object>? recursiveCloner, out Func<object, FastCloneState, object>? worklistCloner);
+            FastClonerCache.TypeCloneMetadata metadata;
+            Func<object, FastCloneState, object>? recursiveCloner;
+            if (runtimeType == lastType && lastMetadata is not null)
+            {
+                metadata = lastMetadata;
+                recursiveCloner = lastRecursiveCloner;
+            }
+            else
+            {
+                dispatch.Resolve(runtimeType, state, out metadata, out recursiveCloner);
+                lastType = runtimeType;
+                lastMetadata = metadata;
+                lastRecursiveCloner = recursiveCloner;
+            }
 
-            outArray[i] = (T)CloneClassInternalResolved(item, state, runtimeType, metadata, recursiveCloner, worklistCloner)!;
+            outArray[i] = (T)CloneClassInternalResolved(item, state, runtimeType, metadata, recursiveCloner)!;
         }
 
         return outArray;
@@ -997,7 +949,7 @@ internal static class FastClonerGenerator
     {
         if (obj is null) return null;
         int count = obj.Count;
-        List<T> result = new(count);
+        List<T> result = new List<T>(count);
         state.AddKnownRef(obj, result);
 
 #if NET5_0_OR_GREATER
@@ -1016,7 +968,7 @@ internal static class FastClonerGenerator
     {
         if (obj is null) return null;
         int count = obj.Count;
-        List<T> result = new(count);
+        List<T> result = new List<T>(count);
         state.AddKnownRef(obj, result);
 
         Func<T, FastCloneState, T>? cloner = GetClonerForValueType<T>();
@@ -1053,7 +1005,7 @@ internal static class FastClonerGenerator
         state.EnsureKnownRefCapacity(count + 1);
         if (state.UseWorkList)
             state.EnsureWorkQueueCapacity(count);
-        List<T?> result = new(count);
+        List<T?> result = new List<T?>(count);
         state.AddKnownRef(obj, result);
         Type declaredType = typeof(T);
 
@@ -1065,19 +1017,21 @@ internal static class FastClonerGenerator
         {
             FastClonerCache.TypeCloneMetadata metadata = GetTypeMetadata(declaredType, state);
             Func<object, FastCloneState, object>? recursiveCloner = metadata.RecursiveCloner;
-            Func<object, FastCloneState, object>? worklistCloner = metadata.WorklistCloner ?? recursiveCloner;
             for (int i = 0; i < count; i++)
             {
                 T? item = srcSpan[i];
                 span[i] = item is null
                     ? null
-                    : (T?)CloneClassInternalResolved(item, state, declaredType, metadata, recursiveCloner, worklistCloner);
+                    : (T?)CloneClassInternalResolved(item, state, declaredType, metadata, recursiveCloner);
             }
 
             return result;
         }
 
-        TypeCloneDispatchCache2 dispatch = default;
+        TypeCloneDispatchCache dispatch = default;
+        Type? lastType = null;
+        FastClonerCache.TypeCloneMetadata? lastMetadata = null;
+        Func<object, FastCloneState, object>? lastRecursiveCloner = null;
         for (int i = 0; i < count; i++)
         {
             T? item = srcSpan[i];
@@ -1088,28 +1042,43 @@ internal static class FastClonerGenerator
             }
 
             Type runtimeType = item.GetType();
-            dispatch.Resolve(runtimeType, state, out FastClonerCache.TypeCloneMetadata metadata, out Func<object, FastCloneState, object>? recursiveCloner, out Func<object, FastCloneState, object>? worklistCloner);
+            FastClonerCache.TypeCloneMetadata metadata;
+            Func<object, FastCloneState, object>? recursiveCloner;
+            if (runtimeType == lastType && lastMetadata is not null)
+            {
+                metadata = lastMetadata;
+                recursiveCloner = lastRecursiveCloner;
+            }
+            else
+            {
+                dispatch.Resolve(runtimeType, state, out metadata, out recursiveCloner);
+                lastType = runtimeType;
+                lastMetadata = metadata;
+                lastRecursiveCloner = recursiveCloner;
+            }
 
-            span[i] = (T?)CloneClassInternalResolved(item, state, runtimeType, metadata, recursiveCloner, worklistCloner);
+            span[i] = (T?)CloneClassInternalResolved(item, state, runtimeType, metadata, recursiveCloner);
         }
 #else
         if (declaredType.IsSealed)
         {
             FastClonerCache.TypeCloneMetadata metadata = GetTypeMetadata(declaredType, state);
             Func<object, FastCloneState, object>? recursiveCloner = metadata.RecursiveCloner;
-            Func<object, FastCloneState, object>? worklistCloner = metadata.WorklistCloner ?? recursiveCloner;
             for (int i = 0; i < count; i++)
             {
                 T? item = obj[i];
                 result.Add(item is null
                     ? null
-                    : (T?)CloneClassInternalResolved(item, state, declaredType, metadata, recursiveCloner, worklistCloner));
+                    : (T?)CloneClassInternalResolved(item, state, declaredType, metadata, recursiveCloner));
             }
 
             return result;
         }
 
-        TypeCloneDispatchCache2 dispatch = default;
+        TypeCloneDispatchCache dispatch = default;
+        Type? lastType = null;
+        FastClonerCache.TypeCloneMetadata? lastMetadata = null;
+        Func<object, FastCloneState, object>? lastRecursiveCloner = null;
         for (int i = 0; i < count; i++)
         {
             T? item = obj[i];
@@ -1120,9 +1089,22 @@ internal static class FastClonerGenerator
             }
 
             Type runtimeType = item.GetType();
-            dispatch.Resolve(runtimeType, state, out FastClonerCache.TypeCloneMetadata metadata, out Func<object, FastCloneState, object>? recursiveCloner, out Func<object, FastCloneState, object>? worklistCloner);
+            FastClonerCache.TypeCloneMetadata metadata;
+            Func<object, FastCloneState, object>? recursiveCloner;
+            if (runtimeType == lastType && lastMetadata is not null)
+            {
+                metadata = lastMetadata;
+                recursiveCloner = lastRecursiveCloner;
+            }
+            else
+            {
+                dispatch.Resolve(runtimeType, state, out metadata, out recursiveCloner);
+                lastType = runtimeType;
+                lastMetadata = metadata;
+                lastRecursiveCloner = recursiveCloner;
+            }
 
-            result.Add((T?)CloneClassInternalResolved(item, state, runtimeType, metadata, recursiveCloner, worklistCloner));
+            result.Add((T?)CloneClassInternalResolved(item, state, runtimeType, metadata, recursiveCloner));
         }
 #endif
 
@@ -1133,7 +1115,7 @@ internal static class FastClonerGenerator
         Dictionary<TKey, TValue>? obj, FastCloneState state) where TKey : notnull
     {
         if (obj is null) return null;
-        Dictionary<TKey, TValue> result = new(obj.Count, obj.Comparer);
+        Dictionary<TKey, TValue> result = new Dictionary<TKey, TValue>(obj.Count, obj.Comparer);
         state.AddKnownRef(obj, result);
         bool ignoreValues = FastClonerCache.HasActiveTypeBehaviorOverrides &&
                             FastClonerCache.IsTypeIgnored(typeof(TValue));
@@ -1155,7 +1137,7 @@ internal static class FastClonerGenerator
         Dictionary<TKey, TValue>? obj, FastCloneState state) where TKey : notnull where TValue : struct
     {
         if (obj is null) return null;
-        Dictionary<TKey, TValue> result = new(obj.Count, obj.Comparer);
+        Dictionary<TKey, TValue> result = new Dictionary<TKey, TValue>(obj.Count, obj.Comparer);
         state.AddKnownRef(obj, result);
         bool ignoreValues = FastClonerCache.HasActiveTypeBehaviorOverrides &&
                             FastClonerCache.IsTypeIgnored(typeof(TValue));
@@ -1217,14 +1199,13 @@ internal static class FastClonerGenerator
         if (declaredType == typeof(object))
             return (Dictionary<TKey, TValue?>?)(object?)CloneDictionaryObjectValueInternal((Dictionary<TKey, object?>)(object)obj, state);
 
-        Dictionary<TKey, TValue?> result = new(obj.Count, obj.Comparer);
+        Dictionary<TKey, TValue?> result = new Dictionary<TKey, TValue?>(obj.Count, obj.Comparer);
         state.AddKnownRef(obj, result);
 
         if (declaredType.IsSealed)
         {
             FastClonerCache.TypeCloneMetadata? metadata = ignoreDeclaredValues ? null : GetTypeMetadata(declaredType, state);
             Func<object, FastCloneState, object>? recursiveCloner = metadata?.RecursiveCloner;
-            Func<object, FastCloneState, object>? worklistCloner = metadata?.WorklistCloner ?? recursiveCloner;
             foreach (KeyValuePair<TKey, TValue?> kvp in obj)
             {
                 TValue? cloned;
@@ -1234,7 +1215,7 @@ internal static class FastClonerGenerator
                 }
                 else
                 {
-                    cloned = (TValue?)CloneClassInternalResolved(kvp.Value, state, declaredType, metadata!, recursiveCloner, worklistCloner);
+                    cloned = (TValue?)CloneClassInternalResolved(kvp.Value, state, declaredType, metadata!, recursiveCloner);
                 }
 #if NET6_0_OR_GREATER
                 ref TValue? valueRef = ref CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
@@ -1249,7 +1230,6 @@ internal static class FastClonerGenerator
         Type? lastType = null;
         FastClonerCache.TypeCloneMetadata? lastMetadata = null;
         Func<object, FastCloneState, object>? lastRecursive = null;
-        Func<object, FastCloneState, object>? lastWorklist = null;
         foreach (KeyValuePair<TKey, TValue?> kvp in obj)
         {
             TValue? value = kvp.Value;
@@ -1297,11 +1277,10 @@ internal static class FastClonerGenerator
             {
                 metadata = lastMetadata = GetTypeMetadata(runtimeType, state);
                 lastRecursive = metadata.RecursiveCloner;
-                lastWorklist = metadata.WorklistCloner ?? lastRecursive;
                 lastType = runtimeType;
             }
 
-            TValue? cloned = (TValue?)CloneClassInternalResolved(value, state, runtimeType, metadata, lastRecursive, lastWorklist);
+            TValue? cloned = (TValue?)CloneClassInternalResolved(value, state, runtimeType, metadata, lastRecursive);
 #if NET6_0_OR_GREATER
             ref TValue? clonedRef = ref CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
             clonedRef = cloned;
@@ -1316,9 +1295,12 @@ internal static class FastClonerGenerator
     private static Dictionary<TKey, object?> CloneDictionaryObjectValueInternal<TKey>(
         Dictionary<TKey, object?> obj, FastCloneState state) where TKey : notnull
     {
-        Dictionary<TKey, object?> result = new(obj.Count, obj.Comparer);
+        Dictionary<TKey, object?> result = new Dictionary<TKey, object?>(obj.Count, obj.Comparer);
         state.AddKnownRef(obj, result);
-        TypeCloneDispatchCache2 dispatch = default;
+        TypeCloneDispatchCache dispatch = default;
+        Type? lastType = null;
+        FastClonerCache.TypeCloneMetadata? lastMetadata = null;
+        Func<object, FastCloneState, object>? lastRecursiveCloner = null;
 
         foreach (KeyValuePair<TKey, object?> kvp in obj)
         {
@@ -1348,10 +1330,20 @@ internal static class FastClonerGenerator
 
             FastClonerCache.TypeCloneMetadata metadata;
             Func<object, FastCloneState, object>? recursiveCloner;
-            Func<object, FastCloneState, object>? worklistCloner;
-            dispatch.Resolve(runtimeType, state, out metadata, out recursiveCloner, out worklistCloner);
+            if (runtimeType == lastType && lastMetadata is not null)
+            {
+                metadata = lastMetadata;
+                recursiveCloner = lastRecursiveCloner;
+            }
+            else
+            {
+                dispatch.Resolve(runtimeType, state, out metadata, out recursiveCloner);
+                lastType = runtimeType;
+                lastMetadata = metadata;
+                lastRecursiveCloner = recursiveCloner;
+            }
 
-            object cloned = CloneClassInternalResolved(value, state, runtimeType, metadata, recursiveCloner, worklistCloner)!;
+            object cloned = CloneClassInternalResolved(value, state, runtimeType, metadata, recursiveCloner)!;
 #if NET6_0_OR_GREATER
             ref object? clonedRef = ref CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
             clonedRef = cloned;
@@ -1377,7 +1369,7 @@ internal static class FastClonerGenerator
         int lb1 = obj.GetLowerBound(0);
         int lb2 = obj.GetLowerBound(1);
         if (lb1 != 0 || lb2 != 0)
-            return (T[,]) CloneAbstractArrayInternal(obj, state);
+            return (T[,]) CloneAbstractArrayInternal(obj, state)!;
 
         int l1 = obj.GetLength(0);
         int l2 = obj.GetLength(1);
@@ -1405,7 +1397,7 @@ internal static class FastClonerGenerator
         {
             for (int i = 0; i < l1; i++)
                 for (int k = 0; k < l2; k++)
-                    outArray[i, k] = (T)CloneClassInternal(obj[i, k], state);
+                    outArray[i, k] = (T)CloneClassInternal(obj[i, k], state)!;
         }
 
         return outArray;
@@ -1428,7 +1420,7 @@ internal static class FastClonerGenerator
             hasZeroLength |= length == 0;
         }
 
-        Type? elementType = obj.GetType().GetElementType();
+        Type elementType = obj.GetType().GetElementType()!;
         Array outArray = Array.CreateInstance(elementType, lengths, lowerBounds);
 
         state.AddKnownRef(obj, outArray);
@@ -1502,14 +1494,6 @@ internal static class FastClonerGenerator
         return FastClonerExprGenerator.GenerateClonerInternal(t, asObject: true, skipCycleTracking: skipCycleTracking, useShallowClassClone: false);
     }
 
-    private static Func<object, FastCloneState, object>? GenerateClonerWorklist(Type t)
-    {
-        if (FastClonerSafeTypes.CanReturnSameObject(t) && !t.IsValueType())
-            return null;
-
-        return (Func<object, FastCloneState, object>?)FastClonerExprGenerator.GenerateClonerInternal(t, asObject: true, skipCycleTracking: false, useShallowClassClone: true);
-    }
-
     private static object? GenerateCloner(Type t, bool asObject)
     {
         if (FastClonerSafeTypes.CanReturnSameObject(t) && asObject && !t.IsValueType())
@@ -1541,28 +1525,30 @@ internal static class FastClonerGenerator
         try
         {
             object result = cloner(objFrom, objTo, state);
-            
-            if (isDeep)
+
+            if (!isDeep)
             {
-                Type? lastWorkType = null;
-                Func<object, object, FastCloneState, object>? lastClonerTo = null;
-                while (state.TryPop(out object from, out object to, out Type workItemType))
-                {
-                    Func<object, object, FastCloneState, object> clonerTo;
-                    if (workItemType == lastWorkType && lastClonerTo is not null)
-                    {
-                        clonerTo = lastClonerTo;
-                    }
-                    else
-                    {
-                        clonerTo = (Func<object, object, FastCloneState, object>)FastClonerCache.GetOrAddDeepClassTo(workItemType, t => ClonerToExprGenerator.GenerateClonerInternal(t, true));
-                        lastWorkType = workItemType;
-                        lastClonerTo = clonerTo;
-                    }
-                    clonerTo(from, to, state);
-                }
+                return result;
             }
             
+            Type? lastWorkType = null;
+            Func<object, object, FastCloneState, object>? lastClonerTo = null;
+            while (state.TryPop(out object from, out object to, out Type workItemType))
+            {
+                Func<object, object, FastCloneState, object> clonerTo;
+                if (workItemType == lastWorkType && lastClonerTo is not null)
+                {
+                    clonerTo = lastClonerTo;
+                }
+                else
+                {
+                    clonerTo = (Func<object, object, FastCloneState, object>)FastClonerCache.GetOrAddDeepClassTo(workItemType, t => ClonerToExprGenerator.GenerateClonerInternal(t, true));
+                    lastWorkType = workItemType;
+                    lastClonerTo = clonerTo;
+                }
+                clonerTo(from, to, state);
+            }
+
             return result;
         }
         finally

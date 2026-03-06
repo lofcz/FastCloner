@@ -87,30 +87,54 @@ internal static class BenchmarkDiffReporter
         {
             if (!baselinePairs.TryGetValue(currentPair.Benchmark, out BenchmarkPair? baselinePair))
             {
+                double? newBenchmarkTimeScore = SafeRatio(currentPair.FastCloner.MeanNanoseconds, currentPair.DeepCloner.MeanNanoseconds);
+                double? newBenchmarkAllocScore = SafeRatio(currentPair.FastCloner.AllocatedBytes, currentPair.DeepCloner.AllocatedBytes);
+
                 items.Add(new BaselineDiffItem(
                     Benchmark: currentPair.Benchmark,
-                    BaselineMeanNanoseconds: null,
-                    CurrentMeanNanoseconds: currentPair.FastCloner.MeanNanoseconds,
-                    TimeDeltaRatio: null,
-                    BaselineAllocatedBytes: null,
-                    CurrentAllocatedBytes: currentPair.FastCloner.AllocatedBytes,
-                    AllocDeltaRatio: null,
+                    BaselineFastClonerMeanNanoseconds: null,
+                    BaselineDeepClonerMeanNanoseconds: null,
+                    CurrentFastClonerMeanNanoseconds: currentPair.FastCloner.MeanNanoseconds,
+                    CurrentDeepClonerMeanNanoseconds: currentPair.DeepCloner.MeanNanoseconds,
+                    BaselineTimeScore: null,
+                    CurrentTimeScore: newBenchmarkTimeScore,
+                    TimeScoreDeltaRatio: null,
+                    BaselineFastClonerAllocatedBytes: null,
+                    BaselineDeepClonerAllocatedBytes: null,
+                    CurrentFastClonerAllocatedBytes: currentPair.FastCloner.AllocatedBytes,
+                    CurrentDeepClonerAllocatedBytes: currentPair.DeepCloner.AllocatedBytes,
+                    BaselineAllocScore: null,
+                    CurrentAllocScore: newBenchmarkAllocScore,
+                    AllocScoreDeltaRatio: null,
                     Status: DiffStatus.NewBenchmark));
                 continue;
             }
 
-            double? timeDelta = SafeDelta(currentPair.FastCloner.MeanNanoseconds, baselinePair.FastCloner.MeanNanoseconds);
-            double? allocDelta = SafeDelta(currentPair.FastCloner.AllocatedBytes, baselinePair.FastCloner.AllocatedBytes);
+            double? baselineTimeScore = SafeRatio(baselinePair.FastCloner.MeanNanoseconds, baselinePair.DeepCloner.MeanNanoseconds);
+            double? currentTimeScore = SafeRatio(currentPair.FastCloner.MeanNanoseconds, currentPair.DeepCloner.MeanNanoseconds);
+            double? baselineAllocScore = SafeRatio(baselinePair.FastCloner.AllocatedBytes, baselinePair.DeepCloner.AllocatedBytes);
+            double? currentAllocScore = SafeRatio(currentPair.FastCloner.AllocatedBytes, currentPair.DeepCloner.AllocatedBytes);
+
+            double? timeDelta = SafeDelta(currentTimeScore, baselineTimeScore);
+            double? allocDelta = SafeDelta(currentAllocScore, baselineAllocScore);
 
             DiffStatus status = ClassifyDiff(timeDelta, allocDelta, timeThreshold, allocThreshold, sameThreshold);
             items.Add(new BaselineDiffItem(
                 Benchmark: currentPair.Benchmark,
-                BaselineMeanNanoseconds: baselinePair.FastCloner.MeanNanoseconds,
-                CurrentMeanNanoseconds: currentPair.FastCloner.MeanNanoseconds,
-                TimeDeltaRatio: timeDelta,
-                BaselineAllocatedBytes: baselinePair.FastCloner.AllocatedBytes,
-                CurrentAllocatedBytes: currentPair.FastCloner.AllocatedBytes,
-                AllocDeltaRatio: allocDelta,
+                BaselineFastClonerMeanNanoseconds: baselinePair.FastCloner.MeanNanoseconds,
+                BaselineDeepClonerMeanNanoseconds: baselinePair.DeepCloner.MeanNanoseconds,
+                CurrentFastClonerMeanNanoseconds: currentPair.FastCloner.MeanNanoseconds,
+                CurrentDeepClonerMeanNanoseconds: currentPair.DeepCloner.MeanNanoseconds,
+                BaselineTimeScore: baselineTimeScore,
+                CurrentTimeScore: currentTimeScore,
+                TimeScoreDeltaRatio: timeDelta,
+                BaselineFastClonerAllocatedBytes: baselinePair.FastCloner.AllocatedBytes,
+                BaselineDeepClonerAllocatedBytes: baselinePair.DeepCloner.AllocatedBytes,
+                CurrentFastClonerAllocatedBytes: currentPair.FastCloner.AllocatedBytes,
+                CurrentDeepClonerAllocatedBytes: currentPair.DeepCloner.AllocatedBytes,
+                BaselineAllocScore: baselineAllocScore,
+                CurrentAllocScore: currentAllocScore,
+                AllocScoreDeltaRatio: allocDelta,
                 Status: status));
         }
 
@@ -203,13 +227,13 @@ internal static class BenchmarkDiffReporter
         sb.AppendLine($"- Baseline generated (UTC): `{baseline.GeneratedAtUtc:yyyy-MM-dd HH:mm:ss}`");
         sb.AppendLine($"- Regression thresholds: time > `{FormatPercent(options.TimeThreshold)}`, alloc > `{FormatPercent(options.AllocThreshold)}`");
         sb.AppendLine();
-        sb.AppendLine("| Status | Benchmark | FC Time (Baseline) | FC Time (Current) | Delta Time | FC Alloc (Baseline) | FC Alloc (Current) | Delta Alloc |");
-        sb.AppendLine("|---|---|---:|---:|---|---:|---:|---|");
+        sb.AppendLine("| Status | Benchmark | Delta Time | Delta Alloc |");
+        sb.AppendLine("|---|---|---|---|");
 
         foreach (BaselineDiffItem item in diff.Items)
         {
             sb.AppendLine(
-                $"| {FormatStatus(item.Status)} | {item.Benchmark} | {FormatNanoseconds(item.BaselineMeanNanoseconds)} | {FormatNanoseconds(item.CurrentMeanNanoseconds)} | {FormatCurrentDelta(item.TimeDeltaRatio, options.SameThreshold, "faster", "slower")} | {FormatBytes(item.BaselineAllocatedBytes)} | {FormatBytes(item.CurrentAllocatedBytes)} | {FormatCurrentDelta(item.AllocDeltaRatio, options.SameThreshold, "less", "more")} |");
+                $"| {FormatStatus(item.Status)} | {item.Benchmark} | {FormatCurrentDelta(item.TimeScoreDeltaRatio, options.SameThreshold, "faster", "slower")} | {FormatCurrentDelta(item.AllocScoreDeltaRatio, options.SameThreshold, "less", "more")} |");
         }
 
         AppendStatusSection(sb, "Regressions", diff.Items.Where(item => item.Status == DiffStatus.Regression).ToList(), options.SameThreshold);
@@ -270,10 +294,18 @@ internal static class BenchmarkDiffReporter
         sb.AppendLine();
         foreach (BaselineDiffItem item in items)
         {
-            string timeDelta = FormatCurrentDelta(item.TimeDeltaRatio, sameThreshold, "faster", "slower");
-            string allocDelta = FormatCurrentDelta(item.AllocDeltaRatio, sameThreshold, "less", "more");
+            string timeDelta = FormatCurrentDelta(item.TimeScoreDeltaRatio, sameThreshold, "faster", "slower");
+            string allocDelta = FormatCurrentDelta(item.AllocScoreDeltaRatio, sameThreshold, "less", "more");
             sb.AppendLine($"- `{item.Benchmark}`: time {timeDelta}, alloc {allocDelta}");
         }
+    }
+
+    private static double? SafeDelta(double? current, double? baseline)
+    {
+        if (current is null || baseline is null || baseline <= 0d)
+            return null;
+
+        return (current.Value - baseline.Value) / baseline.Value;
     }
 
     private static double? SafeDelta(double current, double baseline)
@@ -290,6 +322,22 @@ internal static class BenchmarkDiffReporter
             return null;
 
         return (current - (double)baseline) / baseline;
+    }
+
+    private static double? SafeRatio(double numerator, double denominator)
+    {
+        if (denominator <= 0d)
+            return null;
+
+        return numerator / denominator;
+    }
+
+    private static double? SafeRatio(long numerator, long denominator)
+    {
+        if (denominator <= 0)
+            return null;
+
+        return numerator / (double)denominator;
     }
 
     private static string FormatCurrentDelta(double? ratio, double sameThreshold, string betterWord, string worseWord)
@@ -322,6 +370,14 @@ internal static class BenchmarkDiffReporter
             return "n/a";
 
         return $"{value.Value.ToString("N0", CultureInfo.InvariantCulture)} B";
+    }
+
+    private static string FormatScore(double? value)
+    {
+        if (value is null || double.IsNaN(value.Value) || double.IsInfinity(value.Value))
+            return "n/a";
+
+        return $"{value.Value.ToString("0.000", CultureInfo.InvariantCulture)}x";
     }
 
     private static string FormatPercent(double ratio)
@@ -461,12 +517,20 @@ internal sealed record BaselineDiffReport(
 
 internal sealed record BaselineDiffItem(
     string Benchmark,
-    double? BaselineMeanNanoseconds,
-    double CurrentMeanNanoseconds,
-    double? TimeDeltaRatio,
-    long? BaselineAllocatedBytes,
-    long CurrentAllocatedBytes,
-    double? AllocDeltaRatio,
+    double? BaselineFastClonerMeanNanoseconds,
+    double? BaselineDeepClonerMeanNanoseconds,
+    double CurrentFastClonerMeanNanoseconds,
+    double CurrentDeepClonerMeanNanoseconds,
+    double? BaselineTimeScore,
+    double? CurrentTimeScore,
+    double? TimeScoreDeltaRatio,
+    long? BaselineFastClonerAllocatedBytes,
+    long? BaselineDeepClonerAllocatedBytes,
+    long CurrentFastClonerAllocatedBytes,
+    long CurrentDeepClonerAllocatedBytes,
+    double? BaselineAllocScore,
+    double? CurrentAllocScore,
+    double? AllocScoreDeltaRatio,
     DiffStatus Status);
 
 internal enum DiffStatus
