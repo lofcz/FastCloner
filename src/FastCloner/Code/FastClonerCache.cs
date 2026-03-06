@@ -161,6 +161,16 @@ internal static class FastClonerCache
         public Func<object, FastCloneState, object>? WorklistCloner { get; set; }
     }
 
+    internal sealed class TypeShape
+    {
+        public List<MemberInfo> Members { get; init; } = [];
+        public Dictionary<string, Type> IgnoredEventDetails { get; init; } = [];
+        public Type[] CycleFieldTypes { get; init; } = [];
+        public bool HasReadonlyFields { get; init; }
+        public bool ContainsIgnoredMembers { get; init; }
+        public bool HasDirectSelfReference { get; init; }
+    }
+
     internal static readonly ConcurrentDictionary<Type, CloneBehavior> TypeBehaviors = [];
     internal static volatile bool HasTypeBehaviorOverrides;
     internal static volatile bool HasActiveTypeBehaviorOverrides;
@@ -209,15 +219,13 @@ internal static class FastClonerCache
     
     private static readonly ClrCache<object?> classCache = new ClrCache<object?>();
     private static readonly ClrCache<TypeCloneMetadata> typeMetadataCache = new ClrCache<TypeCloneMetadata>();
+    private static readonly ClrCache<TypeShape> typeShapeCache = new ClrCache<TypeShape>();
     private static readonly ClrCache<object?> structCache = new ClrCache<object?>();
     private static readonly ClrCache<object> deepClassToCache = new ClrCache<object>();
     private static readonly ClrCache<object> shallowClassToCache = new ClrCache<object>();
     private static readonly ConcurrentLazyCache<object> typeConvertCache = new ConcurrentLazyCache<object>();
     private static readonly GenericClrCache<TypeNameKey, object?> fieldCache = new GenericClrCache<TypeNameKey, object?>();
-    private static readonly ClrCache<Dictionary<string, Type>> ignoredEventInfoCache = new ClrCache<Dictionary<string, Type>>();
-    private static readonly ClrCache<List<MemberInfo>> allMembersCache = new ClrCache<List<MemberInfo>>();
     private static readonly GenericClrCache<MemberInfo, CloneBehavior?> memberBehaviorCache = new GenericClrCache<MemberInfo, CloneBehavior?>();
-    private static readonly ClrCache<bool> typeContainsIgnoredMembersCache = new ClrCache<bool>();
     private static readonly ClrCache<CloneBehavior?> attributedTypeBehaviorCache = new ClrCache<CloneBehavior?>();
     private static readonly ClrCache<bool> immutableCollectionStatusCache = new ClrCache<bool>();
     private static readonly ClrCache<object> specialTypesCache = new ClrCache<object>();
@@ -226,7 +234,6 @@ internal static class FastClonerCache
     private static readonly ClrCache<bool> stableHashSemanticsCache = new ClrCache<bool>();
     private static readonly ClrCache<bool> canHaveCyclesCache = new ClrCache<bool>();
     private static readonly ClrCache<bool> valueTypeContainsReferencesCache = new ClrCache<bool>();
-    private static readonly ClrCache<Type[]> cycleFieldTypesCache = new ClrCache<Type[]>();
     private static readonly ClrCache<Type?> collectionPayloadTypeCache = new ClrCache<Type?>();
     private static readonly ClrCache<bool> compilerGeneratedTypeCache = new ClrCache<bool>();
 
@@ -234,28 +241,22 @@ internal static class FastClonerCache
         => fieldCache.GetOrAdd(new TypeNameKey(type, name), k => valueFactory(k.Type));
     public static object? GetOrAddClass(Type type, Func<Type, object?> valueFactory) => classCache.GetOrAdd(type, valueFactory);
     public static TypeCloneMetadata GetOrAddTypeMetadata(Type type, Func<Type, TypeCloneMetadata> valueFactory) => typeMetadataCache.GetOrAdd(type, valueFactory);
+    public static TypeShape GetOrAddTypeShape(Type type, Func<Type, TypeShape> valueFactory) => typeShapeCache.GetOrAdd(type, valueFactory);
     public static object? GetOrAddStructAsObject(Type type, Func<Type, object?> valueFactory) => structCache.GetOrAdd(type, valueFactory);
     public static object GetOrAddDeepClassTo(Type type, Func<Type, object> valueFactory) => deepClassToCache.GetOrAdd(type, valueFactory);
     public static object GetOrAddShallowClassTo(Type type, Func<Type, object> valueFactory) => shallowClassToCache.GetOrAdd(type, valueFactory);
     public static T GetOrAddConvertor<T>(Type from, Type to, Func<Type, Type, T> valueFactory) => (T)typeConvertCache.GetOrAdd(from, to, (f, t) => valueFactory(f, t));
-    public static Dictionary<string, Type> GetOrAddIgnoredEventInfo(Type type, Func<Type, Dictionary<string, Type>> valueFactory) => ignoredEventInfoCache.GetOrAdd(type, valueFactory);
-    public static List<MemberInfo> GetOrAddAllMembers(Type type, Func<Type, List<MemberInfo>> valueFactory) => allMembersCache.GetOrAdd(type, valueFactory);
     public static CloneBehavior? GetOrAddMemberBehavior(MemberInfo memberInfo, Func<MemberInfo, CloneBehavior?> valueFactory) => memberBehaviorCache.GetOrAdd(memberInfo, valueFactory);
     public static CloneBehavior? GetOrAddAttributedTypeBehavior(Type type, Func<Type, CloneBehavior?> valueFactory)
         => attributedTypeBehaviorCache.GetOrAdd(type, valueFactory);
     public static bool GetOrAddImmutableCollectionStatus(Type type, Func<Type, bool> valueFactory)
         => immutableCollectionStatusCache.GetOrAdd(type, valueFactory);
-    public static bool GetOrAddTypeContainsIgnoredMembers(Type type, Func<Type, bool> valueFactory)
-    {
-        return typeContainsIgnoredMembersCache.GetOrAdd(type, valueFactory);
-    }
     public static object GetOrAddSpecialType(Type type, Func<Type, object> valueFactory) => specialTypesCache.GetOrAdd(type, valueFactory);
     public static bool GetOrAddIsTypeSafeHandle(Type type, Func<Type, bool> valueFactory) => isTypeSafeHandleCache.GetOrAdd(type, valueFactory);
     public static bool GetOrAddAnonymousTypeStatus(Type type, Func<Type, bool> valueFactory) => anonymousTypeStatusCache.GetOrAdd(type, valueFactory);
     public static bool GetOrAddStableHashSemantics(Type type, Func<Type, bool> valueFactory) => stableHashSemanticsCache.GetOrAdd(type, valueFactory);
     public static bool GetOrAddCanHaveCycles(Type type, Func<Type, bool> valueFactory) => canHaveCyclesCache.GetOrAdd(type, valueFactory);
     public static bool GetOrAddValueTypeContainsReferences(Type type, Func<Type, bool> valueFactory) => valueTypeContainsReferencesCache.GetOrAdd(type, valueFactory);
-    public static Type[] GetOrAddCycleFieldTypes(Type type, Func<Type, Type[]> valueFactory) => cycleFieldTypesCache.GetOrAdd(type, valueFactory);
     public static Type? GetOrAddCollectionPayloadType(Type type, Func<Type, Type?> valueFactory) => collectionPayloadTypeCache.GetOrAdd(type, valueFactory);
     public static bool GetOrAddCompilerGeneratedType(Type type, Func<Type, bool> valueFactory) => compilerGeneratedTypeCache.GetOrAdd(type, valueFactory);
     
@@ -266,15 +267,13 @@ internal static class FastClonerCache
     {
         classCache.Clear();
         typeMetadataCache.Clear();
+        typeShapeCache.Clear();
         structCache.Clear();
         deepClassToCache.Clear();
         shallowClassToCache.Clear();
         typeConvertCache.Clear();
         fieldCache.Clear();
-        ignoredEventInfoCache.Clear();
-        allMembersCache.Clear();
         memberBehaviorCache.Clear();
-        typeContainsIgnoredMembersCache.Clear();
         attributedTypeBehaviorCache.Clear();
         immutableCollectionStatusCache.Clear();
         specialTypesCache.Clear();
@@ -283,7 +282,6 @@ internal static class FastClonerCache
         stableHashSemanticsCache.Clear();
         canHaveCyclesCache.Clear();
         valueTypeContainsReferencesCache.Clear();
-        cycleFieldTypesCache.Clear();
         collectionPayloadTypeCache.Clear();
         compilerGeneratedTypeCache.Clear();
         BumpCacheVersion();

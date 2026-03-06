@@ -26,10 +26,13 @@ internal static class FastClonerExprGenerator
         fieldSetMethod = typeof(FieldInfo).GetMethod(nameof(FieldInfo.SetValue), [typeof(object), typeof(object)])!;
     }
 
-    private static MethodInfo GetClassCloneMethod(bool useShallowClassClone, bool skipCycleTracking)
+    private static MethodInfo GetClassCloneMethod(Type memberType, bool useShallowClassClone, bool skipCycleTracking)
     {
         if (useShallowClassClone)
             return StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassShallowAndTrack;
+
+        if (!skipCycleTracking && memberType.IsSealed)
+            return StaticMethodInfos.DeepClonerGeneratorMethods.MakeExactClassCloneMethodInfo(memberType);
 
         return skipCycleTracking
             ? StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassInternalNoTracking
@@ -40,7 +43,9 @@ internal static class FastClonerExprGenerator
     {
         return memberType.IsValueType()
             ? StaticMethodInfos.DeepClonerGeneratorMethods.MakeStructCloneMethodInfo(memberType)
-            : StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassInternal;
+            : memberType.IsSealed
+                ? StaticMethodInfos.DeepClonerGeneratorMethods.MakeExactClassCloneMethodInfo(memberType)
+                : StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassInternal;
     }
 
     internal static object? GenerateClonerInternal(Type realType, bool asObject, bool skipCycleTracking = false, bool useShallowClassClone = false)
@@ -141,18 +146,19 @@ internal static class FastClonerExprGenerator
     }
 
 
+    internal static FastClonerCache.TypeShape GetTypeShape(Type type)
+    {
+        return FastClonerCache.GetOrAddTypeShape(type, BuildTypeShape);
+    }
+
     internal static bool CalculateTypeContainsIgnoredMembers(Type type)
     {
-        IEnumerable<MemberInfo> members = FastClonerCache.GetOrAddAllMembers(type, GetAllMembers);
-
-        return members.Any(MemberIsIgnored);
+        return GetTypeShape(type).ContainsIgnoredMembers;
     }
 
     private static bool TypeHasReadonlyFields(Type type)
     {
-        return FastClonerCache.GetOrAddAllMembers(type, GetAllMembers)
-            .OfType<FieldInfo>()
-            .Any(f => f.IsInitOnly);
+        return GetTypeShape(type).HasReadonlyFields;
     }
 
     private static void AddStructReadonlyFieldsCloneExpressions(
@@ -164,22 +170,9 @@ internal static class FastClonerExprGenerator
         bool useShallowClassClone = false,
         bool skipCycleTracking = false)
     {
-        IEnumerable<MemberInfo> members = FastClonerCache.GetOrAddAllMembers(type, GetAllMembers);
-        Dictionary<string, Type> ignoredEventDetails = FastClonerCache.GetOrAddIgnoredEventInfo(type, t =>
-        {
-            Dictionary<string, Type> details = new Dictionary<string, Type>();
-            EventInfo[] events = t.GetEvents(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-
-            foreach (EventInfo evtInfo in events)
-            {
-                if (MemberIsIgnored(evtInfo))
-                {
-                    details[evtInfo.Name] = evtInfo.EventHandlerType;
-                }
-            }
-
-            return details;
-        });
+        FastClonerCache.TypeShape typeShape = GetTypeShape(type);
+        IEnumerable<MemberInfo> members = typeShape.Members;
+        Dictionary<string, Type> ignoredEventDetails = typeShape.IgnoredEventDetails;
 
         foreach (MemberInfo member in members)
         {
@@ -247,8 +240,13 @@ internal static class FastClonerExprGenerator
             }
             else
             {
-                MethodInfo classCloneMethod = GetClassCloneMethod(useShallowClassClone, skipCycleTracking);
-                if (!useShallowClassClone && !skipCycleTracking)
+                MethodInfo classCloneMethod = GetClassCloneMethod(memberType, useShallowClassClone, skipCycleTracking);
+                if (!useShallowClassClone && !skipCycleTracking && memberType.IsSealed)
+                {
+                    Expression call = Expression.Call(classCloneMethod, originalMemberValue, state);
+                    clonedValueExpression = Expression.Convert(call, memberType);
+                }
+                else if (!useShallowClassClone && !skipCycleTracking)
                 {
                     Expression deepCall = Expression.Call(classCloneMethod, originalMemberValue, state);
                     Expression shallowCall = Expression.Call(StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassShallowAndTrack, originalMemberValue, state);
@@ -454,22 +452,9 @@ internal static class FastClonerExprGenerator
         bool skipCycleTracking = false)
     {
         ExpressionPosition currentPosition = new ExpressionPosition(0, 0);
-        IEnumerable<MemberInfo> members = FastClonerCache.GetOrAddAllMembers(type, GetAllMembers);
-        Dictionary<string, Type> ignoredEventDetails = FastClonerCache.GetOrAddIgnoredEventInfo(type, t =>
-        {
-            Dictionary<string, Type> details = new Dictionary<string, Type>();
-            EventInfo[] events = t.GetEvents(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-
-            foreach (EventInfo evtInfo in events)
-            {
-                if (MemberIsIgnored(evtInfo))
-                {
-                    details[evtInfo.Name] = evtInfo.EventHandlerType;
-                }
-            }
-
-            return details;
-        });
+        FastClonerCache.TypeShape typeShape = GetTypeShape(type);
+        IEnumerable<MemberInfo> members = typeShape.Members;
+        Dictionary<string, Type> ignoredEventDetails = typeShape.IgnoredEventDetails;
 
         foreach (MemberInfo member in members)
         {
@@ -620,8 +605,13 @@ internal static class FastClonerExprGenerator
                 }
                 else
                 {
-                    MethodInfo classCloneMethod = GetClassCloneMethod(useShallowClassClone, skipCycleTracking);
-                    if (!useShallowClassClone && !skipCycleTracking)
+                    MethodInfo classCloneMethod = GetClassCloneMethod(memberType, useShallowClassClone, skipCycleTracking);
+                    if (!useShallowClassClone && !skipCycleTracking && memberType.IsSealed)
+                    {
+                        Expression call = Expression.Call(classCloneMethod, originalMemberValue, state);
+                        clonedValueExpression = Expression.Convert(call, memberType);
+                    }
+                    else if (!useShallowClassClone && !skipCycleTracking)
                     {
                         Expression deepCall = Expression.Call(classCloneMethod, originalMemberValue, state);
                         Expression shallowCall = Expression.Call(StaticMethodInfos.DeepClonerGeneratorMethods.CloneClassShallowAndTrack, originalMemberValue, state);
@@ -785,35 +775,88 @@ internal static class FastClonerExprGenerator
         return !badTypes.ContainsAnyPattern(type.FullName);
     }
 
-    private static List<MemberInfo> GetAllMembers(Type type)
+    private static FastClonerCache.TypeShape BuildTypeShape(Type type)
     {
         List<MemberInfo> members = [];
+        Dictionary<string, Type> ignoredEventDetails = new Dictionary<string, Type>();
+        List<Type> cycleFieldTypes = new List<Type>();
+        bool hasReadonlyFields = false;
+        bool containsIgnoredMembers = false;
+        bool hasDirectSelfReference = false;
         Type? currentType = type;
 
-        while (currentType != null && currentType != typeof(ContextBoundObject))
+        while (currentType != null && currentType != typeof(object))
         {
             FieldInfo[] fields = currentType.GetDeclaredFields();
             for (int i = 0; i < fields.Length; i++)
             {
-                members.Add(fields[i]);
-            }
+                FieldInfo field = fields[i];
+                cycleFieldTypes.Add(field.FieldType);
 
-            PropertyInfo[] properties = currentType.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            for (int i = 0; i < properties.Length; i++)
-            {
-                PropertyInfo property = properties[i];
-                if (!property.CanRead || !property.CanWrite || property.GetIndexParameters().Length != 0)
+                if (currentType == typeof(ContextBoundObject))
                 {
                     continue;
                 }
 
-                members.Add(property);
+                members.Add(field);
+                if (field.IsInitOnly)
+                {
+                    hasReadonlyFields = true;
+                }
+
+                if (MemberIsIgnored(field))
+                {
+                    containsIgnoredMembers = true;
+                }
+
+                Type fieldType = field.FieldType;
+                if (fieldType == type || fieldType.IsArray && fieldType.GetElementType() == type)
+                {
+                    hasDirectSelfReference = true;
+                }
+            }
+
+            if (currentType != typeof(ContextBoundObject))
+            {
+                PropertyInfo[] properties = currentType.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+                for (int i = 0; i < properties.Length; i++)
+                {
+                    PropertyInfo property = properties[i];
+                    if (!property.CanRead || !property.CanWrite || property.GetIndexParameters().Length != 0)
+                    {
+                        continue;
+                    }
+
+                    members.Add(property);
+                    if (MemberIsIgnored(property))
+                    {
+                        containsIgnoredMembers = true;
+                    }
+                }
+
+                EventInfo[] events = currentType.GetEvents(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+                for (int i = 0; i < events.Length; i++)
+                {
+                    EventInfo evtInfo = events[i];
+                    if (MemberIsIgnored(evtInfo) && evtInfo.EventHandlerType is not null)
+                    {
+                        ignoredEventDetails[evtInfo.Name] = evtInfo.EventHandlerType;
+                    }
+                }
             }
 
             currentType = currentType.BaseType;
         }
 
-        return members;
+        return new FastClonerCache.TypeShape
+        {
+            Members = members,
+            IgnoredEventDetails = ignoredEventDetails,
+            CycleFieldTypes = cycleFieldTypes.ToArray(),
+            HasReadonlyFields = hasReadonlyFields,
+            ContainsIgnoredMembers = containsIgnoredMembers,
+            HasDirectSelfReference = hasDirectSelfReference
+        };
     }
 
     private static object? CloneIClonable(Type type)
