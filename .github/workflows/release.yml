@@ -36,6 +36,7 @@ jobs:
       run: |
         SHOULD_RELEASE="false"
         CHANGED_PROJECTS=""
+        CHANGED_PROJECT_PATHS=""
         LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
         NEW_VERSION=""
         
@@ -82,6 +83,7 @@ jobs:
             sed -i "s/<Version>.*<\/Version>/<Version>${PROJECT_NEW_VERSION}<\/Version>/g" "$proj"
             
             CHANGED_PROJECTS="$CHANGED_PROJECTS$PROJECT_NAME -> $PROJECT_NEW_VERSION\n"
+            CHANGED_PROJECT_PATHS="$CHANGED_PROJECT_PATHS$proj\n"
             SHOULD_RELEASE="true"
             
             # Update NEW_VERSION if this project's version is higher
@@ -102,6 +104,9 @@ jobs:
         # Set environment variables for next steps
         echo "CHANGED_PROJECTS<<EOF" >> $GITHUB_ENV
         echo -e "$CHANGED_PROJECTS" >> $GITHUB_ENV
+        echo "EOF" >> $GITHUB_ENV
+        echo "CHANGED_PROJECT_PATHS<<EOF" >> $GITHUB_ENV
+        echo -e "$CHANGED_PROJECT_PATHS" >> $GITHUB_ENV
         echo "EOF" >> $GITHUB_ENV
         echo "SHOULD_RELEASE=$SHOULD_RELEASE" >> $GITHUB_ENV
         echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
@@ -142,7 +147,40 @@ jobs:
       working-directory: src
       run: dotnet pack FastCloner.slnx --configuration Release --no-build --output ../nupkgs
     
-    # Create GitHub release
+    # Commit version updates locally and create tag.
+    # Remote GitHub state is updated only after NuGet publish succeeds.
+    - name: Commit version updates and create tag
+      if: env.SHOULD_RELEASE == 'true' && env.NEW_VERSION != ''
+      run: |
+        if [ -z "${{ env.NEW_VERSION }}" ]; then
+          echo "Error: NEW_VERSION is not set"
+          exit 1
+        fi
+        
+        echo "Creating release for version v${{ env.NEW_VERSION }}"
+        
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+
+        while IFS= read -r proj; do
+          if [ -n "$proj" ]; then
+            git add "$proj"
+          fi
+        done <<< "${{ env.CHANGED_PROJECT_PATHS }}"
+
+        git commit -m "Update project versions to v${{ env.NEW_VERSION }}"
+        git tag -a "v${{ env.NEW_VERSION }}" -m "Release v${{ env.NEW_VERSION }}"
+
+    # Publish packages to NuGet.org before pushing any GitHub-visible release state.
+    - name: Push to NuGet
+      if: env.SHOULD_RELEASE == 'true'
+      run: dotnet nuget push "./nupkgs/*.nupkg" --source "https://api.nuget.org/v3/index.json" --api-key ${{secrets.NUGET_API_KEY}} --skip-duplicate
+
+    - name: Push release commit and tag
+      if: env.SHOULD_RELEASE == 'true' && env.NEW_VERSION != ''
+      run: git push --follow-tags
+
+    # Create GitHub release only after commit/tag and NuGet publish have succeeded.
     - name: Create Release
       if: env.SHOULD_RELEASE == 'true'
       id: create_release
@@ -165,26 +203,3 @@ jobs:
         tag_name: v${{ env.NEW_VERSION }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    # Publish packages to NuGet.org
-    - name: Push to NuGet
-      if: env.SHOULD_RELEASE == 'true'
-      run: dotnet nuget push "./nupkgs/*.nupkg" --source "https://api.nuget.org/v3/index.json" --api-key ${{secrets.NUGET_API_KEY}} --skip-duplicate
-    
-    # Commit version updates and create tag
-    - name: Commit version updates
-      if: env.SHOULD_RELEASE == 'true' && env.NEW_VERSION != ''
-      run: |
-        if [ -z "${{ env.NEW_VERSION }}" ]; then
-          echo "Error: NEW_VERSION is not set"
-          exit 1
-        fi
-        
-        echo "Creating release for version v${{ env.NEW_VERSION }}"
-        
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add .
-        git commit -m "Update project versions to v${{ env.NEW_VERSION }}"
-        git tag -a "v${{ env.NEW_VERSION }}" -m "Release v${{ env.NEW_VERSION }}"
-        git push --follow-tags

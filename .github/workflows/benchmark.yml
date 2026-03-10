@@ -22,7 +22,7 @@ on:
 
 env:
   DOTNET_VERSION: "10.0.103"
-  BASELINE_BRANCH: "master"
+  BASELINE_BRANCH: "next"
 
 permissions:
   contents: read
