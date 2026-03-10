@@ -72,15 +72,16 @@ internal static class FastClonerSafeTypes
 
     static FastClonerSafeTypes()
     {
-        InitializeKnownTypes();
+        knownTypes = BuildKnownTypes();
     }
 
-    private static void InitializeKnownTypes()
+    private static ConcurrentDictionary<Type, bool> BuildKnownTypes()
     {
-        ConcurrentDictionary<Type, bool> localKnownTypes = knownTypes;
+        ConcurrentDictionary<Type, bool> result = new();
+        
         foreach (KeyValuePair<Type, bool> x in DefaultKnownTypes)
         {
-            localKnownTypes.TryAdd(x.Key, x.Value);
+            result.TryAdd(x.Key, x.Value);
         }
         
         List<Type?> safeTypes =
@@ -91,8 +92,10 @@ internal static class FastClonerSafeTypes
 
         foreach (Type x in safeTypes.OfType<Type>())
         {
-            localKnownTypes.TryAdd(x, true);
+            result.TryAdd(x, true);
         }
+
+        return result;
     }
     
     private static bool IsSpecialEqualityComparer(string fullName) => fullName switch
@@ -264,25 +267,7 @@ internal static class FastClonerSafeTypes
     
     internal static void ClearKnownTypesCache()
     {
-        ConcurrentDictionary<Type, bool> freshTypes = new();
-        
-        foreach (KeyValuePair<Type, bool> x in DefaultKnownTypes)
-        {
-            freshTypes.TryAdd(x.Key, x.Value);
-        }
-
-        List<Type?> safeTypes =
-        [
-            Type.GetType("System.RuntimeType"),
-            Type.GetType("System.RuntimeTypeHandle")
-        ];
-
-        foreach (Type x in safeTypes.OfType<Type>())
-        {
-            freshTypes.TryAdd(x, true);
-        }
-
-        knownTypes = freshTypes;
+        knownTypes = BuildKnownTypes();
     }
     
     /// <summary>
