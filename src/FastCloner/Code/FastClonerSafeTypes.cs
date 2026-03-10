@@ -264,8 +264,25 @@ internal static class FastClonerSafeTypes
     
     internal static void ClearKnownTypesCache()
     {
-        knownTypes = [];
-        InitializeKnownTypes();
+        ConcurrentDictionary<Type, bool> freshTypes = new();
+        
+        foreach (KeyValuePair<Type, bool> x in DefaultKnownTypes)
+        {
+            freshTypes.TryAdd(x.Key, x.Value);
+        }
+
+        List<Type?> safeTypes =
+        [
+            Type.GetType("System.RuntimeType"),
+            Type.GetType("System.RuntimeTypeHandle")
+        ];
+
+        foreach (Type x in safeTypes.OfType<Type>())
+        {
+            freshTypes.TryAdd(x, true);
+        }
+
+        knownTypes = freshTypes;
     }
     
     /// <summary>
