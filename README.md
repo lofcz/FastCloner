@@ -10,19 +10,20 @@
 [![FastCloner](https://shields.io/nuget/v/FastCloner.SourceGenerator?v=304&icon=nuget&label=FastCloner.SourceGenerator)](https://www.nuget.org/packages/FastCloner.SourceGenerator)
 [![License:MIT](https://img.shields.io/badge/License-MIT-34D058.svg)](https://opensource.org/license/mit)
 
-FastCloner is a high-performance, zero-dependency deep cloning library for real-world .NET object graphs, from <code>.NET 4.6</code> all the way to <code>.NET 10+</code>. It combines source generation with optimized reflection fallback, so deep cloning _just works_.
+FastCloner is a zero-dependency deep cloning library for .NET, from <code>.NET 4.6</code> to <code>.NET 10+</code>. It combines source generation with optimized reflection fallback, so deep cloning _just works_.
  
 </div>
 
 ## ✨ Features
 
 - **The Fastest** - [Benchmarked](https://github.com/lofcz/FastCloner?tab=readme-ov-file#performance) to beat all other libraries with [third-party](https://github.com/FoundatioFx/Foundatio/pull/469#issuecomment-4013424812) [independent](https://github.com/AnderssonPeter/Dolly?tab=readme-ov-file#benchmarks) [benchmarks](https://github.com/arika0093/IDeepCloneable?tab=readme-ov-file#performance) verifying the performance. **300x** speed-up vs `Newtonsoft.Json` and **160x** vs `System.Text.Json`
-- **The Most Correct** - Cloning objects is hard: `<T>`, `abstract`, immutables, read-only, pointers, circular dependencies, deeply nested graphs.. we have over [800 tests](https://github.com/lofcz/FastCloner/tree/next/FastCloner.Tests) verifying correct behavior in these cases and we are transparent about the [limitations](https://github.com/lofcz/FastCloner?tab=readme-ov-file#limitations)
-- **Novel Algorithm** - FastCloner recognizes that certain cloning code cannot be generated in certain scenarios and uses highly optimized reflection-based approach instead for these types - this only happens for the members that need this, not entire objects
-- **Zero-Overhead Abstractions** - The generator uses call site analysis to eliminate indirection via inlining of generated methods. This ensures the generated code behaves like a single optimized block, just as if you hand-wrote it for maximum performance.
-- **Embeddable** - FastCloner has no dependencies outside the standard library. Source generator and reflection parts can be installed independently
-- **Gentle & Caring** - FastCloner detects standard attributes like `[NonSerialized]` making it easy to try without polluting codebase with custom attributes. Type usage graph for generics is built automatically producing performant cloning code without manual annotations
-- **Easy Integration** - `FastDeepClone()` for AOT cloning, `DeepClone()` for reflection cloning. That's it!
+- **The Most Correct** - Built for the cases clone libraries get wrong: polymorphism, circular/shared references, readonly and immutable members, deep graphs, delegates, events, collections... Backed by [800+ tests](https://github.com/lofcz/FastCloner/tree/next/FastCloner.Tests), with documented [limitations](https://github.com/lofcz/FastCloner?tab=readme-ov-file#limitations)
+- **Hybrid AOT** - Uses generated clone code wherever possible, with targeted fallback to the runtime engine only where safety or correctness requires it
+- **Automatic type discovery** - The generator follows usages of generic and abstract types and emits concrete clone paths automatically
+- **Embeddable** - No dependencies outside the standard library. Source generator and reflection parts can be installed independently
+- **Precise control** - Override clone behavior per type or member with `Clone`, `Reference`, `Shallow`, or `Ignore`, at compile time or runtime
+- **Selective tracking** - FastCloner avoids identity and cycle-tracking overhead by default, but enables it when graph shape or `[FastClonerPreserveIdentity]` requires it
+- **Easy Integration** - `FastDeepClone()` for AOT cloning, `DeepClone()` for reflection cloning. FastCloner respects standard .NET attributes like `[NonSerialized]`, so you can adopt it without depending on library-specific annotations
 - **Production Ready** - Used by projects like [Foundatio](https://github.com/FoundatioFx/Foundatio), [Jobbr](https://jobbr.readthedocs.io/en/latest), [TarkovSP](https://sp-tarkov.com), [SnapX](https://github.com/SnapXL/SnapX), and [WinPaletter](https://github.com/Abdelrhman-AK/WinPaletter), with over [300K downloads on NuGet](https://www.nuget.org/packages/fastCloner#usedby-body-tab)
 ## Getting Started
 
@@ -356,12 +357,13 @@ You can run the benchmark [locally](https://github.com/lofcz/FastCloner/blob/nex
 
 ### Build Times & IDE Performance
 
-FastCloner's source generator is carefully engineered for zero impact on IDE responsiveness and swift build times.
+The source generator is designed to work with Roslyn's incremental model. It uses `ForAttributeWithMetadataName`, turns Roslyn symbols into stable `TypeModel` / `MemberModel` records early, and keeps `ISymbol`, syntax nodes, and `Compilation` out of the output pipeline.
 
-- **Tiered Caching**: We use `ForAttributeWithMetadataName` for highly efficient filtering and strictly separate syntax analysis from code generation.
-- **Smart Models**: Roslyn symbols are immediately projected into lightweight, cache-friendly `TypeModel` records. The generator never holds onto compilation symbols, allowing the incremental pipeline to perfectly cache previous results.
-- **No Compilation Trashing**: We avoid expensive `CompilationProvider` combinations that break generator caching. Code generation only re-runs when your data models actually change, not on every keystroke or unrelated edit.
-- **Allocation Free**: `EquatableArray` collections ensure that change detection is instant and creates no garbage collection pressure.
+- **Incremental pipeline** - Type analysis happens during the transform step, so codegen re-runs only when decorated types or relevant usage data changes.
+- **Stable models** - `TypeModel` and `MemberModel` hold precomputed data instead of Roslyn symbols, which keeps incremental caching effective across edits.
+- **No `CompilationProvider` in output** - The output pipeline intentionally avoids it to reduce broad invalidation and unnecessary regeneration.
+- **Deterministic collection equality** - `EquatableArray` is used so generator model collections compare cleanly in the incremental pipeline.
+- **Inlining of one-off helpers** - Helpers used once are inlined to keep generated clone paths direct.
 
 ## Internalization
 
@@ -387,6 +389,7 @@ CLI options:
 - `--preprocessor <SYMBOL=VALUE;...>`: Per-symbol preprocessor transformation input.
   - `VALUE=true|false` is recognized as boolean and enables full condition resolution/removal where possible.
   - any other value is used as direct replacement in `#if` expressions (e.g., `SOMETHING=random_text`).
+  - This lets the builder resolve `#if` branches ahead of time and emit target-specific code.
 - `--fqn <prefix1|prefix2|...>`: Fully qualifies matching external metadata types in generated code.
   - Use `all` to qualify all external metadata types.
   - Use prefixes such as `System|System.Collections` to limit qualification to selected namespaces.
@@ -402,7 +405,7 @@ CLI options:
 
 ## Contributing
 
-If you are looking to add new functionality, please open an issue first to verify your intent is aligned with the scope of the project. The library is covered by over [800 tests](https://github.com/lofcz/FastCloner/tree/next/src/FastCloner.Tests), please run them against your work before proposing changes. We also run benchmark regression analysis on every pull request to `next`; if a change causes a measurable performance regression, the PR should clearly justify that trade-off. When reporting issues, providing a minimal reproduction we can plug in as a new test greatly reduces turnaround time.
+If you are looking to add new functionality, please open an issue first to verify your intent is aligned with the scope of the project. The library is covered by over [800 tests](https://github.com/lofcz/FastCloner/tree/next/src/FastCloner.Tests), please run them against your work before proposing changes. Tests run in parallel to verify thread-safety of the library (with targeted exceptions). Run `dotnet test` from the cloned repo root. We also run benchmark regression analysis on every pull request to `next`; if a change causes a measurable performance regression, the PR should clearly justify that trade-off. When reporting issues, providing a minimal reproduction we can plug in as a new test greatly reduces turnaround time. We use [TUnit](https://github.com/thomhurst/TUnit) for testing.
 
 Each PR gets an updated benchmark report comment from `github-actions`, so you can spot regressions early and iterate before merge.
 
@@ -423,6 +426,17 @@ Each PR gets an updated benchmark report comment from `github-actions`, so you c
 | 🟢 | SmallObject | -6% faster | ~same |
 | ⚪ | SmallObjectWithCollections | -2% faster | ~same |
 | ⚪ | StringArray_1000 | ~same | ~same |
+
+</details>
+
+<details>
+<summary>Tests Troubleshooting</summary>
+
+Rider: automatic tests discovery
+  - Temporarily disable VSTest adapters support (`Build, Execution, Deployment > Unit Testing > VSTest`)
+  - Enable Testing Platform support (`Build, Execution, Deployment > Unit Testing > Testing Platform`)
+  - Re-enable VSTest adapters support
+  - Rebuild / refresh the test explorer
 
 </details>
 
