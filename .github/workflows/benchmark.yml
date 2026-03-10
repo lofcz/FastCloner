@@ -266,10 +266,10 @@ jobs:
           $currentReportPath = "$env:RESULT_DIR/current-report.md"
 
           $fallback = @(
-            "## Deep Clone Benchmarks"
-            ""
-            "- OS: `${{ matrix.os }}`"
-            "- Detailed PR benchmark report was not generated for this run."
+            '## Deep Clone Benchmarks'
+            ''
+            '- OS: `${{ matrix.os }}`'
+            '- Detailed PR benchmark report was not generated for this run.'
           )
 
           if (Test-Path $summaryPath) {

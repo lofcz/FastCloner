@@ -281,6 +281,77 @@ public class ClassWithNonClonableDictionary
             $"Found: {string.Join("; ", nullableWarnings.Select(d => $"{d.Id}: {d.GetMessage()}"))}");
     }
 
+    [Test]
+    public async Task GeneratedCode_ForNullableGetterOnlyObservableCollection_ShouldNotProduceNullableWarnings()
+    {
+        string source = @"
+#nullable enable
+using FastCloner.SourceGenerator.Shared;
+using System.Collections.ObjectModel;
+
+namespace TestNamespace;
+
+public class InternalClass
+{
+}
+
+[FastClonerClonable]
+public class TestClass1
+{
+    public ObservableCollection<InternalClass>? Items2
+    {
+        get;
+    }
+}";
+        (ImmutableArray<Diagnostic> _, ImmutableArray<Diagnostic> compilationDiags) = RunGeneratorAndCompile(source);
+
+        List<Diagnostic> nullableWarnings = compilationDiags
+            .Where(d => d.Id is "CS8604" or "CS8602" or "CS8600" or "CS8601" or "CS8603")
+            .Where(d => d.Severity == DiagnosticSeverity.Warning)
+            .ToList();
+
+        await Assert.That(nullableWarnings).IsEmpty().Because("Generated code should not produce nullable warnings for nullable getter-only ObservableCollection members. " +
+            $"Found: {string.Join("; ", nullableWarnings.Select(d => $"{d.Id}: {d.GetMessage()}"))}");
+    }
+
+    [Test]
+    public async Task GeneratedCode_ForNonNullableGetterOnlyObservableCollection_ShouldNotProduceNullableWarnings()
+    {
+        string source = @"
+#nullable enable
+using FastCloner.SourceGenerator.Shared;
+using System.Collections.ObjectModel;
+
+namespace TestNamespace;
+
+public class InternalClass
+{
+}
+
+[FastClonerClonable]
+public class TestClass2
+{
+    public TestClass2()
+    {
+        Items1 = [];
+    }
+
+    public ObservableCollection<InternalClass> Items1
+    {
+        get;
+    }
+}";
+        (ImmutableArray<Diagnostic> _, ImmutableArray<Diagnostic> compilationDiags) = RunGeneratorAndCompile(source);
+
+        List<Diagnostic> nullableWarnings = compilationDiags
+            .Where(d => d.Id is "CS8604" or "CS8602" or "CS8600" or "CS8601" or "CS8603")
+            .Where(d => d.Severity == DiagnosticSeverity.Warning)
+            .ToList();
+
+        await Assert.That(nullableWarnings).IsEmpty().Because("Generated code should not produce nullable warnings for non-nullable getter-only ObservableCollection members. " +
+            $"Found: {string.Join("; ", nullableWarnings.Select(d => $"{d.Id}: {d.GetMessage()}"))}");
+    }
+
     // Helper method to run the generator (returns only generator diagnostics)
     private static ImmutableArray<Diagnostic> RunGenerator(string source)
     {
@@ -324,6 +395,7 @@ public class ClassWithNonClonableDictionary
             MetadataReference.CreateFromFile(typeof(FastCloner).Assembly.Location),
             MetadataReference.CreateFromFile(System.Reflection.Assembly.Load("System.Runtime").Location),
             MetadataReference.CreateFromFile(System.Reflection.Assembly.Load("System.Collections").Location),
+            MetadataReference.CreateFromFile(System.Reflection.Assembly.Load("System.ObjectModel").Location),
             MetadataReference.CreateFromFile(System.Reflection.Assembly.Load("netstandard").Location)
         ];
 

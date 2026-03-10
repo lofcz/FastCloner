@@ -241,7 +241,8 @@ internal static class CollectionHelperGenerator
                 sb.AppendLine("            {");
 
                 string itemExpr = GetItemCloneExpression(context, member, "item", isSafe, hasClonableAttr, needsState);
-                sb.AppendLine($"                temp.Add({itemExpr});");
+                sb.AppendLine($"                var clonedItem = {itemExpr};");
+                sb.AppendLine("                temp.Add(clonedItem!);");
                 sb.AppendLine("            }");
                 sb.AppendLine("            for (int i = temp.Count - 1; i >= 0; i--)");
                 sb.AppendLine("            {");
@@ -257,7 +258,8 @@ internal static class CollectionHelperGenerator
                     sb.AppendLine("            for (int i = 0; i < source.Count; i++)");
                     sb.AppendLine("            {");
                     string itemExpr = GetItemCloneExpression(context, member, "source[i]", isSafe, hasClonableAttr, needsState);
-                    sb.AppendLine($"                span[i] = {itemExpr};");
+                    sb.AppendLine($"                var clonedItem = {itemExpr};");
+                    sb.AppendLine("                span[i] = clonedItem!;");
                     sb.AppendLine("            }");
                 }
                 else
@@ -265,7 +267,8 @@ internal static class CollectionHelperGenerator
                     sb.AppendLine("            for (int i = 0; i < source.Count; i++)");
                     sb.AppendLine("            {");
                     string itemExpr = GetItemCloneExpression(context, member, "source[i]", isSafe, hasClonableAttr, needsState);
-                    sb.AppendLine($"                result.Add({itemExpr});");
+                    sb.AppendLine($"                var clonedItem = {itemExpr};");
+                    sb.AppendLine("                result.Add(clonedItem!);");
                     sb.AppendLine("            }");
                 }
             }
@@ -276,7 +279,8 @@ internal static class CollectionHelperGenerator
 
                 string itemExpr = GetItemCloneExpression(context, member, "item", isSafe, hasClonableAttr, needsState);
 
-                sb.AppendLine($"                result.{addMethod}({itemExpr});");
+                sb.AppendLine($"                var clonedItem = {itemExpr};");
+                sb.AppendLine($"                result.{addMethod}(clonedItem!);");
                 sb.AppendLine("            }");
             }
             
@@ -328,7 +332,8 @@ internal static class CollectionHelperGenerator
         sb.AppendLine("            foreach (var item in source)");
         sb.AppendLine("            {");
         string itemExpr = GetItemCloneExpression(context, member, "item", isSafe, hasClonableAttr, needsState);
-        sb.AppendLine($"                temp.Add({itemExpr});");
+        sb.AppendLine($"                var clonedItem = {itemExpr};");
+        sb.AppendLine("                temp.Add(clonedItem!);");
         sb.AppendLine("            }");
         
         if (kind == CollectionKind.ImmutableStack)
@@ -391,7 +396,8 @@ internal static class CollectionHelperGenerator
         sb.AppendLine("            foreach (var item in source)");
         sb.AppendLine("            {");
         string itemExpr = GetItemCloneExpression(context, member, "item", isSafe, hasClonableAttr, needsState);
-        sb.AppendLine($"                temp.Add({itemExpr});");
+        sb.AppendLine($"                var clonedItem = {itemExpr};");
+        sb.AppendLine("                temp.Add(clonedItem!);");
         sb.AppendLine("            }");
 
         sb.AppendLine($"            var result = new global::System.Collections.ObjectModel.ReadOnlyCollection<{member.ElementTypeName}>(temp);");
@@ -526,14 +532,16 @@ internal static class CollectionHelperGenerator
         sb.AppendLine("            {");
         
         (string keyExpr, string valExpr) = GetKeyValueExpressions(context, member, needsState);
+        sb.AppendLine($"                var clonedKey = {keyExpr};");
+        sb.AppendLine($"                var clonedValue = {valExpr};");
 
         if (isConcurrent)
         {
-            sb.AppendLine($"                result.TryAdd({keyExpr}, {valExpr});");
+            sb.AppendLine("                result.TryAdd(clonedKey!, clonedValue!);");
         }
         else
         {
-            sb.AppendLine($"                result.Add({keyExpr}, {valExpr});");
+            sb.AppendLine("                result.Add(clonedKey!, clonedValue!);");
         }
 
         sb.AppendLine("            }");
@@ -582,7 +590,9 @@ internal static class CollectionHelperGenerator
         sb.AppendLine("            foreach (var kvp in source)");
         sb.AppendLine("            {");
         (string keyExpr, string valExpr) = GetKeyValueExpressions(context, member, needsState);
-        sb.AppendLine($"                temp.Add({keyExpr}, {valExpr});");
+        sb.AppendLine($"                var clonedKey = {keyExpr};");
+        sb.AppendLine($"                var clonedValue = {valExpr};");
+        sb.AppendLine("                temp.Add(clonedKey!, clonedValue!);");
         sb.AppendLine("            }");
 
         string factoryMethod = kind == CollectionKind.ImmutableSortedDictionary
@@ -629,7 +639,9 @@ internal static class CollectionHelperGenerator
         sb.AppendLine("            foreach (var kvp in source)");
         sb.AppendLine("            {");
         (string keyExpr, string valExpr) = GetKeyValueExpressions(context, member, needsState);
-        sb.AppendLine($"                temp.Add({keyExpr}, {valExpr});");
+        sb.AppendLine($"                var clonedKey = {keyExpr};");
+        sb.AppendLine($"                var clonedValue = {valExpr};");
+        sb.AppendLine("                temp.Add(clonedKey!, clonedValue!);");
         sb.AppendLine("            }");
 
         sb.AppendLine($"            var result = new global::System.Collections.ObjectModel.ReadOnlyDictionary<{member.KeyTypeName}, {member.ValueTypeName}>(temp);");
@@ -804,7 +816,8 @@ internal static class CollectionHelperGenerator
                 itemExpr = "source[i]";
             }
 
-            sb.AppendLine($"                result[i] = {itemExpr};");
+            sb.AppendLine($"                var clonedItem = {itemExpr};");
+            sb.AppendLine("                result[i] = clonedItem!;");
             sb.AppendLine("            }");
         }
         sb.AppendLine();
@@ -869,6 +882,7 @@ internal static class CollectionHelperGenerator
             {
                 string indent = new string(' ', 12 + d * 4);
                 sb.AppendLine($"{indent}for (int i{d} = 0; i{d} < len{d}; i{d}++)");
+                sb.AppendLine($"{indent}{{");
             }
 
             string innerIndent = new string(' ', 12 + rank * 4);
@@ -910,7 +924,14 @@ internal static class CollectionHelperGenerator
                 itemExpr = $"source[{indexList}]";
             }
 
-            sb.AppendLine($"{innerIndent}result[{indexList}] = {itemExpr};");
+            sb.AppendLine($"{innerIndent}var clonedItem = {itemExpr};");
+            sb.AppendLine($"{innerIndent}result[{indexList}] = clonedItem!;");
+
+            for (int d = rank - 1; d >= 0; d--)
+            {
+                string indent = new string(' ', 12 + d * 4);
+                sb.AppendLine($"{indent}}}");
+            }
         }
 
         sb.AppendLine();
