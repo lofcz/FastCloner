@@ -17,11 +17,28 @@ internal sealed class FastCloneState
     private static FastCloneState? _simpleState;
 
     public bool TrackReferences { get; }
+    public FastClonerRuntimeConfig Configuration { get; private set; } = FastCloner.GetRuntimeConfigSnapshot();
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static FastCloneState GetSimpleState()
     {
-        return _simpleState ?? CreateSimpleState();
+        FastCloneState state = _simpleState ?? CreateSimpleState();
+        if (!ReferenceEquals(state.Configuration, FastClonerRuntimeConfig.Default))
+            state.Configuration = FastClonerRuntimeConfig.Default;
+        return state;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static FastCloneState GetSimpleState(FastClonerRuntimeConfig? configuration = null)
+    {
+        FastClonerRuntimeConfig config = configuration ?? FastCloner.GetRuntimeConfigSnapshot();
+        if (ReferenceEquals(config, FastClonerRuntimeConfig.Default))
+            return GetSimpleState();
+
+        FastCloneState state = _simpleState ?? CreateSimpleState();
+        if (!ReferenceEquals(state.Configuration, config))
+            state.Configuration = config;
+        return state;
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -32,7 +49,7 @@ internal sealed class FastCloneState
         return state;
     }
 
-    public static FastCloneState Rent()
+    public static FastCloneState RentDefault()
     {
         FastCloneState?[]? pool = _pool;
         if (pool != null && _poolCount > 0)
@@ -41,9 +58,36 @@ internal sealed class FastCloneState
             FastCloneState? state = pool[index];
             pool[index] = null;
             if (state != null)
+            {
+                if (!ReferenceEquals(state.Configuration, FastClonerRuntimeConfig.Default))
+                    state.Configuration = FastClonerRuntimeConfig.Default;
                 return state;
+            }
         }
-        return new FastCloneState();
+
+        return new FastCloneState { Configuration = FastClonerRuntimeConfig.Default };
+    }
+
+    public static FastCloneState Rent(FastClonerRuntimeConfig? configuration = null)
+    {
+        FastClonerRuntimeConfig config = configuration ?? FastCloner.GetRuntimeConfigSnapshot();
+        if (ReferenceEquals(config, FastClonerRuntimeConfig.Default))
+            return RentDefault();
+
+        FastCloneState?[]? pool = _pool;
+        if (pool != null && _poolCount > 0)
+        {
+            int index = --_poolCount;
+            FastCloneState? state = pool[index];
+            pool[index] = null;
+            if (state != null)
+            {
+                if (!ReferenceEquals(state.Configuration, config))
+                    state.Configuration = config;
+                return state;
+            }
+        }
+        return new FastCloneState { Configuration = config };
     }
 
     public static void Return(FastCloneState state)

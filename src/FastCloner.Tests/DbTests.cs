@@ -1,3 +1,4 @@
+using System.IO;
 using System.Data.Common;
 using FluentNHibernate.Cfg;
 using FluentNHibernate.Cfg.Db;
@@ -8,25 +9,24 @@ using NHibernate.Collection;
 using NHibernate.Mapping.ByCode;
 using NHibernate.Tool.hbm2ddl;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
 
 using NHibernate;
 using NHibernate.Proxy;
-
-[TestFixture(Low)]
-[TestFixture(High)]
+[NotInParallel("FastClonerGlobalState")]
 public class DbTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
-    private ISessionFactory sessionFactory;
+    private static ISessionFactory? sessionFactory;
     private const string DbFile = "test.db";
 
-    [OneTimeSetUp]
-    public void SetUp()
+    [Before(Class)]
+    public static void SetUp()
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
-            Assert.Ignore("DbTests are skipped on macOS due to System.Data.SQLite native SQLite.Interop dependency.");
+            Skip.Test("DbTests are skipped on macOS due to System.Data.SQLite native SQLite.Interop dependency.");
         }
 
         if (File.Exists(DbFile))
@@ -44,8 +44,8 @@ public class DbTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
         }
     }
 
-    [OneTimeTearDown]
-    public void TearDown()
+    [After(Class)]
+    public static void TearDown()
     {
         sessionFactory?.Dispose();
         
@@ -109,7 +109,7 @@ public class DbTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
     }
 
     [Test]
-    public void Test_CloneNHibernateProxy()
+    public async Task Test_CloneNHibernateProxy()
     {
         using ISession? session = sessionFactory.OpenSession();
         using ITransaction? transaction = session.BeginTransaction();
@@ -138,15 +138,17 @@ public class DbTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
             Entity cloned = unproxiedEntity.DeepClone();
 
             // Assert
-            Assert.Multiple(() =>
+            using (Assert.Multiple())
             {
-                Assert.That(cloned, Is.Not.Null);
-                Assert.That(cloned, Is.Not.InstanceOf<INHibernateProxy>());
-                Assert.That(cloned.Id, Is.EqualTo(entity.Id));
-                Assert.That(cloned.Name, Is.EqualTo("Test"));
-                Assert.That(cloned.Children, Has.Count.EqualTo(1));
-                Assert.That(cloned.Children[0].Name, Is.EqualTo("Child1"));
-            });
+                await Assert.That(cloned).IsNotNull();
+                await Assert.That(cloned).IsNotAssignableTo<INHibernateProxy>();
+                await Assert.That(cloned.Id).IsEqualTo(entity.Id);
+                await Assert.That(cloned.Name).IsEqualTo("Test");
+                await Assert.That(cloned.Children).Count().IsEqualTo(1);
+                await Assert.That(cloned.Children[0].Name).IsEqualTo("Child1");
+
+                // Assert
+            }
         }
         catch (Exception e)
         {

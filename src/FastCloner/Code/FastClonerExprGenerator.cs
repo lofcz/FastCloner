@@ -1710,7 +1710,11 @@ internal static class FastClonerExprGenerator
                 ? (byte)1
                 : (byte)2;
 
-        AdaptiveDictionaryFactoryKey key = new AdaptiveDictionaryFactoryKey(keyType.TypeHandle.Value, valueType.TypeHandle.Value, variant);
+        AdaptiveDictionaryFactoryKey key = new AdaptiveDictionaryFactoryKey(
+            FastCloner.GetPublishedCacheKey(),
+            keyType.TypeHandle.Value,
+            valueType.TypeHandle.Value,
+            variant);
         Func<ExpressionPosition, object> factory = adaptiveDictionaryFactoryCache.GetOrAdd(key, _ =>
         {
             string methodName = variant switch
@@ -1729,15 +1733,16 @@ internal static class FastClonerExprGenerator
         return factory(position);
     }
 
-    private readonly struct AdaptiveDictionaryFactoryKey(IntPtr keyHandle, IntPtr valueHandle, byte variant) : IEquatable<AdaptiveDictionaryFactoryKey>
+    private readonly struct AdaptiveDictionaryFactoryKey(long cacheKey, IntPtr keyHandle, IntPtr valueHandle, byte variant) : IEquatable<AdaptiveDictionaryFactoryKey>
     {
+        private readonly long cacheKey = cacheKey;
         private readonly IntPtr keyHandle = keyHandle;
         private readonly IntPtr valueHandle = valueHandle;
         private readonly byte variant = variant;
 
         public bool Equals(AdaptiveDictionaryFactoryKey other)
         {
-            return keyHandle == other.keyHandle && valueHandle == other.valueHandle && variant == other.variant;
+            return cacheKey == other.cacheKey && keyHandle == other.keyHandle && valueHandle == other.valueHandle && variant == other.variant;
         }
 
         public override bool Equals(object? obj)
@@ -1749,7 +1754,8 @@ internal static class FastClonerExprGenerator
         {
             unchecked
             {
-                int hash = keyHandle.GetHashCode();
+                int hash = cacheKey.GetHashCode();
+                hash = (hash * 397) ^ keyHandle.GetHashCode();
                 hash = (hash * 397) ^ valueHandle.GetHashCode();
                 return (hash * 397) ^ variant.GetHashCode();
             }

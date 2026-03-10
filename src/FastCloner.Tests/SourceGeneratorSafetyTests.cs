@@ -1,7 +1,7 @@
 using FastCloner.SourceGenerator.Shared;
-using NUnit.Framework;
 using System;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests.SourceGenerator
 {
@@ -12,14 +12,12 @@ namespace FastCloner.Tests.SourceGenerator
         public CancellationTokenSource? Cts { get; set; }
         public WeakReference<string>? WeakRef { get; set; }
         public WeakReference? NonGenericWeakRef { get; set; }
-        public System.Threading.Tasks.Task? Task { get; set; }
+        public Task? Task { get; set; }
     }
-
-    [TestFixture]
     public class SourceGeneratorSafetyTests
     {
         [Test]
-        public void Verify_SourceGenerator_Uses_ReferenceCopy_For_SpecialTypes()
+        public async Task Verify_SourceGenerator_Uses_ReferenceCopy_For_SpecialTypes()
         {
             // Arrange
             SafetyTestClass source = new SafetyTestClass
@@ -27,7 +25,7 @@ namespace FastCloner.Tests.SourceGenerator
                 Cts = new CancellationTokenSource(),
                 WeakRef = new WeakReference<string>("test"),
                 NonGenericWeakRef = new WeakReference("test"),
-                Task = System.Threading.Tasks.Task.CompletedTask
+                Task = Task.CompletedTask
             };
 
             // Act
@@ -35,19 +33,19 @@ namespace FastCloner.Tests.SourceGenerator
             SafetyTestClass clone = source.FastDeepClone();
 
             // Assert
-            Assert.That(clone, Is.Not.SameAs(source));
-            
+            await Assert.That(clone).IsNotSameReferenceAs(source);
+
             // CancellationTokenSource should be Reference Copy
-            Assert.That(clone.Cts, Is.SameAs(source.Cts), "CTS should be reference copied by Source Generator");
+            await Assert.That(clone.Cts).IsSameReferenceAs(source.Cts).Because("CTS should be reference copied by Source Generator");
 
             // WeakReference<T> should be Reference Copy
-            Assert.That(clone.WeakRef, Is.SameAs(source.WeakRef), "WeakReference<T> should be reference copied by Source Generator");
-            
+            await Assert.That(clone.WeakRef).IsSameReferenceAs(source.WeakRef).Because("WeakReference<T> should be reference copied by Source Generator");
+
             // WeakReference (non-generic) should be Reference Copy
-            Assert.That(clone.NonGenericWeakRef, Is.SameAs(source.NonGenericWeakRef), "WeakReference should be reference copied by Source Generator");
+            await Assert.That(clone.NonGenericWeakRef).IsSameReferenceAs(source.NonGenericWeakRef).Because("WeakReference should be reference copied by Source Generator");
 
             // Task should be Reference Copy
-            Assert.That(clone.Task, Is.SameAs(source.Task), "Task should be reference copied by Source Generator");
+            await Assert.That(ReferenceEquals(clone.Task, source.Task)).IsTrue().Because("Task should be reference copied by Source Generator");
         }
     }
 }

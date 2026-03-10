@@ -1,12 +1,7 @@
 using FastCloner.Code;
-using NUnit.Framework;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
-
-/// <summary>
-/// Tests for the new consolidated attribute system including [FastClonerReference] and [FastClonerBehavior].
-/// </summary>
-[TestFixture]
 public class BehaviorAttributeTests
 {
     #region Test Classes
@@ -95,7 +90,7 @@ public class BehaviorAttributeTests
     #region [FastClonerReference] Tests
 
     [Test]
-    public void FastClonerReference_PreservesReference()
+    public async Task FastClonerReference_PreservesReference()
     {
         // Arrange
         SharedService service = new SharedService { ServiceName = "TestService", InstanceId = 42 };
@@ -110,21 +105,21 @@ public class BehaviorAttributeTests
         ClassWithReferenceAttribute clone = original.DeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.Not.SameAs(original));
-        Assert.That(clone.Name, Is.EqualTo("Test"));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.Name).IsEqualTo("Test");
+
         // SharedService should be the SAME reference (not cloned)
-        Assert.That(clone.SharedService, Is.SameAs(original.SharedService));
-        Assert.That(clone.SharedService.InstanceId, Is.EqualTo(42));
-        
+        await Assert.That(clone.SharedService).IsSameReferenceAs(original.SharedService);
+        await Assert.That(clone.SharedService.InstanceId).IsEqualTo(42);
+
         // Data should be a DIFFERENT reference (deep cloned)
-        Assert.That(clone.Data, Is.Not.SameAs(original.Data));
-        Assert.That(clone.Data.Value, Is.EqualTo("DataValue"));
+        await Assert.That(clone.Data).IsNotSameReferenceAs(original.Data);
+        await Assert.That(clone.Data.Value).IsEqualTo("DataValue");
     }
 
     [Test]
-    public void FastClonerReference_WithNullValue_ClonesSuccessfully()
+    public async Task FastClonerReference_WithNullValue_ClonesSuccessfully()
     {
         // Arrange
         ClassWithReferenceAttribute original = new ClassWithReferenceAttribute
@@ -138,9 +133,9 @@ public class BehaviorAttributeTests
         ClassWithReferenceAttribute clone = original.DeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone.SharedService, Is.Null);
-        Assert.That(clone.Data, Is.Not.SameAs(original.Data));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone.SharedService).IsNull();
+        await Assert.That(clone.Data).IsNotSameReferenceAs(original.Data);
     }
 
     #endregion
@@ -148,7 +143,7 @@ public class BehaviorAttributeTests
     #region [FastClonerBehavior] Explicit Tests
 
     [Test]
-    public void FastClonerBehavior_Reference_PreservesReference()
+    public async Task FastClonerBehavior_Reference_PreservesReference()
     {
         // Arrange
         ClassWithExplicitBehavior original = new ClassWithExplicitBehavior
@@ -164,11 +159,11 @@ public class BehaviorAttributeTests
         ClassWithExplicitBehavior clone = original.DeepClone();
 
         // Assert - Reference behavior
-        Assert.That(clone.Service1, Is.SameAs(original.Service1));
+        await Assert.That(clone.Service1).IsSameReferenceAs(original.Service1);
     }
 
     [Test]
-    public void FastClonerBehavior_Shallow_CopiesReference()
+    public async Task FastClonerBehavior_Shallow_CopiesReference()
     {
         // Arrange
         ClassWithExplicitBehavior original = new ClassWithExplicitBehavior
@@ -184,11 +179,11 @@ public class BehaviorAttributeTests
         ClassWithExplicitBehavior clone = original.DeepClone();
 
         // Assert - Shallow behavior copies reference directly
-        Assert.That(clone.ShallowData, Is.SameAs(original.ShallowData));
+        await Assert.That(clone.ShallowData).IsSameReferenceAs(original.ShallowData);
     }
 
     [Test]
-    public void FastClonerBehavior_Ignore_SetsToNull()
+    public async Task FastClonerBehavior_Ignore_SetsToNull()
     {
         // Arrange
         ClassWithExplicitBehavior original = new ClassWithExplicitBehavior
@@ -204,11 +199,11 @@ public class BehaviorAttributeTests
         ClassWithExplicitBehavior clone = original.DeepClone();
 
         // Assert - Ignored behavior sets to null/default
-        Assert.That(clone.IgnoredData, Is.Null);
+        await Assert.That(clone.IgnoredData).IsNull();
     }
 
     [Test]
-    public void FastClonerBehavior_Clone_DeepClones()
+    public async Task FastClonerBehavior_Clone_DeepClones()
     {
         // Arrange
         ClassWithExplicitBehavior original = new ClassWithExplicitBehavior
@@ -224,8 +219,8 @@ public class BehaviorAttributeTests
         ClassWithExplicitBehavior clone = original.DeepClone();
 
         // Assert - Explicit Clone behavior deep clones
-        Assert.That(clone.ExplicitCloneData, Is.Not.SameAs(original.ExplicitCloneData));
-        Assert.That(clone.ExplicitCloneData.Value, Is.EqualTo("Cloned"));
+        await Assert.That(clone.ExplicitCloneData).IsNotSameReferenceAs(original.ExplicitCloneData);
+        await Assert.That(clone.ExplicitCloneData.Value).IsEqualTo("Cloned");
     }
 
     #endregion
@@ -233,7 +228,7 @@ public class BehaviorAttributeTests
     #region Mixed Attribute Tests
 
     [Test]
-    public void MixedAttributes_AllBehaviorsWorkCorrectly()
+    public async Task MixedAttributes_AllBehaviorsWorkCorrectly()
     {
         // Arrange
         MixedAttributeClass original = new MixedAttributeClass
@@ -248,11 +243,11 @@ public class BehaviorAttributeTests
         MixedAttributeClass clone = original.DeepClone();
 
         // Assert
-        Assert.That(clone.Ignored, Is.Null);                          // [FastClonerIgnore] -> null
-        Assert.That(clone.Shallow, Is.SameAs(original.Shallow));      // [FastClonerShallow] -> same reference
-        Assert.That(clone.Reference, Is.SameAs(original.Reference));  // [FastClonerReference] -> same reference
-        Assert.That(clone.Normal, Is.Not.SameAs(original.Normal));    // No attribute -> deep cloned
-        Assert.That(clone.Normal.Value, Is.EqualTo("Normal"));
+        await Assert.That(clone.Ignored).IsNull();                          // [FastClonerIgnore] -> null
+        await Assert.That(clone.Shallow).IsSameReferenceAs(original.Shallow);      // [FastClonerShallow] -> same reference
+        await Assert.That(clone.Reference).IsSameReferenceAs(original.Reference);  // [FastClonerReference] -> same reference
+        await Assert.That(clone.Normal).IsNotSameReferenceAs(original.Normal);    // No attribute -> deep cloned
+        await Assert.That(clone.Normal.Value).IsEqualTo("Normal");
     }
 
     #endregion
@@ -260,7 +255,7 @@ public class BehaviorAttributeTests
     #region [FastClonerIgnore(bool)] Tests
 
     [Test]
-    public void FastClonerIgnore_WithFalse_DoesNotIgnore()
+    public async Task FastClonerIgnore_WithFalse_DoesNotIgnore()
     {
         // Arrange
         ClassWithIgnoreFalse original = new ClassWithIgnoreFalse
@@ -274,12 +269,12 @@ public class BehaviorAttributeTests
 
         // Assert
         // NotIgnored should be deep cloned (ignored=false means NOT ignored)
-        Assert.That(clone.NotIgnored, Is.Not.Null);
-        Assert.That(clone.NotIgnored, Is.Not.SameAs(original.NotIgnored));
-        Assert.That(clone.NotIgnored.Value, Is.EqualTo("NotIgnored"));
-        
+        await Assert.That(clone.NotIgnored).IsNotNull();
+        await Assert.That(clone.NotIgnored).IsNotSameReferenceAs(original.NotIgnored);
+        await Assert.That(clone.NotIgnored.Value).IsEqualTo("NotIgnored");
+
         // IsIgnored should be null (ignored=true means ignored)
-        Assert.That(clone.IsIgnored, Is.Null);
+        await Assert.That(clone.IsIgnored).IsNull();
     }
 
     #endregion
@@ -343,7 +338,7 @@ public class BehaviorAttributeTests
     }
 
     [Test]
-    public void TypeLevelReference_PreservesReference()
+    public async Task TypeLevelReference_PreservesReference()
     {
         // Arrange
         ContainerWithTypeBehaviors original = new ContainerWithTypeBehaviors
@@ -358,11 +353,11 @@ public class BehaviorAttributeTests
         ContainerWithTypeBehaviors clone = original.DeepClone();
 
         // Assert - TypeMarkedAsReference should preserve reference
-        Assert.That(clone.RefType, Is.SameAs(original.RefType));
+        await Assert.That(clone.RefType).IsSameReferenceAs(original.RefType);
     }
 
     [Test]
-    public void TypeLevelIgnore_SetsToNull()
+    public async Task TypeLevelIgnore_SetsToNull()
     {
         // Arrange
         ContainerWithTypeBehaviors original = new ContainerWithTypeBehaviors
@@ -377,11 +372,11 @@ public class BehaviorAttributeTests
         ContainerWithTypeBehaviors clone = original.DeepClone();
 
         // Assert - TypeMarkedAsIgnored should be null
-        Assert.That(clone.IgnoredType, Is.Null);
+        await Assert.That(clone.IgnoredType).IsNull();
     }
 
     [Test]
-    public void TypeLevelShallow_CopiesReference()
+    public async Task TypeLevelShallow_CopiesReference()
     {
         // Arrange
         ContainerWithTypeBehaviors original = new ContainerWithTypeBehaviors
@@ -396,11 +391,11 @@ public class BehaviorAttributeTests
         ContainerWithTypeBehaviors clone = original.DeepClone();
 
         // Assert - TypeMarkedAsShallow should be same reference (shallow clone for members = copy reference)
-        Assert.That(clone.ShallowType, Is.SameAs(original.ShallowType));
+        await Assert.That(clone.ShallowType).IsSameReferenceAs(original.ShallowType);
     }
 
     [Test]
-    public void TypeLevel_NormalType_DeepClones()
+    public async Task TypeLevel_NormalType_DeepClones()
     {
         // Arrange
         ContainerWithTypeBehaviors original = new ContainerWithTypeBehaviors
@@ -415,12 +410,12 @@ public class BehaviorAttributeTests
         ContainerWithTypeBehaviors clone = original.DeepClone();
 
         // Assert - Normal type should be deep cloned
-        Assert.That(clone.NormalType, Is.Not.SameAs(original.NormalType));
-        Assert.That(clone.NormalType.Value, Is.EqualTo("Normal"));
+        await Assert.That(clone.NormalType).IsNotSameReferenceAs(original.NormalType);
+        await Assert.That(clone.NormalType.Value).IsEqualTo("Normal");
     }
 
     [Test]
-    public void MemberLevelOverride_TakesPrecedenceOverTypeLevel()
+    public async Task MemberLevelOverride_TakesPrecedenceOverTypeLevel()
     {
         // Arrange
         ContainerWithMemberOverride original = new ContainerWithMemberOverride
@@ -434,12 +429,12 @@ public class BehaviorAttributeTests
 
         // Assert
         // OverriddenToClone should be deep cloned (member-level override)
-        Assert.That(clone.OverriddenToClone, Is.Not.SameAs(original.OverriddenToClone));
-        Assert.That(clone.OverriddenToClone.Name, Is.EqualTo("Override"));
-        Assert.That(clone.OverriddenToClone.Value, Is.EqualTo(1));
-        
+        await Assert.That(clone.OverriddenToClone).IsNotSameReferenceAs(original.OverriddenToClone);
+        await Assert.That(clone.OverriddenToClone.Name).IsEqualTo("Override");
+        await Assert.That(clone.OverriddenToClone.Value).IsEqualTo(1);
+
         // DefaultBehavior should preserve reference (type-level behavior)
-        Assert.That(clone.DefaultBehavior, Is.SameAs(original.DefaultBehavior));
+        await Assert.That(clone.DefaultBehavior).IsSameReferenceAs(original.DefaultBehavior);
     }
 
     #endregion

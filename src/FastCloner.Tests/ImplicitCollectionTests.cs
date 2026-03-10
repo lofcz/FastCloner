@@ -1,10 +1,8 @@
 using FastCloner.SourceGenerator.Shared;
-using NUnit.Framework;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
-
-[TestFixture]
 [SourceGeneratorCompatible]
 public class ImplicitCollectionTests
 {
@@ -29,34 +27,34 @@ public class ImplicitCollectionTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ImplicitCollection_Should_Be_Cloned()
+    public async Task ImplicitCollection_Should_Be_Cloned()
     {
         RootContainer original = new RootContainer
         {
             Middle = new ImplicitCollectionContainer
             {
-                Items = new List<ImplicitItem>
-                {
+                Items =
+                [
                     new ImplicitItem { Value = 1 },
                     new ImplicitItem { Value = 2 }
-                }
+                ]
             }
         };
 
         RootContainer clone = original.FastDeepClone();
 
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone.Middle, Is.Not.Null);
-        Assert.That(clone.Middle!.Items, Is.Not.Null);
-        Assert.That(clone.Middle.Items.Count, Is.EqualTo(2));
-        Assert.That(clone.Middle.Items, Is.Not.SameAs(original.Middle.Items));
-        Assert.That(clone.Middle.Items[0], Is.Not.SameAs(original.Middle.Items[0]));
-        Assert.That(clone.Middle.Items[0].Value, Is.EqualTo(1));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone.Middle).IsNotNull();
+        await Assert.That(clone.Middle!.Items).IsNotNull();
+        await Assert.That(clone.Middle.Items.Count).IsEqualTo(2);
+        await Assert.That(clone.Middle.Items).IsNotSameReferenceAs(original.Middle.Items);
+        await Assert.That(clone.Middle.Items[0]).IsNotSameReferenceAs(original.Middle.Items[0]);
+        await Assert.That(clone.Middle.Items[0].Value).IsEqualTo(1);
+
         // Modify original
         original.Middle.Items[0].Value = 99;
         
         // Verify independence
-        Assert.That(clone.Middle.Items[0].Value, Is.EqualTo(1));
+        await Assert.That(clone.Middle.Items[0].Value).IsEqualTo(1);
     }
 }

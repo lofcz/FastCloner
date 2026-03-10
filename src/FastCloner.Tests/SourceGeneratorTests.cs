@@ -2,10 +2,9 @@
 using FastCloner.SourceGenerator.Shared;
 using Microsoft.CodeAnalysis.CSharp.Testing;
 using Microsoft.CodeAnalysis.Testing;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
-
-[TestFixture]
 [SourceGeneratorCompatible]
 public class SourceGeneratorTests
 {
@@ -19,7 +18,7 @@ public class SourceGeneratorTests
     
     [Test]
     [SourceGeneratorCompatible]
-    public void SimpleObject_Should_Be_Cloned()
+    public async Task SimpleObject_Should_Be_Cloned()
     {
         // Arrange
         Person person = new Person
@@ -33,38 +32,38 @@ public class SourceGeneratorTests
         Person? copy = person.FastDeepClone();
         
         // Assert - initial state
-        Assert.That(copy, Is.Not.Null);
-        Assert.That(copy!.Age, Is.EqualTo(person.Age));
-        Assert.That(copy.Name, Is.EqualTo(person.Name));
-        Assert.That(copy.Hobbies, Is.Not.Null);
-        Assert.That(copy.Hobbies!.Count, Is.EqualTo(person.Hobbies!.Count));
-        Assert.That(copy.Hobbies, Is.Not.SameAs(person.Hobbies)); // Should be a different list instance
-        
+        await Assert.That(copy).IsNotNull();
+        await Assert.That(copy!.Age).IsEqualTo(person.Age);
+        await Assert.That(copy.Name).IsEqualTo(person.Name);
+        await Assert.That(copy.Hobbies).IsNotNull();
+        await Assert.That(copy.Hobbies!.Count).IsEqualTo(person.Hobbies!.Count);
+        await Assert.That(copy.Hobbies).IsNotSameReferenceAs(person.Hobbies); // Should be a different list instance
+
         // Verify deep clone independence - modify original list
         person.Hobbies![0] = "Swimming";
         person.Hobbies.Add("Gaming");
         
         // Original should see the updates
-        Assert.That(person.Hobbies[0], Is.EqualTo("Swimming"));
-        Assert.That(person.Hobbies.Count, Is.EqualTo(3));
-        Assert.That(person.Hobbies[2], Is.EqualTo("Gaming"));
-        
+        await Assert.That(person.Hobbies[0]).IsEqualTo("Swimming");
+        await Assert.That(person.Hobbies.Count).IsEqualTo(3);
+        await Assert.That(person.Hobbies[2]).IsEqualTo("Gaming");
+
         // Clone should NOT see the updates (proves deep clone worked)
-        Assert.That(copy.Hobbies![0], Is.EqualTo("Reading")); // Original value preserved
-        Assert.That(copy.Hobbies.Count, Is.EqualTo(2)); // Original count preserved
-        Assert.That(copy.Hobbies, Does.Not.Contain("Swimming"));
-        Assert.That(copy.Hobbies, Does.Not.Contain("Gaming"));
+        await Assert.That(copy.Hobbies![0]).IsEqualTo("Reading"); // Original value preserved
+        await Assert.That(copy.Hobbies.Count).IsEqualTo(2); // Original count preserved
+        await Assert.That(copy.Hobbies).DoesNotContain("Swimming");
+        await Assert.That(copy.Hobbies).DoesNotContain("Gaming");
     }
 
     [Test]
     public async Task Analyzer1()
     {
         //  disabled as there is no longer a requirement to mark classes as partial!
-        Assert.Pass();
-        
+        ;
+
         // [|text|]: indicates that a diagnostic is reported for text. By default, this form may only be used for testing analyzers with exactly one DiagnosticDescriptor provided by DiagnosticAnalyzer.SupportedDiagnostics.
         // {|ExpectedDiagnosticId:text|}: indicates that a diagnostic with Id ExpectedDiagnosticId is reported for text.
-        
+
         /*var sharedAssembly = typeof(FastClonerClonableAttribute).Assembly;
         
         CSharpAnalyzerTest<FastClonerClonableAnalyzer, DefaultVerifier> context = new CSharpAnalyzerTest<FastClonerClonableAnalyzer, DefaultVerifier>
@@ -128,7 +127,7 @@ public class SourceGeneratorTests
     
     [Test]
     [SourceGeneratorCompatible]
-    public void ComplexClass_DeepClone_Should_Create_Independent_Copy()
+    public async Task ComplexClass_DeepClone_Should_Create_Independent_Copy()
     {
         // Arrange - create a complex object with nested objects, arrays, and lists
         ComplexClass original = new ComplexClass
@@ -193,29 +192,29 @@ public class SourceGeneratorTests
         ComplexClass clone = original.FastDeepClone();
 
         // Assert - verify the clone is not null
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.SimpleClass2, Is.Not.Null);
-        Assert.That(clone.Array, Is.Not.Null);
-        Assert.That(clone.List, Is.Not.Null);
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.SimpleClass2).IsNotNull();
+        await Assert.That(clone.Array).IsNotNull();
+        await Assert.That(clone.List).IsNotNull();
 
         // Verify initial values are copied correctly
-        Assert.That(clone.SimpleClass2!.Int, Is.EqualTo(10));
-        Assert.That(clone.SimpleClass2.String, Is.EqualTo("Lorem ipsum ..."));
-        Assert.That(clone.Array!.Length, Is.EqualTo(2));
-        Assert.That(clone.Array[0].String, Is.EqualTo("Array Item 1"));
-        Assert.That(clone.Array[1].String, Is.EqualTo("Array Item 2"));
-        Assert.That(clone.List!.Count, Is.EqualTo(2));
-        Assert.That(clone.List[0].String, Is.EqualTo("List Item 1"));
-        Assert.That(clone.List[1].String, Is.EqualTo("List Item 2"));
+        await Assert.That(clone.SimpleClass2!.Int).IsEqualTo(10);
+        await Assert.That(clone.SimpleClass2.String).IsEqualTo("Lorem ipsum ...");
+        await Assert.That(clone.Array!.Length).IsEqualTo(2);
+        await Assert.That(clone.Array[0].String).IsEqualTo("Array Item 1");
+        await Assert.That(clone.Array[1].String).IsEqualTo("Array Item 2");
+        await Assert.That(clone.List!.Count).IsEqualTo(2);
+        await Assert.That(clone.List[0].String).IsEqualTo("List Item 1");
+        await Assert.That(clone.List[1].String).IsEqualTo("List Item 2");
 
         // CRITICAL: Verify deep clone - not same references
-        Assert.That(clone.SimpleClass2, Is.Not.SameAs(original.SimpleClass2));
-        Assert.That(clone.Array, Is.Not.SameAs(original.Array));
-        Assert.That(clone.Array[0], Is.Not.SameAs(original.Array![0]));
-        Assert.That(clone.Array[1], Is.Not.SameAs(original.Array[1]));
-        Assert.That(clone.List, Is.Not.SameAs(original.List));
-        Assert.That(clone.List[0], Is.Not.SameAs(original.List![0]));
-        Assert.That(clone.List[1], Is.Not.SameAs(original.List[1]));
+        await Assert.That(clone.SimpleClass2).IsNotSameReferenceAs(original.SimpleClass2);
+        await Assert.That(clone.Array).IsNotSameReferenceAs(original.Array);
+        await Assert.That(clone.Array[0]).IsNotSameReferenceAs(original.Array![0]);
+        await Assert.That(clone.Array[1]).IsNotSameReferenceAs(original.Array[1]);
+        await Assert.That(clone.List).IsNotSameReferenceAs(original.List);
+        await Assert.That(clone.List[0]).IsNotSameReferenceAs(original.List![0]);
+        await Assert.That(clone.List[1]).IsNotSameReferenceAs(original.List[1]);
 
         // Modify the original - clone should NOT be affected
         original.SimpleClass2.Int = 999;
@@ -227,19 +226,19 @@ public class SourceGeneratorTests
         original.List.Add(new SimpleClass3 { String = "NEW ITEM" });
 
         // Verify clone is unaffected
-        Assert.That(clone.SimpleClass2.Int, Is.EqualTo(10), "SimpleClass2 should not be modified");
-        Assert.That(clone.SimpleClass2.String, Is.EqualTo("Lorem ipsum ..."), "SimpleClass2.String should not be modified");
-        Assert.That(clone.Array[0].String, Is.EqualTo("Array Item 1"), "Array[0] should not be modified");
-        Assert.That(clone.Array[1].Int, Is.EqualTo(20), "Array[1] should not be modified");
-        Assert.That(clone.List[0].String, Is.EqualTo("List Item 1"), "List[0] should not be modified");
-        Assert.That(clone.List[1].Double, Is.EqualTo(4940.4943048).Within(0.0001), "List[1] should not be modified");
-        Assert.That(clone.List.Count, Is.EqualTo(2), "List count should not change");
-        Assert.That(clone.List, Does.Not.Contain(original.List[2]), "Clone should not have new item added to original");
+        await Assert.That(clone.SimpleClass2.Int).IsEqualTo(10).Because("SimpleClass2 should not be modified");
+        await Assert.That(clone.SimpleClass2.String).IsEqualTo("Lorem ipsum ...").Because("SimpleClass2.String should not be modified");
+        await Assert.That(clone.Array[0].String).IsEqualTo("Array Item 1").Because("Array[0] should not be modified");
+        await Assert.That(clone.Array[1].Int).IsEqualTo(20).Because("Array[1] should not be modified");
+        await Assert.That(clone.List[0].String).IsEqualTo("List Item 1").Because("List[0] should not be modified");
+        await Assert.That(clone.List[1].Double).IsEqualTo(4940.4943048).Within(0.0001).Because("List[1] should not be modified");
+        await Assert.That(clone.List.Count).IsEqualTo(2).Because("List count should not change");
+        await Assert.That(clone.List).DoesNotContain(original.List[2]).Because("Clone should not have new item added to original");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Dictionary_DeepClone_Should_Clone_Keys_And_Values()
+    public async Task Dictionary_DeepClone_Should_Clone_Keys_And_Values()
     {
         // Arrange
         DictionaryContainer original = new DictionaryContainer
@@ -255,26 +254,26 @@ public class SourceGeneratorTests
         DictionaryContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Dict, Is.Not.Null);
-        Assert.That(clone.Dict!.Count, Is.EqualTo(2));
-        Assert.That(clone.Dict["Key1"].String, Is.EqualTo("Value 1"));
-        Assert.That(clone.Dict["Key2"].String, Is.EqualTo("Value 2"));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Dict).IsNotNull();
+        await Assert.That(clone.Dict!.Count).IsEqualTo(2);
+        await Assert.That(clone.Dict["Key1"].String).IsEqualTo("Value 1");
+        await Assert.That(clone.Dict["Key2"].String).IsEqualTo("Value 2");
 
         // Verify deep clone - values should be new instances
-        Assert.That(clone.Dict["Key1"], Is.Not.SameAs(original.Dict!["Key1"]));
-        Assert.That(clone.Dict["Key2"], Is.Not.SameAs(original.Dict["Key2"]));
-        
+        await Assert.That(clone.Dict["Key1"]).IsNotSameReferenceAs(original.Dict!["Key1"]);
+        await Assert.That(clone.Dict["Key2"]).IsNotSameReferenceAs(original.Dict["Key2"]);
+
         // Modify original
         original.Dict["Key1"].String = "MODIFIED";
         
         // Verify clone is unaffected
-        Assert.That(clone.Dict["Key1"].String, Is.EqualTo("Value 1"));
+        await Assert.That(clone.Dict["Key1"].String).IsEqualTo("Value 1");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void RecursiveCollection_Should_Be_DeepCloned()
+    public async Task RecursiveCollection_Should_Be_DeepCloned()
     {
         // Arrange
         RecursiveCollectionContainer original = new RecursiveCollectionContainer
@@ -291,26 +290,26 @@ public class SourceGeneratorTests
         RecursiveCollectionContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        
+        await Assert.That(clone).IsNotNull();
+
         // Check nested list
-        Assert.That(clone!.NestedList, Is.Not.Null);
-        Assert.That(clone.NestedList!.Count, Is.EqualTo(2));
-        Assert.That(clone.NestedList[0], Is.Not.SameAs(original.NestedList![0]));
-        Assert.That(clone.NestedList[0], Is.EqualTo(new[] { 1, 2 }));
-        
+        await Assert.That(clone!.NestedList).IsNotNull();
+        await Assert.That(clone.NestedList!.Count).IsEqualTo(2);
+        await Assert.That(clone.NestedList[0]).IsNotSameReferenceAs(original.NestedList![0]);
+        await Assert.That(clone.NestedList[0]).IsEquivalentTo([1, 2]);
+
         // Check nested dict
-        Assert.That(clone.NestedDict, Is.Not.Null);
-        Assert.That(clone.NestedDict!.Count, Is.EqualTo(2));
-        Assert.That(clone.NestedDict["Group1"], Is.Not.SameAs(original.NestedDict!["Group1"]));
-        Assert.That(clone.NestedDict["Group1"]["A"], Is.EqualTo("1"));
-        
+        await Assert.That(clone.NestedDict).IsNotNull();
+        await Assert.That(clone.NestedDict!.Count).IsEqualTo(2);
+        await Assert.That(clone.NestedDict["Group1"]).IsNotSameReferenceAs(original.NestedDict!["Group1"]);
+        await Assert.That(clone.NestedDict["Group1"]["A"]).IsEqualTo("1");
+
         // Verify independence
         original.NestedList[0].Add(99);
         original.NestedDict["Group1"]["A"] = "MODIFIED";
         
-        Assert.That(clone.NestedList[0].Count, Is.EqualTo(2));
-        Assert.That(clone.NestedDict["Group1"]["A"], Is.EqualTo("1"));
+        await Assert.That(clone.NestedList[0].Count).IsEqualTo(2);
+        await Assert.That(clone.NestedDict["Group1"]["A"]).IsEqualTo("1");
     }
 
     [FastClonerClonable]
@@ -347,22 +346,22 @@ public class SourceGeneratorTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void EnumerableSamples_Should_Be_DeepCloned()
+    public async Task EnumerableSamples_Should_Be_DeepCloned()
     {
         // Arrange
         EnumerableSamples original = new EnumerableSamples
         {
-            ListInts = new List<int> { 1, 2, 3 },
-            ArrayInts = new int[] { 4, 5, 6 },
+            ListInts = [1, 2, 3],
+            ArrayInts = [4, 5, 6],
             IListInts = new List<int> { 7, 8, 9 },
             ICollectionInts = new List<int> { 10, 11, 12 },
             IEnumerableInts = new List<int> { 13, 14, 15 },
             IReadOnlyListInts = new List<int> { 16, 17, 18 },
             IReadOnlyCollectionInts = new List<int> { 19, 20, 21 },
-            HashSetInts = new HashSet<int> { 22, 23, 24 },
-            QueueInts = new Queue<int>(new[] { 25, 26, 27 }),
-            StackInts = new Stack<int>(new[] { 28, 29, 30 }),
-            LinkedListInts = new LinkedList<int>(new[] { 31, 32, 33 }),
+            HashSetInts = [22, 23, 24],
+            QueueInts = new Queue<int>([25, 26, 27]),
+            StackInts = new Stack<int>([28, 29, 30]),
+            LinkedListInts = new LinkedList<int>([31, 32, 33]),
             DictionaryInts = new Dictionary<int, string> { { 1, "One" }, { 2, "Two" } },
             IReadOnlyDictionaryInts = new Dictionary<int, string> { { 3, "Three" }, { 4, "Four" } },
             SortedDictionaryInts = new SortedDictionary<int, string> { { 5, "Five" }, { 6, "Six" } },
@@ -374,73 +373,73 @@ public class SourceGeneratorTests
         EnumerableSamples clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
+        await Assert.That(clone).IsNotNull();
 
         // List
-        Assert.That(clone!.ListInts, Is.Not.SameAs(original.ListInts));
-        Assert.That(clone.ListInts, Is.EquivalentTo(original.ListInts));
+        await Assert.That(clone!.ListInts).IsNotSameReferenceAs(original.ListInts);
+        await Assert.That(clone.ListInts).IsEquivalentTo(original.ListInts);
 
         // Array
-        Assert.That(clone.ArrayInts, Is.Not.SameAs(original.ArrayInts));
-        Assert.That(clone.ArrayInts, Is.EquivalentTo(original.ArrayInts));
+        await Assert.That(clone.ArrayInts).IsNotSameReferenceAs(original.ArrayInts);
+        await Assert.That(clone.ArrayInts).IsEquivalentTo(original.ArrayInts);
 
         // IList
-        Assert.That(clone.IListInts, Is.Not.SameAs(original.IListInts));
-        Assert.That(clone.IListInts, Is.EquivalentTo(original.IListInts));
-        Assert.That(clone.IListInts, Is.InstanceOf<List<int>>()); // Typically clones to List for interfaces
+        await Assert.That(clone.IListInts).IsNotSameReferenceAs(original.IListInts);
+        await Assert.That(clone.IListInts).IsEquivalentTo(original.IListInts);
+        await Assert.That(clone.IListInts).IsAssignableTo<List<int>>(); // Typically clones to List for interfaces
 
         // ICollection
-        Assert.That(clone.ICollectionInts, Is.Not.SameAs(original.ICollectionInts));
-        Assert.That(clone.ICollectionInts, Is.EquivalentTo(original.ICollectionInts));
+        await Assert.That(clone.ICollectionInts).IsNotSameReferenceAs(original.ICollectionInts);
+        await Assert.That(clone.ICollectionInts).IsEquivalentTo(original.ICollectionInts);
 
         // IEnumerable
-        Assert.That(clone.IEnumerableInts, Is.Not.SameAs(original.IEnumerableInts));
-        Assert.That(clone.IEnumerableInts, Is.EquivalentTo(original.IEnumerableInts));
+        await Assert.That(clone.IEnumerableInts).IsNotSameReferenceAs(original.IEnumerableInts);
+        await Assert.That(clone.IEnumerableInts).IsEquivalentTo(original.IEnumerableInts);
 
         // IReadOnlyList
-        Assert.That(clone.IReadOnlyListInts, Is.Not.SameAs(original.IReadOnlyListInts));
-        Assert.That(clone.IReadOnlyListInts, Is.EquivalentTo(original.IReadOnlyListInts));
+        await Assert.That(clone.IReadOnlyListInts).IsNotSameReferenceAs(original.IReadOnlyListInts);
+        await Assert.That(clone.IReadOnlyListInts).IsEquivalentTo(original.IReadOnlyListInts);
 
         // IReadOnlyCollection
-        Assert.That(clone.IReadOnlyCollectionInts, Is.Not.SameAs(original.IReadOnlyCollectionInts));
-        Assert.That(clone.IReadOnlyCollectionInts, Is.EquivalentTo(original.IReadOnlyCollectionInts));
+        await Assert.That(clone.IReadOnlyCollectionInts).IsNotSameReferenceAs(original.IReadOnlyCollectionInts);
+        await Assert.That(clone.IReadOnlyCollectionInts).IsEquivalentTo(original.IReadOnlyCollectionInts);
 
         // HashSet
-        Assert.That(clone.HashSetInts, Is.Not.SameAs(original.HashSetInts));
-        Assert.That(clone.HashSetInts, Is.EquivalentTo(original.HashSetInts));
+        await Assert.That(clone.HashSetInts).IsNotSameReferenceAs(original.HashSetInts);
+        await Assert.That(clone.HashSetInts).IsEquivalentTo(original.HashSetInts);
 
         // Queue
-        Assert.That(clone.QueueInts, Is.Not.SameAs(original.QueueInts));
-        Assert.That(clone.QueueInts, Is.EquivalentTo(original.QueueInts));
+        await Assert.That(clone.QueueInts).IsNotSameReferenceAs(original.QueueInts);
+        await Assert.That(clone.QueueInts).IsEquivalentTo(original.QueueInts);
 
         // Stack
-        Assert.That(clone.StackInts, Is.Not.SameAs(original.StackInts));
-        Assert.That(clone.StackInts, Is.EquivalentTo(original.StackInts));
+        await Assert.That(clone.StackInts).IsNotSameReferenceAs(original.StackInts);
+        await Assert.That(clone.StackInts).IsEquivalentTo(original.StackInts);
 
         // LinkedList
-        Assert.That(clone.LinkedListInts, Is.Not.SameAs(original.LinkedListInts));
-        Assert.That(clone.LinkedListInts, Is.EquivalentTo(original.LinkedListInts));
+        await Assert.That(clone.LinkedListInts).IsNotSameReferenceAs(original.LinkedListInts);
+        await Assert.That(clone.LinkedListInts).IsEquivalentTo(original.LinkedListInts);
 
         // Dictionary
-        Assert.That(clone.DictionaryInts, Is.Not.SameAs(original.DictionaryInts));
-        Assert.That(clone.DictionaryInts, Is.EquivalentTo(original.DictionaryInts));
+        await Assert.That(clone.DictionaryInts).IsNotSameReferenceAs(original.DictionaryInts);
+        await Assert.That(clone.DictionaryInts).IsEquivalentTo(original.DictionaryInts);
 
         // IReadOnlyDictionary
-        Assert.That(clone.IReadOnlyDictionaryInts, Is.Not.SameAs(original.IReadOnlyDictionaryInts));
-        Assert.That(clone.IReadOnlyDictionaryInts, Is.EquivalentTo(original.IReadOnlyDictionaryInts));
+        await Assert.That(clone.IReadOnlyDictionaryInts).IsNotSameReferenceAs(original.IReadOnlyDictionaryInts);
+        await Assert.That(clone.IReadOnlyDictionaryInts).IsEquivalentTo(original.IReadOnlyDictionaryInts);
 
         // SortedDictionary
-        Assert.That(clone.SortedDictionaryInts, Is.Not.SameAs(original.SortedDictionaryInts));
-        Assert.That(clone.SortedDictionaryInts, Is.EquivalentTo(original.SortedDictionaryInts));
+        await Assert.That(clone.SortedDictionaryInts).IsNotSameReferenceAs(original.SortedDictionaryInts);
+        await Assert.That(clone.SortedDictionaryInts).IsEquivalentTo(original.SortedDictionaryInts);
 
         // SortedList
-        Assert.That(clone.SortedListInts, Is.Not.SameAs(original.SortedListInts));
-        Assert.That(clone.SortedListInts, Is.EquivalentTo(original.SortedListInts));
+        await Assert.That(clone.SortedListInts).IsNotSameReferenceAs(original.SortedListInts);
+        await Assert.That(clone.SortedListInts).IsEquivalentTo(original.SortedListInts);
 
         // Nested Implicit
-        Assert.That(clone.IReadOnlyDictionaryIntPeople, Is.Not.SameAs(original.IReadOnlyDictionaryIntPeople));
-        Assert.That(clone.IReadOnlyDictionaryIntPeople![9], Is.Not.SameAs(original.IReadOnlyDictionaryIntPeople![9]));
-        Assert.That(clone.IReadOnlyDictionaryIntPeople[9].MySuperName, Is.EqualTo("Nine"));
+        await Assert.That(clone.IReadOnlyDictionaryIntPeople).IsNotSameReferenceAs(original.IReadOnlyDictionaryIntPeople);
+        await Assert.That(clone.IReadOnlyDictionaryIntPeople![9]).IsNotSameReferenceAs(original.IReadOnlyDictionaryIntPeople![9]);
+        await Assert.That(clone.IReadOnlyDictionaryIntPeople[9].MySuperName).IsEqualTo("Nine");
     }
 
     // Test classes without public parameterless constructors
@@ -486,7 +485,7 @@ public class SourceGeneratorTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Class_Without_Public_Parameterless_Constructor_Should_Be_Cloned()
+    public async Task Class_Without_Public_Parameterless_Constructor_Should_Be_Cloned()
     {
         // Arrange - ClassWithoutParameterlessCtor requires a parameter in its constructor
         // Note: Read-only properties set in constructor (Name, Value) won't be cloned since
@@ -500,19 +499,19 @@ public class SourceGeneratorTests
         ClassWithoutParameterlessCtor clone = original.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.Not.SameAs(original));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsNotSameReferenceAs(original);
         // Read-only properties from constructor will be default values (not cloned)
-        Assert.That(clone.Name, Is.Null); // Default value since constructor wasn't called
-        Assert.That(clone.Value, Is.EqualTo(0)); // Default value since constructor wasn't called
+        await Assert.That(clone.Name).IsNull(); // Default value since constructor wasn't called
+        await Assert.That(clone.Value).IsEqualTo(0); // Default value since constructor wasn't called
         // Writable properties set after construction will be cloned
-        Assert.That(clone.Description, Is.EqualTo("Test Description"));
-        Assert.That(clone.AdditionalData, Is.EqualTo("Extra Data"));
+        await Assert.That(clone.Description).IsEqualTo("Test Description");
+        await Assert.That(clone.AdditionalData).IsEqualTo("Extra Data");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Class_Without_Parameterless_Constructor_With_Circular_References_Should_Be_Cloned()
+    public async Task Class_Without_Parameterless_Constructor_With_Circular_References_Should_Be_Cloned()
     {
         // Arrange - Test that circular reference tracking works with FormatterServices
         ClassWithCircularRefNoCtor original = new ClassWithCircularRefNoCtor("Initial");
@@ -522,10 +521,10 @@ public class SourceGeneratorTests
         ClassWithCircularRefNoCtor clone = original.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.Not.SameAs(original));
-        Assert.That(clone.Name, Is.Null); // Read-only property from constructor won't be cloned
-        Assert.That(clone.Self, Is.SameAs(clone)); // Circular reference should be preserved
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.Name).IsNull(); // Read-only property from constructor won't be cloned
+        await Assert.That(clone.Self).IsSameReferenceAs(clone); // Circular reference should be preserved
     }
 
     // Test classes for complex circular dependency testing
@@ -567,7 +566,7 @@ public class SourceGeneratorTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void FastDeepClone_Should_Handle_Complex_Circular_Dependencies()
+    public async Task FastDeepClone_Should_Handle_Complex_Circular_Dependencies()
     {
         // 1. Direct Cycle A <-> B
         CircularNodeA a = new CircularNodeA();
@@ -576,20 +575,20 @@ public class SourceGeneratorTests
         b.A = a;
         
         CircularNodeA cloneA = a.FastDeepClone();
-        Assert.That(cloneA, Is.Not.Null);
-        Assert.That(cloneA, Is.Not.SameAs(a));
-        Assert.That(cloneA!.B, Is.Not.SameAs(b));
-        Assert.That(cloneA.B!.A, Is.SameAs(cloneA)); // Cycle preserved
-        
+        await Assert.That(cloneA).IsNotNull();
+        await Assert.That(cloneA).IsNotSameReferenceAs(a);
+        await Assert.That(cloneA!.B).IsNotSameReferenceAs(b);
+        await Assert.That(cloneA.B!.A).IsSameReferenceAs(cloneA); // Cycle preserved
+
         // 2. Self Cycle C -> C
         CircularNodeC c = new CircularNodeC();
         c.Self = c;
         
         CircularNodeC cloneC = c.FastDeepClone();
-        Assert.That(cloneC, Is.Not.Null);
-        Assert.That(cloneC, Is.Not.SameAs(c));
-        Assert.That(cloneC!.Self, Is.SameAs(cloneC)); // Cycle preserved
-        
+        await Assert.That(cloneC).IsNotNull();
+        await Assert.That(cloneC).IsNotSameReferenceAs(c);
+        await Assert.That(cloneC!.Self).IsSameReferenceAs(cloneC); // Cycle preserved
+
         // 3. Lollipop Graph D -> E <-> F
         CircularNodeD d = new CircularNodeD();
         CircularNodeE e = new CircularNodeE();
@@ -599,10 +598,10 @@ public class SourceGeneratorTests
         f.E = e;
         
         CircularNodeD cloneD = d.FastDeepClone();
-        Assert.That(cloneD, Is.Not.Null);
-        Assert.That(cloneD, Is.Not.SameAs(d));
-        Assert.That(cloneD!.E, Is.Not.SameAs(e));
-        Assert.That(cloneD.E!.F, Is.Not.SameAs(f));
-        Assert.That(cloneD.E!.F!.E, Is.SameAs(cloneD.E)); // Cycle preserved
+        await Assert.That(cloneD).IsNotNull();
+        await Assert.That(cloneD).IsNotSameReferenceAs(d);
+        await Assert.That(cloneD!.E).IsNotSameReferenceAs(e);
+        await Assert.That(cloneD.E!.F).IsNotSameReferenceAs(f);
+        await Assert.That(cloneD.E!.F!.E).IsSameReferenceAs(cloneD.E); // Cycle preserved
     }
 }

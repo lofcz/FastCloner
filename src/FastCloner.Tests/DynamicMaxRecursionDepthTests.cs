@@ -1,8 +1,7 @@
 using FastCloner.Code;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
-
-[TestFixture]
 public class DynamicMaxRecursionDepthTests
 {
     public sealed class ExactNode
@@ -22,20 +21,14 @@ public class DynamicMaxRecursionDepthTests
         public A? Child;
     }
     
-    [OneTimeSetUp]
-    public void BaseOneTimeSetUp()
-    {
-        
-    }
-
-    [OneTimeTearDown]
-    public void BaseOneTimeTearDown()
+    [After(Test)]
+    public void ResetMaxRecursionDepth()
     {
         FastCloner.MaxRecursionDepth = 1000;
     }
 
     [Test]
-    public void TestDynamicMaxRecursionDepth()
+    public async Task TestDynamicMaxRecursionDepth()
     {
         // Arrange
         A orig = new A();
@@ -45,36 +38,33 @@ public class DynamicMaxRecursionDepthTests
         {
             FastCloner.MaxRecursionDepth = 1;
             A? clone = FastCloner.DeepClone(orig);
-            AssertClone(clone);
+            await AssertClone(clone);
         }
         
         // Act & Assert: MRD = 2
         {
             FastCloner.MaxRecursionDepth = 2;
             A? clone = FastCloner.DeepClone(orig);
-            AssertClone(clone);
+            await AssertClone(clone);
         }
         
         // Act & Assert: MRD = 3
         {
             FastCloner.MaxRecursionDepth = 3;
             A? clone = FastCloner.DeepClone(orig);
-            AssertClone(clone);
+            await AssertClone(clone);
         }
 
-        void AssertClone(A? clone)
+        async Task AssertClone(A? clone)
         {
-            using (Assert.EnterMultipleScope())
-            {
-                Assert.That((orig == clone).Dump(), Is.EqualTo("false"), $"Orig should not be the same as clone for depth {FastCloner.MaxRecursionDepth}");
-                Assert.That((orig.Bs == clone.Bs).Dump(), Is.EqualTo("false"), $"Orig.Bs should not be the same as clone.Bs for depth {FastCloner.MaxRecursionDepth}");
-                Assert.That((orig.Bs.First() == clone.Bs.First()).Dump(), Is.EqualTo("false"), $"Orig.Bs.First() should not be the same as clone.Bs.First() for depth {FastCloner.MaxRecursionDepth}");
-            }
+            await Assert.That((orig == clone).Dump()).IsEqualTo("false").Because($"Orig should not be the same as clone for depth {FastCloner.MaxRecursionDepth}");
+            await Assert.That((orig.Bs == clone.Bs).Dump()).IsEqualTo("false").Because($"Orig.Bs should not be the same as clone.Bs for depth {FastCloner.MaxRecursionDepth}");
+            await Assert.That((orig.Bs.First() == clone.Bs.First()).Dump()).IsEqualTo("false").Because($"Orig.Bs.First() should not be the same as clone.Bs.First() for depth {FastCloner.MaxRecursionDepth}");
         }
     }
 
     [Test]
-    public void TestDeepObjectGraph_1500Levels_WithMRD1000()
+    public async Task TestDeepObjectGraph_1500Levels_WithMRD1000()
     {
         // Arrange
         const int nestLevel = 1500;
@@ -101,21 +91,21 @@ public class DynamicMaxRecursionDepthTests
         A? clone = FastCloner.DeepClone(root);
         
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That((root == clone).Dump(), Is.EqualTo("false"));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That((root == clone).Dump()).IsEqualTo("false");
+
         A? origA = root;
         A? clonedA = clone;
         int level = 0;
         
         while (origA != null && clonedA != null)
         {
-            Assert.That((origA == clonedA).Dump(), Is.EqualTo("false"), $"A at level {level} should be different objects");
-            
+            await Assert.That((origA == clonedA).Dump()).IsEqualTo("false").Because($"A at level {level} should be different objects");
+
             if (origA.Child != null && clonedA.Child != null)
             {
-                Assert.That((origA.Child == clonedA.Child).Dump(), Is.EqualTo("false"), $"B at level {level} should be different objects");
-                
+                await Assert.That((origA.Child == clonedA.Child).Dump()).IsEqualTo("false").Because($"B at level {level} should be different objects");
+
                 origA = origA.Child.Child;
                 clonedA = clonedA.Child.Child;
                 level++;
@@ -126,11 +116,11 @@ public class DynamicMaxRecursionDepthTests
             }
         }
         
-        Assert.That(level, Is.GreaterThan(maxRecursionDepth), $"Verified {level} levels");
+        await Assert.That(level).IsGreaterThan(maxRecursionDepth).Because($"Verified {level} levels");
     }
 
     [Test]
-    public void TestDeepExactObjectGraph_1500Levels_WithMRD1()
+    public async Task TestDeepExactObjectGraph_1500Levels_WithMRD1()
     {
         const int nestLevel = 1500;
 
@@ -147,29 +137,29 @@ public class DynamicMaxRecursionDepthTests
         FastCloner.MaxRecursionDepth = 1;
         ExactNode? clone = FastCloner.DeepClone(root);
 
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.Not.SameAs(root));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsNotSameReferenceAs(root);
 
         ExactNode? originalCurrent = root;
         ExactNode? cloneCurrent = clone;
         int verifiedLevels = 0;
         while (originalCurrent is not null && cloneCurrent is not null)
         {
-            Assert.That(cloneCurrent, Is.Not.SameAs(originalCurrent), $"Node at level {verifiedLevels} should be cloned");
-            Assert.That(cloneCurrent.Value, Is.EqualTo(originalCurrent.Value), $"Value at level {verifiedLevels} should match");
+            await Assert.That(cloneCurrent).IsNotSameReferenceAs(originalCurrent).Because($"Node at level {verifiedLevels} should be cloned");
+            await Assert.That(cloneCurrent.Value).IsEqualTo(originalCurrent.Value).Because($"Value at level {verifiedLevels} should match");
 
             originalCurrent = originalCurrent.Child;
             cloneCurrent = cloneCurrent.Child;
             verifiedLevels++;
         }
 
-        Assert.That(verifiedLevels, Is.EqualTo(nestLevel + 1));
-        Assert.That(cloneCurrent, Is.Null);
-        Assert.That(originalCurrent, Is.Null);
+        await Assert.That(verifiedLevels).IsEqualTo(nestLevel + 1);
+        await Assert.That(cloneCurrent).IsNull();
+        await Assert.That(originalCurrent).IsNull();
     }
 
     [Test]
-    public void Internal_CloneClassInternal_Should_Reset_CallDepth_After_WorkList_Switch()
+    public async Task Internal_CloneClassInternal_Should_Reset_CallDepth_After_WorkList_Switch()
     {
         ExactNode root = new ExactNode
         {
@@ -188,9 +178,9 @@ public class DynamicMaxRecursionDepthTests
         {
             ExactNode? clone = (ExactNode?)FastClonerGenerator.CloneClassInternal(root, state);
 
-            Assert.That(clone, Is.Not.Null);
-            Assert.That(state.UseWorkList, Is.True);
-            Assert.That(state.CurrentDepth, Is.EqualTo(0));
+            await Assert.That(clone).IsNotNull();
+            await Assert.That(state.UseWorkList).IsTrue();
+            await Assert.That(state.CurrentDepth).IsEqualTo(0);
         }
         finally
         {

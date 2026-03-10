@@ -5,11 +5,9 @@ using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using System.Linq;
 using FastCloner.SourceGenerator.Shared;
-using NUnit.Framework;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
-
-#region Test Model Classes
 
 /// <summary>
 /// Simple mutable reference type for testing deep cloning
@@ -305,7 +303,7 @@ public class IReadOnlyCollectionContainer
 /// </summary>
 public class EnumerableOnlyCollection<T> : IEnumerable<T>
 {
-    private readonly List<T> _inner = new();
+    private readonly List<T> _inner = [];
     public void Add(T item) => _inner.Add(item);
     public IEnumerator<T> GetEnumerator() => _inner.GetEnumerator();
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
@@ -319,17 +317,11 @@ public class ConcreteEnumerableOnlyContainer
 {
     public EnumerableOnlyCollection<MutableItem>? Items { get; set; }
 }
-
-#endregion
-
-[TestFixture]
 public class SourceGeneratorCollectionTests
 {
-    #region Stack Tests
-
     [Test]
     [SourceGeneratorCompatible]
-    public void Stack_With_Complex_Elements_Should_Preserve_LIFO_Order()
+    public async Task Stack_With_Complex_Elements_Should_Preserve_LIFO_Order()
     {
         // Arrange
         StackContainer original = new StackContainer
@@ -344,39 +336,35 @@ public class SourceGeneratorCollectionTests
         StackContainer clone = original.FastDeepClone();
 
         // Assert - verify LIFO order (3, 2, 1)
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
-        Assert.That(clone.Items!.Count, Is.EqualTo(3));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
+        await Assert.That(clone.Items!.Count).IsEqualTo(3);
 
         MutableItem[] cloneItems = clone.Items.ToArray();
-        Assert.That(cloneItems[0].Id, Is.EqualTo(3), "First pop should be 3 (LIFO)");
-        Assert.That(cloneItems[1].Id, Is.EqualTo(2), "Second pop should be 2 (LIFO)");
-        Assert.That(cloneItems[2].Id, Is.EqualTo(1), "Third pop should be 1 (LIFO)");
+        await Assert.That(cloneItems[0].Id).IsEqualTo(3).Because("First pop should be 3 (LIFO)");
+        await Assert.That(cloneItems[1].Id).IsEqualTo(2).Because("Second pop should be 2 (LIFO)");
+        await Assert.That(cloneItems[2].Id).IsEqualTo(1).Because("Third pop should be 1 (LIFO)");
 
         // Verify deep clone - modifying clone shouldn't affect original
         cloneItems[0].Name = "Modified";
-        Assert.That(original.Items.Peek().Name, Is.EqualTo("Third"));
+        await Assert.That(original.Items.Peek().Name).IsEqualTo("Third");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Stack_Empty_Should_Clone_Correctly()
+    public async Task Stack_Empty_Should_Clone_Correctly()
     {
         StackContainer original = new StackContainer { Items = new Stack<MutableItem>() };
         StackContainer clone = original.FastDeepClone();
         
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items!.Count, Is.EqualTo(0));
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items!.Count).IsEqualTo(0);
     }
-
-    #endregion
-
-    #region Queue Tests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Queue_With_Complex_Elements_Should_Preserve_FIFO_Order()
+    public async Task Queue_With_Complex_Elements_Should_Preserve_FIFO_Order()
     {
         // Arrange
         QueueContainer original = new QueueContainer
@@ -391,31 +379,27 @@ public class SourceGeneratorCollectionTests
         QueueContainer clone = original.FastDeepClone();
 
         // Assert - verify FIFO order (1, 2, 3)
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items!.Count, Is.EqualTo(3));
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items!.Count).IsEqualTo(3);
 
         MutableItem[] cloneItems = clone.Items.ToArray();
-        Assert.That(cloneItems[0].Id, Is.EqualTo(1), "First dequeue should be 1 (FIFO)");
-        Assert.That(cloneItems[1].Id, Is.EqualTo(2), "Second dequeue should be 2 (FIFO)");
-        Assert.That(cloneItems[2].Id, Is.EqualTo(3), "Third dequeue should be 3 (FIFO)");
+        await Assert.That(cloneItems[0].Id).IsEqualTo(1).Because("First dequeue should be 1 (FIFO)");
+        await Assert.That(cloneItems[1].Id).IsEqualTo(2).Because("Second dequeue should be 2 (FIFO)");
+        await Assert.That(cloneItems[2].Id).IsEqualTo(3).Because("Third dequeue should be 3 (FIFO)");
 
         // Verify deep clone
         cloneItems[0].Name = "Modified";
-        Assert.That(original.Items.Peek().Name, Is.EqualTo("First"));
+        await Assert.That(original.Items.Peek().Name).IsEqualTo("First");
     }
-
-    #endregion
-
-    #region LinkedList Tests
-
+    
     [Test]
     [SourceGeneratorCompatible]
-    public void LinkedList_With_Complex_Elements_Should_Preserve_Order()
+    public async Task LinkedList_With_Complex_Elements_Should_Preserve_Order()
     {
         // Arrange
         LinkedListContainer original = new LinkedListContainer
         {
-            Items = new LinkedList<MutableItem>()
+            Items = []
         };
         original.Items.AddLast(new MutableItem { Id = 1, Name = "First" });
         original.Items.AddLast(new MutableItem { Id = 2, Name = "Second" });
@@ -425,41 +409,37 @@ public class SourceGeneratorCollectionTests
         LinkedListContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items!.Count, Is.EqualTo(3));
-        Assert.That(clone.Items.First!.Value.Id, Is.EqualTo(1));
-        Assert.That(clone.Items.Last!.Value.Id, Is.EqualTo(3));
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items!.Count).IsEqualTo(3);
+        await Assert.That(clone.Items.First!.Value.Id).IsEqualTo(1);
+        await Assert.That(clone.Items.Last!.Value.Id).IsEqualTo(3);
 
         // Verify deep clone
         clone.Items.First.Value.Name = "Modified";
-        Assert.That(original.Items.First!.Value.Name, Is.EqualTo("First"));
+        await Assert.That(original.Items.First!.Value.Name).IsEqualTo("First");
     }
-
-    #endregion
-
-    #region Sorted Collection Tests
-
+    
     [Test]
     [SourceGeneratorCompatible]
-    public void SortedSet_Should_Maintain_Sorted_Order()
+    public async Task SortedSet_Should_Maintain_Sorted_Order()
     {
         // Arrange - insert out of order
         SortedSetContainer original = new SortedSetContainer
         {
-            Numbers = new SortedSet<int> { 3, 1, 4, 1, 5, 9, 2, 6 }
+            Numbers = [3, 1, 4, 1, 5, 9, 2, 6]
         };
 
         // Act
         SortedSetContainer clone = original.FastDeepClone();
 
         // Assert - should be sorted: 1, 2, 3, 4, 5, 6, 9
-        Assert.That(clone!.Numbers, Is.Not.Null);
-        Assert.That(clone.Numbers!.ToArray(), Is.EqualTo(new[] { 1, 2, 3, 4, 5, 6, 9 }));
+        await Assert.That(clone!.Numbers).IsNotNull();
+        await Assert.That(clone.Numbers!.ToArray().SequenceEqual([1, 2, 3, 4, 5, 6, 9])).IsTrue();
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void SortedDictionary_Should_Maintain_Key_Order_And_Deep_Clone_Values()
+    public async Task SortedDictionary_Should_Maintain_Key_Order_And_Deep_Clone_Values()
     {
         // Arrange
         SortedDictionaryContainer original = new SortedDictionaryContainer
@@ -476,18 +456,18 @@ public class SourceGeneratorCollectionTests
         SortedDictionaryContainer clone = original.FastDeepClone();
 
         // Assert - keys should be in order: 1, 2, 3
-        Assert.That(clone!.Items, Is.Not.Null);
+        await Assert.That(clone!.Items).IsNotNull();
         int[] keys = clone.Items!.Keys.ToArray();
-        Assert.That(keys, Is.EqualTo(new[] { 1, 2, 3 }));
+        await Assert.That(keys.SequenceEqual([1, 2, 3])).IsTrue();
 
         // Verify deep clone
         clone.Items[1].Name = "Modified";
-        Assert.That(original.Items[1].Name, Is.EqualTo("One"));
+        await Assert.That(original.Items[1].Name).IsEqualTo("One");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void SortedList_Should_Maintain_Key_Order_And_Deep_Clone_Values()
+    public async Task SortedList_Should_Maintain_Key_Order_And_Deep_Clone_Values()
     {
         // Arrange
         SortedListContainer original = new SortedListContainer
@@ -504,22 +484,18 @@ public class SourceGeneratorCollectionTests
         SortedListContainer clone = original.FastDeepClone();
 
         // Assert - keys should be in order: alpha, bravo, charlie
-        Assert.That(clone!.Items, Is.Not.Null);
+        await Assert.That(clone!.Items).IsNotNull();
         string[] keys = clone.Items!.Keys.ToArray();
-        Assert.That(keys, Is.EqualTo(new[] { "alpha", "bravo", "charlie" }));
+        await Assert.That(keys.SequenceEqual(new[] { "alpha", "bravo", "charlie" })).IsTrue();
 
         // Verify deep clone
         clone.Items["alpha"].Name = "Modified";
-        Assert.That(original.Items["alpha"].Name, Is.EqualTo("Alpha"));
+        await Assert.That(original.Items["alpha"].Name).IsEqualTo("Alpha");
     }
-
-    #endregion
-
-    #region Concurrent Collection Tests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ConcurrentStack_With_Complex_Elements_Should_Preserve_Order()
+    public async Task ConcurrentStack_With_Complex_Elements_Should_Preserve_Order()
     {
         // Arrange
         ConcurrentStackContainer original = new ConcurrentStackContainer
@@ -534,21 +510,21 @@ public class SourceGeneratorCollectionTests
         ConcurrentStackContainer clone = original.FastDeepClone();
 
         // Assert - LIFO order
-        Assert.That(clone!.Items, Is.Not.Null);
+        await Assert.That(clone!.Items).IsNotNull();
         MutableItem[] cloneItems = clone.Items!.ToArray();
-        Assert.That(cloneItems[0].Id, Is.EqualTo(3));
-        Assert.That(cloneItems[1].Id, Is.EqualTo(2));
-        Assert.That(cloneItems[2].Id, Is.EqualTo(1));
+        await Assert.That(cloneItems[0].Id).IsEqualTo(3);
+        await Assert.That(cloneItems[1].Id).IsEqualTo(2);
+        await Assert.That(cloneItems[2].Id).IsEqualTo(1);
 
         // Verify deep clone
         cloneItems[0].Name = "Modified";
         original.Items.TryPeek(out MutableItem? originalTop);
-        Assert.That(originalTop!.Name, Is.EqualTo("Third"));
+        await Assert.That(originalTop!.Name).IsEqualTo("Third");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ConcurrentQueue_With_Complex_Elements_Should_Preserve_Order()
+    public async Task ConcurrentQueue_With_Complex_Elements_Should_Preserve_Order()
     {
         // Arrange
         ConcurrentQueueContainer original = new ConcurrentQueueContainer
@@ -563,16 +539,16 @@ public class SourceGeneratorCollectionTests
         ConcurrentQueueContainer clone = original.FastDeepClone();
 
         // Assert - FIFO order
-        Assert.That(clone!.Items, Is.Not.Null);
+        await Assert.That(clone!.Items).IsNotNull();
         MutableItem[] cloneItems = clone.Items!.ToArray();
-        Assert.That(cloneItems[0].Id, Is.EqualTo(1));
-        Assert.That(cloneItems[1].Id, Is.EqualTo(2));
-        Assert.That(cloneItems[2].Id, Is.EqualTo(3));
+        await Assert.That(cloneItems[0].Id).IsEqualTo(1);
+        await Assert.That(cloneItems[1].Id).IsEqualTo(2);
+        await Assert.That(cloneItems[2].Id).IsEqualTo(3);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ConcurrentDictionary_With_Complex_Values_Should_Deep_Clone()
+    public async Task ConcurrentDictionary_With_Complex_Values_Should_Deep_Clone()
     {
         // Arrange
         ConcurrentDictionaryContainer original = new ConcurrentDictionaryContainer
@@ -586,39 +562,39 @@ public class SourceGeneratorCollectionTests
         ConcurrentDictionaryContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items!.Count, Is.EqualTo(2));
-        Assert.That(clone.Items[1].Name, Is.EqualTo("One"));
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items!.Count).IsEqualTo(2);
+        await Assert.That(clone.Items[1].Name).IsEqualTo("One");
 
         // Verify deep clone
         clone.Items[1].Name = "Modified";
-        Assert.That(original.Items[1].Name, Is.EqualTo("One"));
+        await Assert.That(original.Items[1].Name).IsEqualTo("One");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ConcurrentBag_With_Complex_Elements_Should_Clone()
+    public async Task ConcurrentBag_With_Complex_Elements_Should_Clone()
     {
         // Arrange
         ConcurrentBagContainer original = new ConcurrentBagContainer
         {
-            Items = new ConcurrentBag<MutableItem>
-            {
+            Items =
+            [
                 new MutableItem { Id = 1, Name = "One" },
                 new MutableItem { Id = 2, Name = "Two" },
                 new MutableItem { Id = 3, Name = "Three" }
-            }
+            ]
         };
 
         // Act
         ConcurrentBagContainer clone = original.FastDeepClone();
 
         // Assert - ConcurrentBag doesn't guarantee order, just check contents
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items!.Count, Is.EqualTo(3));
-        
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items!.Count).IsEqualTo(3);
+
         int[] cloneIds = clone.Items.Select(x => x.Id).OrderBy(x => x).ToArray();
-        Assert.That(cloneIds, Is.EqualTo(new[] { 1, 2, 3 }));
+        await Assert.That(cloneIds).IsEquivalentTo([1, 2, 3]);
 
         // Verify deep clone
         MutableItem firstCloneItem = clone.Items.First();
@@ -626,16 +602,12 @@ public class SourceGeneratorCollectionTests
         firstCloneItem.Name = "Modified";
         
         MutableItem originalItem = original.Items.First(x => x.Id == originalId);
-        Assert.That(originalItem.Name, Is.Not.EqualTo("Modified"));
+        await Assert.That(originalItem.Name).IsNotEqualTo("Modified");
     }
-
-    #endregion
-
-    #region Immutable Collection Tests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ImmutableList_With_Complex_Elements_Should_Deep_Clone()
+    public async Task ImmutableList_With_Complex_Elements_Should_Deep_Clone()
     {
         // Arrange
         ImmutableListContainer original = new ImmutableListContainer
@@ -650,43 +622,44 @@ public class SourceGeneratorCollectionTests
         ImmutableListContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items!.Count, Is.EqualTo(2));
-        Assert.That(clone.Items[0].Id, Is.EqualTo(1));
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items!.Count).IsEqualTo(2);
+        await Assert.That(clone.Items[0].Id).IsEqualTo(1);
 
         // Verify deep clone
         clone.Items[0].Name = "Modified";
-        Assert.That(original.Items[0].Name, Is.EqualTo("One"));
+        await Assert.That(original.Items[0].Name).IsEqualTo("One");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ImmutableArray_With_Complex_Elements_Should_Deep_Clone()
+    public async Task ImmutableArray_With_Complex_Elements_Should_Deep_Clone()
     {
         // Arrange
         ImmutableArrayContainer original = new ImmutableArrayContainer
         {
-            Items = ImmutableArray.Create(
+            Items =
+            [
                 new MutableItem { Id = 1, Name = "One" },
                 new MutableItem { Id = 2, Name = "Two" }
-            )
+            ]
         };
 
         // Act
         ImmutableArrayContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone!.Items.Length, Is.EqualTo(2));
-        Assert.That(clone.Items[0].Id, Is.EqualTo(1));
+        await Assert.That(clone!.Items.Length).IsEqualTo(2);
+        await Assert.That(clone.Items[0].Id).IsEqualTo(1);
 
         // Verify deep clone
         clone.Items[0].Name = "Modified";
-        Assert.That(original.Items[0].Name, Is.EqualTo("One"));
+        await Assert.That(original.Items[0].Name).IsEqualTo("One");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ImmutableStack_With_Complex_Elements_Should_Preserve_Order()
+    public async Task ImmutableStack_With_Complex_Elements_Should_Preserve_Order()
     {
         // Arrange - Push creates stack in reverse order (last push = top)
         ImmutableStackContainer original = new ImmutableStackContainer
@@ -701,20 +674,20 @@ public class SourceGeneratorCollectionTests
         ImmutableStackContainer clone = original.FastDeepClone();
 
         // Assert - LIFO: 3 should be on top
-        Assert.That(clone!.Items, Is.Not.Null);
+        await Assert.That(clone!.Items).IsNotNull();
         MutableItem[] cloneArray = clone.Items!.ToArray();
-        Assert.That(cloneArray[0].Id, Is.EqualTo(3), "Top should be 3");
-        Assert.That(cloneArray[1].Id, Is.EqualTo(2));
-        Assert.That(cloneArray[2].Id, Is.EqualTo(1));
+        await Assert.That(cloneArray[0].Id).IsEqualTo(3).Because("Top should be 3");
+        await Assert.That(cloneArray[1].Id).IsEqualTo(2);
+        await Assert.That(cloneArray[2].Id).IsEqualTo(1);
 
         // Verify deep clone
         cloneArray[0].Name = "Modified";
-        Assert.That(original.Items.Peek().Name, Is.EqualTo("Third"));
+        await Assert.That(original.Items.Peek().Name).IsEqualTo("Third");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ImmutableQueue_With_Complex_Elements_Should_Preserve_Order()
+    public async Task ImmutableQueue_With_Complex_Elements_Should_Preserve_Order()
     {
         // Arrange
         ImmutableQueueContainer original = new ImmutableQueueContainer
@@ -729,20 +702,20 @@ public class SourceGeneratorCollectionTests
         ImmutableQueueContainer clone = original.FastDeepClone();
 
         // Assert - FIFO order
-        Assert.That(clone!.Items, Is.Not.Null);
+        await Assert.That(clone!.Items).IsNotNull();
         MutableItem[] cloneArray = clone.Items!.ToArray();
-        Assert.That(cloneArray[0].Id, Is.EqualTo(1), "First should be 1 (FIFO)");
-        Assert.That(cloneArray[1].Id, Is.EqualTo(2));
-        Assert.That(cloneArray[2].Id, Is.EqualTo(3));
+        await Assert.That(cloneArray[0].Id).IsEqualTo(1).Because("First should be 1 (FIFO)");
+        await Assert.That(cloneArray[1].Id).IsEqualTo(2);
+        await Assert.That(cloneArray[2].Id).IsEqualTo(3);
 
         // Verify deep clone
         cloneArray[0].Name = "Modified";
-        Assert.That(original.Items.Peek().Name, Is.EqualTo("First"));
+        await Assert.That(original.Items.Peek().Name).IsEqualTo("First");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ImmutableHashSet_With_Primitives_Returns_Same_Reference()
+    public async Task ImmutableHashSet_With_Primitives_Returns_Same_Reference()
     {
         // Arrange
         ImmutableHashSetPrimitiveContainer original = new ImmutableHashSetPrimitiveContainer
@@ -754,14 +727,13 @@ public class SourceGeneratorCollectionTests
         ImmutableHashSetPrimitiveContainer clone = original.FastDeepClone();
 
         // Assert - optimization: should return same reference for immutable with immutable elements
-        Assert.That(clone!.Numbers, Is.Not.Null);
-        Assert.That(clone.Numbers, Is.SameAs(original.Numbers), 
-            "Immutable collection with immutable elements should return same reference");
+        await Assert.That(clone!.Numbers).IsNotNull();
+        await Assert.That(clone.Numbers).IsSameReferenceAs(original.Numbers).Because("Immutable collection with immutable elements should return same reference");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ImmutableDictionary_With_Primitives_Returns_Same_Reference()
+    public async Task ImmutableDictionary_With_Primitives_Returns_Same_Reference()
     {
         // Arrange
         ImmutableDictionaryPrimitiveContainer original = new ImmutableDictionaryPrimitiveContainer
@@ -775,14 +747,13 @@ public class SourceGeneratorCollectionTests
         ImmutableDictionaryPrimitiveContainer clone = original.FastDeepClone();
 
         // Assert - optimization: should return same reference
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items, Is.SameAs(original.Items),
-            "Immutable dictionary with immutable keys and values should return same reference");
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items).IsSameReferenceAs(original.Items).Because("Immutable dictionary with immutable keys and values should return same reference");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ImmutableDictionary_With_Complex_Values_Should_Deep_Clone()
+    public async Task ImmutableDictionary_With_Complex_Values_Should_Deep_Clone()
     {
         // Arrange
         ImmutableDictionaryComplexContainer original = new ImmutableDictionaryComplexContainer
@@ -796,17 +767,17 @@ public class SourceGeneratorCollectionTests
         ImmutableDictionaryComplexContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items!.Count, Is.EqualTo(2));
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items!.Count).IsEqualTo(2);
 
         // Verify deep clone - values should be different instances
         clone.Items[1].Name = "Modified";
-        Assert.That(original.Items[1].Name, Is.EqualTo("One"));
+        await Assert.That(original.Items[1].Name).IsEqualTo("One");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ImmutableSortedSet_Should_Maintain_Order()
+    public async Task ImmutableSortedSet_Should_Maintain_Order()
     {
         // Arrange
         ImmutableSortedSetContainer original = new ImmutableSortedSetContainer
@@ -818,16 +789,16 @@ public class SourceGeneratorCollectionTests
         ImmutableSortedSetContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone!.Numbers, Is.Not.Null);
-        Assert.That(clone.Numbers!.ToArray(), Is.EqualTo(new[] { 1, 2, 3, 4, 5 }));
-        
+        await Assert.That(clone!.Numbers).IsNotNull();
+        await Assert.That(clone.Numbers!.ToArray().SequenceEqual([1, 2, 3, 4, 5])).IsTrue();
+
         // Should be same reference since primitives
-        Assert.That(clone.Numbers, Is.SameAs(original.Numbers));
+        await Assert.That(clone.Numbers).IsSameReferenceAs(original.Numbers);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ImmutableSortedDictionary_Should_Maintain_Order_And_Deep_Clone()
+    public async Task ImmutableSortedDictionary_Should_Maintain_Order_And_Deep_Clone()
     {
         // Arrange
         ImmutableSortedDictionaryContainer original = new ImmutableSortedDictionaryContainer
@@ -842,22 +813,18 @@ public class SourceGeneratorCollectionTests
         ImmutableSortedDictionaryContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone!.Items, Is.Not.Null);
+        await Assert.That(clone!.Items).IsNotNull();
         int[] keys = clone.Items!.Keys.ToArray();
-        Assert.That(keys, Is.EqualTo(new[] { 1, 2, 3 }));
+        await Assert.That(keys.SequenceEqual([1, 2, 3])).IsTrue();
 
         // Verify deep clone
         clone.Items[1].Name = "Modified";
-        Assert.That(original.Items[1].Name, Is.EqualTo("One"));
+        await Assert.That(original.Items[1].Name).IsEqualTo("One");
     }
-
-    #endregion
-
-    #region ReadOnly Collection Tests
-
+    
     [Test]
     [SourceGeneratorCompatible]
-    public void ReadOnlyCollection_With_Complex_Elements_Should_Deep_Clone()
+    public async Task ReadOnlyCollection_With_Complex_Elements_Should_Deep_Clone()
     {
         // Arrange
         ReadOnlyCollectionContainer original = new ReadOnlyCollectionContainer
@@ -873,18 +840,18 @@ public class SourceGeneratorCollectionTests
         ReadOnlyCollectionContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
-        Assert.That(clone.Items!.Count, Is.EqualTo(2));
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
+        await Assert.That(clone.Items!.Count).IsEqualTo(2);
 
         // Verify deep clone
         clone.Items[0].Name = "Modified";
-        Assert.That(original.Items[0].Name, Is.EqualTo("One"));
+        await Assert.That(original.Items[0].Name).IsEqualTo("One");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ReadOnlyDictionary_With_Complex_Values_Should_Deep_Clone()
+    public async Task ReadOnlyDictionary_With_Complex_Values_Should_Deep_Clone()
     {
         // Arrange
         ReadOnlyDictionaryContainer original = new ReadOnlyDictionaryContainer
@@ -900,114 +867,102 @@ public class SourceGeneratorCollectionTests
         ReadOnlyDictionaryContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
 
         // Verify deep clone
         clone.Items[1].Name = "Modified";
-        Assert.That(original.Items[1].Name, Is.EqualTo("One"));
+        await Assert.That(original.Items[1].Name).IsEqualTo("One");
     }
-
-    #endregion
-
-    #region Observable Collection Tests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ObservableCollection_With_Complex_Elements_Should_Deep_Clone()
+    public async Task ObservableCollection_With_Complex_Elements_Should_Deep_Clone()
     {
         // Arrange
         ObservableCollectionContainer original = new ObservableCollectionContainer
         {
-            Items = new ObservableCollection<MutableItem>
-            {
+            Items =
+            [
                 new MutableItem { Id = 1, Name = "One" },
                 new MutableItem { Id = 2, Name = "Two" }
-            }
+            ]
         };
 
         // Act
         ObservableCollectionContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
-        Assert.That(clone.Items!.Count, Is.EqualTo(2));
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
+        await Assert.That(clone.Items!.Count).IsEqualTo(2);
 
         // Verify order preserved
-        Assert.That(clone.Items[0].Id, Is.EqualTo(1));
-        Assert.That(clone.Items[1].Id, Is.EqualTo(2));
+        await Assert.That(clone.Items[0].Id).IsEqualTo(1);
+        await Assert.That(clone.Items[1].Id).IsEqualTo(2);
 
         // Verify deep clone
         clone.Items[0].Name = "Modified";
-        Assert.That(original.Items[0].Name, Is.EqualTo("One"));
+        await Assert.That(original.Items[0].Name).IsEqualTo("One");
     }
-
-    #endregion
-
-    #region HashSet Tests
-
+    
     [Test]
     [SourceGeneratorCompatible]
-    public void HashSet_With_Complex_Elements_Should_Deep_Clone()
+    public async Task HashSet_With_Complex_Elements_Should_Deep_Clone()
     {
         // Arrange
         MutableItem item1 = new MutableItem { Id = 1, Name = "One" };
         MutableItem item2 = new MutableItem { Id = 2, Name = "Two" };
         HashSetContainer original = new HashSetContainer
         {
-            Items = new HashSet<MutableItem> { item1, item2 }
+            Items = [item1, item2]
         };
 
         // Act
         HashSetContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items!.Count, Is.EqualTo(2));
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items!.Count).IsEqualTo(2);
 
         // Verify deep clone - get an item and modify it
         MutableItem cloneItem = clone.Items.First(x => x.Id == 1);
         cloneItem.Name = "Modified";
-        Assert.That(item1.Name, Is.EqualTo("One"));
+        await Assert.That(item1.Name).IsEqualTo("One");
     }
-
-    #endregion
-
-    #region Array Tests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void JaggedArray_With_Complex_Elements_Should_Deep_Clone()
+    public async Task JaggedArray_With_Complex_Elements_Should_Deep_Clone()
     {
         // Arrange
         JaggedArrayContainer original = new JaggedArrayContainer
         {
-            Items = new[]
-            {
-                new[] { new MutableItem { Id = 1, Name = "1-1" }, new MutableItem { Id = 2, Name = "1-2" } },
-                new[] { new MutableItem { Id = 3, Name = "2-1" } }
-            }
+            Items =
+            [
+                [new MutableItem { Id = 1, Name = "1-1" }, new MutableItem { Id = 2, Name = "1-2" }],
+                [new MutableItem { Id = 3, Name = "2-1" }]
+            ]
         };
 
         // Act
         JaggedArrayContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
-        Assert.That(clone.Items!.Length, Is.EqualTo(2));
-        Assert.That(clone.Items[0].Length, Is.EqualTo(2));
-        Assert.That(clone.Items[1].Length, Is.EqualTo(1));
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
+        await Assert.That(clone.Items!.Length).IsEqualTo(2);
+        await Assert.That(clone.Items[0].Length).IsEqualTo(2);
+        await Assert.That(clone.Items[1].Length).IsEqualTo(1);
 
         // Verify deep clone
         clone.Items[0][0].Name = "Modified";
-        Assert.That(original.Items[0][0].Name, Is.EqualTo("1-1"));
+        await Assert.That(original.Items[0][0].Name).IsEqualTo("1-1");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void MultiDimArray_With_Complex_Elements_Should_Deep_Clone()
+    public async Task MultiDimArray_With_Complex_Elements_Should_Deep_Clone()
     {
         // Arrange
         MultiDimArrayContainer original = new MultiDimArrayContainer
@@ -1025,20 +980,20 @@ public class SourceGeneratorCollectionTests
         MultiDimArrayContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
-        Assert.That(clone.Items!.GetLength(0), Is.EqualTo(2));
-        Assert.That(clone.Items.GetLength(1), Is.EqualTo(3));
-        Assert.That(clone.Items[1, 2].Id, Is.EqualTo(6));
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
+        await Assert.That(clone.Items!.GetLength(0)).IsEqualTo(2);
+        await Assert.That(clone.Items.GetLength(1)).IsEqualTo(3);
+        await Assert.That(clone.Items[1, 2].Id).IsEqualTo(6);
 
         // Verify deep clone
         clone.Items[0, 0].Name = "Modified";
-        Assert.That(original.Items[0, 0].Name, Is.EqualTo("0-0"));
+        await Assert.That(original.Items[0, 0].Name).IsEqualTo("0-0");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ThreeDimArray_With_Primitives_Should_Clone()
+    public async Task ThreeDimArray_With_Primitives_Should_Clone()
     {
         // Arrange
         ThreeDimArrayContainer original = new ThreeDimArrayContainer
@@ -1054,22 +1009,18 @@ public class SourceGeneratorCollectionTests
         ThreeDimArrayContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone!.Numbers, Is.Not.Null);
-        Assert.That(clone.Numbers, Is.Not.SameAs(original.Numbers));
-        Assert.That(clone.Numbers![1, 2, 3], Is.EqualTo(123));
+        await Assert.That(clone!.Numbers).IsNotNull();
+        await Assert.That(clone.Numbers).IsNotSameReferenceAs(original.Numbers);
+        await Assert.That(clone.Numbers![1, 2, 3]).IsEqualTo(123);
 
         // Verify independence
         clone.Numbers[0, 0, 0] = 999;
-        Assert.That(original.Numbers[0, 0, 0], Is.EqualTo(0));
+        await Assert.That(original.Numbers[0, 0, 0]).IsEqualTo(0);
     }
-
-    #endregion
-
-    #region Nested Collection Tests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void NestedCollections_List_Of_Stacks_Should_Deep_Clone()
+    public async Task NestedCollections_List_Of_Stacks_Should_Deep_Clone()
     {
         // Arrange
         Stack<MutableItem> stack1 = new Stack<MutableItem>();
@@ -1081,45 +1032,41 @@ public class SourceGeneratorCollectionTests
 
         NestedCollectionContainer original = new NestedCollectionContainer
         {
-            StackList = new List<Stack<MutableItem>> { stack1, stack2 }
+            StackList = [stack1, stack2]
         };
 
         // Act
         NestedCollectionContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone!.StackList, Is.Not.Null);
-        Assert.That(clone.StackList!.Count, Is.EqualTo(2));
-        Assert.That(clone.StackList[0].Count, Is.EqualTo(2));
-        Assert.That(clone.StackList[1].Count, Is.EqualTo(1));
+        await Assert.That(clone!.StackList).IsNotNull();
+        await Assert.That(clone.StackList!.Count).IsEqualTo(2);
+        await Assert.That(clone.StackList[0].Count).IsEqualTo(2);
+        await Assert.That(clone.StackList[1].Count).IsEqualTo(1);
 
         // Verify LIFO order preserved in stacks
-        Assert.That(clone.StackList[0].Peek().Id, Is.EqualTo(2), "Top of stack1 should be 2");
+        await Assert.That(clone.StackList[0].Peek().Id).IsEqualTo(2).Because("Top of stack1 should be 2");
 
         // Verify deep clone
         clone.StackList[0].Peek().Name = "Modified";
-        Assert.That(stack1.Peek().Name, Is.EqualTo("S1-2"));
+        await Assert.That(stack1.Peek().Name).IsEqualTo("S1-2");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Dictionary_With_List_Values_Should_Deep_Clone()
+    public async Task Dictionary_With_List_Values_Should_Deep_Clone()
     {
         // Arrange
         DictionaryWithCollectionValuesContainer original = new DictionaryWithCollectionValuesContainer
         {
             Items = new Dictionary<string, List<MutableItem>>
             {
-                { "group1", new List<MutableItem> 
-                    { 
+                { "group1", [
                         new MutableItem { Id = 1, Name = "G1-1" },
                         new MutableItem { Id = 2, Name = "G1-2" }
-                    } 
+                    ]
                 },
-                { "group2", new List<MutableItem>
-                    {
-                        new MutableItem { Id = 3, Name = "G2-1" }
-                    }
+                { "group2", [new MutableItem { Id = 3, Name = "G2-1" }]
                 }
             }
         };
@@ -1128,23 +1075,19 @@ public class SourceGeneratorCollectionTests
         DictionaryWithCollectionValuesContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items!.Count, Is.EqualTo(2));
-        Assert.That(clone.Items["group1"].Count, Is.EqualTo(2));
-        Assert.That(clone.Items["group2"].Count, Is.EqualTo(1));
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items!.Count).IsEqualTo(2);
+        await Assert.That(clone.Items["group1"].Count).IsEqualTo(2);
+        await Assert.That(clone.Items["group2"].Count).IsEqualTo(1);
 
         // Verify deep clone of nested items
         clone.Items["group1"][0].Name = "Modified";
-        Assert.That(original.Items["group1"][0].Name, Is.EqualTo("G1-1"));
+        await Assert.That(original.Items["group1"][0].Name).IsEqualTo("G1-1");
     }
-
-    #endregion
-
-    #region Null Handling Tests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Null_Collections_Should_Remain_Null()
+    public async Task Null_Collections_Should_Remain_Null()
     {
         // Arrange
         StackContainer original = new StackContainer { Items = null };
@@ -1153,12 +1096,12 @@ public class SourceGeneratorCollectionTests
         StackContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone!.Items, Is.Null);
+        await Assert.That(clone!.Items).IsNull();
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Collection_With_Null_Elements_Should_Clone_Correctly()
+    public async Task Collection_With_Null_Elements_Should_Clone_Correctly()
     {
         // Arrange
         QueueContainer original = new QueueContainer
@@ -1173,20 +1116,16 @@ public class SourceGeneratorCollectionTests
         QueueContainer clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone!.Items!.Count, Is.EqualTo(3));
+        await Assert.That(clone!.Items!.Count).IsEqualTo(3);
         MutableItem[] cloneArray = clone.Items.ToArray();
-        Assert.That(cloneArray[0].Id, Is.EqualTo(1));
-        Assert.That(cloneArray[1], Is.Null);
-        Assert.That(cloneArray[2].Id, Is.EqualTo(3));
+        await Assert.That(cloneArray[0].Id).IsEqualTo(1);
+        await Assert.That(cloneArray[1]).IsNull();
+        await Assert.That(cloneArray[2].Id).IsEqualTo(3);
     }
-
-    #endregion
-
-    #region ICollection/IEnumerable/IReadOnlyCollection Interface Tests (#28)
-
+    
     [Test]
     [SourceGeneratorCompatible]
-    public void ICollection_With_Complex_Elements_Should_Deep_Clone()
+    public async Task ICollection_With_Complex_Elements_Should_Deep_Clone()
     {
         ICollectionContainer original = new ICollectionContainer
         {
@@ -1200,32 +1139,32 @@ public class SourceGeneratorCollectionTests
 
         ICollectionContainer clone = original.FastDeepClone();
 
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
-        Assert.That(clone.Items!.Count, Is.EqualTo(3));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
+        await Assert.That(clone.Items!.Count).IsEqualTo(3);
 
         List<MutableItem> cloneList = clone.Items.ToList();
-        Assert.That(cloneList[0].Id, Is.EqualTo(1));
-        Assert.That(cloneList[1].Id, Is.EqualTo(2));
-        Assert.That(cloneList[2].Id, Is.EqualTo(3));
+        await Assert.That(cloneList[0].Id).IsEqualTo(1);
+        await Assert.That(cloneList[1].Id).IsEqualTo(2);
+        await Assert.That(cloneList[2].Id).IsEqualTo(3);
 
         cloneList[0].Name = "Modified";
-        Assert.That(original.Items.First().Name, Is.EqualTo("One"));
+        await Assert.That(original.Items.First().Name).IsEqualTo("One");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ICollection_Null_Should_Remain_Null()
+    public async Task ICollection_Null_Should_Remain_Null()
     {
         ICollectionContainer original = new ICollectionContainer { Items = null };
         ICollectionContainer clone = original.FastDeepClone();
-        Assert.That(clone!.Items, Is.Null);
+        await Assert.That(clone!.Items).IsNull();
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void IEnumerable_With_Complex_Elements_Should_Deep_Clone()
+    public async Task IEnumerable_With_Complex_Elements_Should_Deep_Clone()
     {
         IEnumerableContainer original = new IEnumerableContainer
         {
@@ -1238,22 +1177,22 @@ public class SourceGeneratorCollectionTests
 
         IEnumerableContainer clone = original.FastDeepClone();
 
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
 
         List<MutableItem> cloneList = clone.Items!.ToList();
-        Assert.That(cloneList.Count, Is.EqualTo(2));
-        Assert.That(cloneList[0].Id, Is.EqualTo(10));
-        Assert.That(cloneList[1].Id, Is.EqualTo(20));
+        await Assert.That(cloneList.Count).IsEqualTo(2);
+        await Assert.That(cloneList[0].Id).IsEqualTo(10);
+        await Assert.That(cloneList[1].Id).IsEqualTo(20);
 
         cloneList[0].Name = "Modified";
-        Assert.That(original.Items.First().Name, Is.EqualTo("Alpha"));
+        await Assert.That(original.Items.First().Name).IsEqualTo("Alpha");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void IReadOnlyCollection_With_Complex_Elements_Should_Deep_Clone()
+    public async Task IReadOnlyCollection_With_Complex_Elements_Should_Deep_Clone()
     {
         IReadOnlyCollectionContainer original = new IReadOnlyCollectionContainer
         {
@@ -1267,44 +1206,44 @@ public class SourceGeneratorCollectionTests
 
         IReadOnlyCollectionContainer clone = original.FastDeepClone();
 
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
-        Assert.That(clone.Items!.Count, Is.EqualTo(3));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
+        await Assert.That(clone.Items!.Count).IsEqualTo(3);
 
         List<MutableItem> cloneList = clone.Items.ToList();
-        Assert.That(cloneList[0].Id, Is.EqualTo(100));
-        Assert.That(cloneList[2].Id, Is.EqualTo(300));
+        await Assert.That(cloneList[0].Id).IsEqualTo(100);
+        await Assert.That(cloneList[2].Id).IsEqualTo(300);
 
         cloneList[0].Name = "Modified";
-        Assert.That(original.Items.First().Name, Is.EqualTo("X"));
+        await Assert.That(original.Items.First().Name).IsEqualTo("X");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ConcreteClass_Only_IEnumerable_Should_Deep_Clone()
+    public async Task ConcreteClass_Only_IEnumerable_Should_Deep_Clone()
     {
         ConcreteEnumerableOnlyContainer original = new ConcreteEnumerableOnlyContainer
         {
-            Items = new EnumerableOnlyCollection<MutableItem>()
+            Items =
+            [
+                new MutableItem { Id = 1, Name = "One" },
+                new MutableItem { Id = 2, Name = "Two" }
+            ]
         };
-        original.Items.Add(new MutableItem { Id = 1, Name = "One" });
-        original.Items.Add(new MutableItem { Id = 2, Name = "Two" });
 
         ConcreteEnumerableOnlyContainer clone = original.FastDeepClone();
 
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
 
         List<MutableItem> cloneList = clone.Items!.ToList();
-        Assert.That(cloneList.Count, Is.EqualTo(2));
-        Assert.That(cloneList[0].Id, Is.EqualTo(1));
-        Assert.That(cloneList[1].Id, Is.EqualTo(2));
+        await Assert.That(cloneList.Count).IsEqualTo(2);
+        await Assert.That(cloneList[0].Id).IsEqualTo(1);
+        await Assert.That(cloneList[1].Id).IsEqualTo(2);
 
         cloneList[0].Name = "Modified";
-        Assert.That(original.Items.First().Name, Is.EqualTo("One"));
+        await Assert.That(original.Items.First().Name).IsEqualTo("One");
     }
-
-    #endregion
 }

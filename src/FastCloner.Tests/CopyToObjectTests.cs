@@ -2,15 +2,14 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.Threading.Tasks;
+using FastCloner.Code;
 
 namespace FastCloner.Tests;
-
-[TestFixture(Low)]
-[TestFixture(High)]
 public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     [Test]
-    public void InterfaceTest()
+    public async Task InterfaceTest()
     {
         SampleInterfaceClsWithProp source = new SampleInterfaceClsWithProp
         {
@@ -24,7 +23,7 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         };
 
         SampleInterfaceClsWithProp to = source.DeepClone();
-        Assert.That(ReferenceEquals(source.ActivityData, to.ActivityData), Is.EqualTo(false));
+        await Assert.That(ReferenceEquals(source.ActivityData, to.ActivityData)).IsEqualTo(false);
     }
 
     public class KeyClass
@@ -33,7 +32,7 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
 
     [Test]
-    public void DictionaryBrokenAfterCloningTest()
+    public async Task DictionaryBrokenAfterCloningTest()
     {
         // Arrange
         Dictionary<KeyClass, string> originalDict = new Dictionary<KeyClass, string>();
@@ -45,20 +44,22 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         KeyClass clonedKey = clonedDict.Keys.First();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(ReferenceEquals(key, clonedKey), Is.False);
-            Assert.That(key.Value, Is.EqualTo(clonedKey.Value));
+            await Assert.That(ReferenceEquals(key, clonedKey)).IsFalse();
+            await Assert.That(key.Value).IsEqualTo(clonedKey.Value);
 
-            Assert.That(originalDict.ContainsKey(key), Is.True);
-            Assert.That(clonedDict.ContainsKey(clonedKey), Is.True); // important
+            await Assert.That(originalDict.ContainsKey(key)).IsTrue();
+            await Assert.That(clonedDict.ContainsKey(clonedKey)).IsTrue(); // important
 
-            Assert.That(clonedKey.Value is "TestKey", Is.True);
-        });
+            await Assert.That(clonedKey.Value is "TestKey").IsTrue();
+
+            // Assert
+        }
     }
 
     [Test]
-    public void MultipleDictionariesAtSameLevelShouldBeClonedCorrectly()
+    public async Task MultipleDictionariesAtSameLevelShouldBeClonedCorrectly()
     {
         // Arrange
         DictionaryContainer container = new DictionaryContainer
@@ -79,28 +80,30 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         KeyClass clonedKey2 = clonedContainer.Dict2.Keys.First();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(ReferenceEquals(container.Dict1, clonedContainer.Dict1), Is.False);
-            Assert.That(ReferenceEquals(container.Dict2, clonedContainer.Dict2), Is.False);
+            await Assert.That(ReferenceEquals(container.Dict1, clonedContainer.Dict1)).IsFalse();
+            await Assert.That(ReferenceEquals(container.Dict2, clonedContainer.Dict2)).IsFalse();
 
-            Assert.That(ReferenceEquals(key1, clonedKey1), Is.False);
-            Assert.That(ReferenceEquals(key2, clonedKey2), Is.False);
-            Assert.That(key1.Value, Is.EqualTo(clonedKey1.Value));
-            Assert.That(key2.Value, Is.EqualTo(clonedKey2.Value));
+            await Assert.That(ReferenceEquals(key1, clonedKey1)).IsFalse();
+            await Assert.That(ReferenceEquals(key2, clonedKey2)).IsFalse();
+            await Assert.That(key1.Value).IsEqualTo(clonedKey1.Value);
+            await Assert.That(key2.Value).IsEqualTo(clonedKey2.Value);
 
-            Assert.That(container.Dict1.ContainsKey(key1), Is.True);
-            Assert.That(container.Dict2.ContainsKey(key2), Is.True);
-            Assert.That(clonedContainer.Dict1.ContainsKey(clonedKey1), Is.True);
-            Assert.That(clonedContainer.Dict2.ContainsKey(clonedKey2), Is.True);
+            await Assert.That(container.Dict1.ContainsKey(key1)).IsTrue();
+            await Assert.That(container.Dict2.ContainsKey(key2)).IsTrue();
+            await Assert.That(clonedContainer.Dict1.ContainsKey(clonedKey1)).IsTrue();
+            await Assert.That(clonedContainer.Dict2.ContainsKey(clonedKey2)).IsTrue();
 
-            Assert.That(clonedContainer.Dict1[clonedKey1], Is.EqualTo("Value1"));
-            Assert.That(clonedContainer.Dict2[clonedKey2], Is.EqualTo("Value2"));
-        });
+            await Assert.That(clonedContainer.Dict1[clonedKey1]).IsEqualTo("Value1");
+            await Assert.That(clonedContainer.Dict2[clonedKey2]).IsEqualTo("Value2");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void MultipleHashSetsAtSameLevelShouldBeClonedCorrectly()
+    public async Task MultipleHashSetsAtSameLevelShouldBeClonedCorrectly()
     {
         // Arrange
         HashSetContainer container = new HashSetContainer
@@ -125,36 +128,38 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         KeyClass clonedItem3 = clonedContainer.Set3.First();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(ReferenceEquals(container.Set1, clonedContainer.Set1), Is.False);
-            Assert.That(ReferenceEquals(container.Set2, clonedContainer.Set2), Is.False);
-            Assert.That(ReferenceEquals(container.Set3, clonedContainer.Set3), Is.False);
+            await Assert.That(ReferenceEquals(container.Set1, clonedContainer.Set1)).IsFalse();
+            await Assert.That(ReferenceEquals(container.Set2, clonedContainer.Set2)).IsFalse();
+            await Assert.That(ReferenceEquals(container.Set3, clonedContainer.Set3)).IsFalse();
 
-            Assert.That(ReferenceEquals(item1, clonedItem1), Is.False);
-            Assert.That(ReferenceEquals(item2, clonedItem2), Is.False);
-            Assert.That(ReferenceEquals(item3, clonedItem3), Is.False);
+            await Assert.That(ReferenceEquals(item1, clonedItem1)).IsFalse();
+            await Assert.That(ReferenceEquals(item2, clonedItem2)).IsFalse();
+            await Assert.That(ReferenceEquals(item3, clonedItem3)).IsFalse();
 
-            Assert.That(item1.Value, Is.EqualTo(clonedItem1.Value));
-            Assert.That(item2.Value, Is.EqualTo(clonedItem2.Value));
-            Assert.That(item3.Value, Is.EqualTo(clonedItem3.Value));
+            await Assert.That(item1.Value).IsEqualTo(clonedItem1.Value);
+            await Assert.That(item2.Value).IsEqualTo(clonedItem2.Value);
+            await Assert.That(item3.Value).IsEqualTo(clonedItem3.Value);
 
-            Assert.That(container.Set1, Does.Contain(item1));
-            Assert.That(container.Set2, Does.Contain(item2));
-            Assert.That(container.Set3, Does.Contain(item3));
+            await Assert.That(container.Set1).Contains(item1);
+            await Assert.That(container.Set2).Contains(item2);
+            await Assert.That(container.Set3).Contains(item3);
 
-            Assert.That(clonedContainer.Set1, Does.Contain(clonedItem1));
-            Assert.That(clonedContainer.Set2, Does.Contain(clonedItem2));
-            Assert.That(clonedContainer.Set3, Does.Contain(clonedItem3));
+            await Assert.That(clonedContainer.Set1).Contains(clonedItem1);
+            await Assert.That(clonedContainer.Set2).Contains(clonedItem2);
+            await Assert.That(clonedContainer.Set3).Contains(clonedItem3);
 
-            Assert.That(container.Set1, Has.Count.EqualTo(1));
-            Assert.That(container.Set2, Has.Count.EqualTo(1));
-            Assert.That(container.Set3, Has.Count.EqualTo(1));
+            await Assert.That(container.Set1).Count().IsEqualTo(1);
+            await Assert.That(container.Set2).Count().IsEqualTo(1);
+            await Assert.That(container.Set3).Count().IsEqualTo(1);
 
-            Assert.That(clonedContainer.Set1, Has.Count.EqualTo(1));
-            Assert.That(clonedContainer.Set2, Has.Count.EqualTo(1));
-            Assert.That(clonedContainer.Set3, Has.Count.EqualTo(1));
-        });
+            await Assert.That(clonedContainer.Set1).Count().IsEqualTo(1);
+            await Assert.That(clonedContainer.Set2).Count().IsEqualTo(1);
+            await Assert.That(clonedContainer.Set3).Count().IsEqualTo(1);
+
+            // Assert
+        }
     }
 
     public class HashSetContainer
@@ -171,7 +176,7 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
 
     [Test]
-    public void NestedDictionariesShouldBeClonedCorrectly()
+    public async Task NestedDictionariesShouldBeClonedCorrectly()
     {
         // Arrange
         Dictionary<string, Dictionary<KeyClass, string>> outerDict = new Dictionary<string, Dictionary<KeyClass, string>>();
@@ -186,30 +191,32 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         KeyClass clonedKey = clonedInnerDict.Keys.First();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(ReferenceEquals(outerDict, clonedOuterDict), Is.False, "Outer dictionaries should be different instances");
-            Assert.That(ReferenceEquals(innerDict, clonedInnerDict), Is.False, "Inner dictionaries should be different instances");
+            await Assert.That(ReferenceEquals(outerDict, clonedOuterDict)).IsFalse().Because("Outer dictionaries should be different instances");
+            await Assert.That(ReferenceEquals(innerDict, clonedInnerDict)).IsFalse().Because("Inner dictionaries should be different instances");
 
-            Assert.That(ReferenceEquals(key, clonedKey), Is.False, "Keys should be different instances");
-            Assert.That(key.Value, Is.EqualTo(clonedKey.Value), "Key values should be equal");
+            await Assert.That(ReferenceEquals(key, clonedKey)).IsFalse().Because("Keys should be different instances");
+            await Assert.That(key.Value).IsEqualTo(clonedKey.Value).Because("Key values should be equal");
 
-            Assert.That(innerDict.ContainsKey(key), Is.True, "Original inner dict should contain original key");
-            Assert.That(clonedInnerDict.ContainsKey(clonedKey), Is.True, "Cloned inner dict should contain cloned key");
+            await Assert.That(innerDict.ContainsKey(key)).IsTrue().Because("Original inner dict should contain original key");
+            await Assert.That(clonedInnerDict.ContainsKey(clonedKey)).IsTrue().Because("Cloned inner dict should contain cloned key");
 
-            Assert.That(innerDict[key], Is.EqualTo("TestValue"), "Original value should be preserved");
-            Assert.That(clonedInnerDict[clonedKey], Is.EqualTo("TestValue"), "Cloned value should be equal");
+            await Assert.That(innerDict[key]).IsEqualTo("TestValue").Because("Original value should be preserved");
+            await Assert.That(clonedInnerDict[clonedKey]).IsEqualTo("TestValue").Because("Cloned value should be equal");
 
-            Assert.That(outerDict.Keys, Has.Count.EqualTo(1), "Original outer dict should have one key");
-            Assert.That(clonedOuterDict.Keys, Has.Count.EqualTo(1), "Cloned outer dict should have one key");
-            Assert.That(innerDict.Keys, Has.Count.EqualTo(1), "Original inner dict should have one key");
-            Assert.That(clonedInnerDict.Keys, Has.Count.EqualTo(1), "Cloned inner dict should have one key");
-        });
+            await Assert.That(outerDict.Keys).Count().IsEqualTo(1).Because("Original outer dict should have one key");
+            await Assert.That(clonedOuterDict.Keys).Count().IsEqualTo(1).Because("Cloned outer dict should have one key");
+            await Assert.That(innerDict.Keys).Count().IsEqualTo(1).Because("Original inner dict should have one key");
+            await Assert.That(clonedInnerDict.Keys).Count().IsEqualTo(1).Because("Cloned inner dict should have one key");
+
+            // Assert
+        }
     }
 
 
     [Test]
-    public void SetBrokenAfterCloningTest()
+    public async Task SetBrokenAfterCloningTest()
     {
         // Arrange
         HashSet<KeyClass> originalSet = [];
@@ -221,26 +228,28 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         KeyClass clonedKey = clonedSet.First();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(ReferenceEquals(key, clonedKey), Is.False);
-            Assert.That(key.Value, Is.EqualTo(clonedKey.Value));
-            Assert.That(originalSet, Does.Contain(key));
-            Assert.That(clonedSet, Does.Contain(clonedKey)); // important
-            Assert.That(clonedKey.Value is "TestKey", Is.True);
-        });
+            await Assert.That(ReferenceEquals(key, clonedKey)).IsFalse();
+            await Assert.That(key.Value).IsEqualTo(clonedKey.Value);
+            await Assert.That(originalSet).Contains(key);
+            await Assert.That(clonedSet).Contains(clonedKey); // important
+            await Assert.That(clonedKey.Value is "TestKey").IsTrue();
+
+            // Assert
+        }
     }
     
     [Test]
-    public void CanCopyTypes()
+    public async Task CanCopyTypes()
     {
         Type original = typeof(string);
         Type result = original.DeepClone();
-        Assert.That(original, Is.EqualTo(result));
+        await Assert.That(original).IsEqualTo(result);
     }
 
     [Test]
-    public void OrderedDictionaryBrokenAfterCloningTest()
+    public async Task OrderedDictionaryBrokenAfterCloningTest()
     {
         // Arrange
         OrderedDictionary originalDict = new OrderedDictionary();
@@ -252,19 +261,21 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         KeyClass? clonedKey = clonedDict.Keys.Cast<KeyClass>().First();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(ReferenceEquals(key, clonedKey), Is.False);
-            Assert.That(key.Value, Is.EqualTo(clonedKey.Value));
-            Assert.That(originalDict.Contains(key), Is.True);
-            Assert.That(clonedDict.Contains(clonedKey), Is.True); // important
-            Assert.That(clonedKey.Value is "TestKey", Is.True);
-            Assert.That(clonedDict[clonedKey], Is.EqualTo("TestValue"));
-        });
+            await Assert.That(ReferenceEquals(key, clonedKey)).IsFalse();
+            await Assert.That(key.Value).IsEqualTo(clonedKey.Value);
+            await Assert.That(originalDict.Contains(key)).IsTrue();
+            await Assert.That(clonedDict.Contains(clonedKey)).IsTrue(); // important
+            await Assert.That(clonedKey.Value is "TestKey").IsTrue();
+            await Assert.That(clonedDict[clonedKey]).IsEqualTo("TestValue");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void TaskCancelledExceptionCloningTest()
+    public async Task TaskCancelledExceptionCloningTest()
     {
         // Arrange
         CancellationTokenSource cts = new CancellationTokenSource();
@@ -282,25 +293,27 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         }
 
         // Act & Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(originalException, Is.Not.Null);
-            
-            Assert.DoesNotThrow(() =>
+            await Assert.That(originalException).IsNotNull();
+
+            await Assert.That(async () =>
             {
                 TaskCanceledException? clonedException = originalException.DeepClone();
-                Assert.That(clonedException, Is.Not.Null);
-                Assert.That(clonedException.Message, Is.EqualTo(originalException.Message));
-                Assert.That(ReferenceEquals(originalException, clonedException), Is.False);
-                Assert.That(clonedException.Task, Is.Not.Null);
-            });
-        });
+                await Assert.That(clonedException).IsNotNull();
+                await Assert.That(clonedException.Message).IsEqualTo(originalException.Message);
+                await Assert.That(ReferenceEquals(originalException, clonedException)).IsFalse();
+                await Assert.That((object?)clonedException.Task).IsNotNull();
+            }).ThrowsNothing();
+
+            // Act & Assert
+        }
         
         cts.Dispose();
     }
 
     [Test]
-    public void SingleGenericDictionaryCloneTest()
+    public async Task SingleGenericDictionaryCloneTest()
     {
         // Arrange
         SingleGenericDictionary<KeyValuePair<KeyClass, string>> originalDict = new SingleGenericDictionary<KeyValuePair<KeyClass, string>>();
@@ -314,17 +327,19 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         KeyClass clonedKey = clonedKvp.Key;
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(ReferenceEquals(key, clonedKey), Is.False);
-            Assert.That(key.Value, Is.EqualTo(clonedKey.Value));
+            await Assert.That(ReferenceEquals(key, clonedKey)).IsFalse();
+            await Assert.That(key.Value).IsEqualTo(clonedKey.Value);
 
-            Assert.That(originalDict.Count, Is.EqualTo(clonedDict.Count));
-            Assert.That(clonedDict.Contains(clonedKvp), Is.True);
+            await Assert.That(originalDict.Count).IsEqualTo(clonedDict.Count);
+            await Assert.That(clonedDict.Contains(clonedKvp)).IsTrue();
 
-            Assert.That(clonedKey.Value, Is.EqualTo("TestKey"));
-            Assert.That(clonedKvp.Value, Is.EqualTo("TestValue"));
-        });
+            await Assert.That(clonedKey.Value).IsEqualTo("TestKey");
+            await Assert.That(clonedKvp.Value).IsEqualTo("TestValue");
+
+            // Assert
+        }
     }
 
     public class SingleGenericDictionary<T> : Collection<T>, IDictionary
@@ -422,9 +437,9 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
 
     [Test]
-    [TestCase(false)]
-    [TestCase(true)]
-    public void Simple_Class_Should_Be_Cloned(bool isDeep)
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Simple_Class_Should_Be_Cloned(bool isDeep)
     {
         C1 cFrom = new C1
         {
@@ -447,17 +462,17 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         else
             cFrom.ShallowCloneTo(cTo);
 
-        Assert.That(ReferenceEquals(cTo, cToRef), Is.True);
-        Assert.That(cTo.A, Is.EqualTo(12));
-        Assert.That(cTo.B, Is.EqualTo("testestest"));
-        Assert.That(cTo.C.Length, Is.EqualTo(3));
-        Assert.That(cTo.C[2], Is.EqualTo(3));
+        await Assert.That(ReferenceEquals(cTo, cToRef)).IsTrue();
+        await Assert.That(cTo.A).IsEqualTo(12);
+        await Assert.That(cTo.B).IsEqualTo("testestest");
+        await Assert.That(cTo.C.Length).IsEqualTo(3);
+        await Assert.That(cTo.C[2]).IsEqualTo((byte)3);
     }
 
     [Test]
-    [TestCase(false)]
-    [TestCase(true)]
-    public void Descendant_Class_Should_Be_Cloned(bool isDeep)
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Descendant_Class_Should_Be_Cloned(bool isDeep)
     {
         C1 cFrom = new C1
         {
@@ -477,78 +492,122 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         else
             cFrom.ShallowCloneTo(cTo);
 
-        Assert.That(ReferenceEquals(cTo, cTo), Is.True);
-        Assert.That(cTo.A, Is.EqualTo(11));
-        Assert.That(((C1)cTo).A, Is.EqualTo(12));
-        Assert.That(cTo.D, Is.EqualTo(42.3m));
+        await Assert.That(ReferenceEquals(cTo, cTo)).IsTrue();
+        await Assert.That(cTo.A).IsEqualTo(11);
+        await Assert.That(((C1)cTo).A).IsEqualTo(12);
+        await Assert.That(cTo.D).IsEqualTo(42.3m);
     }
 
     [Test]
-    public void Class_With_Subclass_Should_Be_Shallow_CLoned()
+    public async Task Class_With_Subclass_Should_Be_Shallow_CLoned()
     {
         C1 c1 = new C1 { A = 12 };
         C3 cFrom = new C3 { A = c1, B = c1 };
         C3 cTo = cFrom.ShallowCloneTo(new C3());
-        Assert.That(ReferenceEquals(cFrom.A, cTo.A), Is.True);
-        Assert.That(ReferenceEquals(cFrom.B, cTo.B), Is.True);
-        Assert.That(ReferenceEquals(cTo.A, cTo.B), Is.True);
+        await Assert.That(ReferenceEquals(cFrom.A, cTo.A)).IsTrue();
+        await Assert.That(ReferenceEquals(cFrom.B, cTo.B)).IsTrue();
+        await Assert.That(ReferenceEquals(cTo.A, cTo.B)).IsTrue();
     }
 
     [Test]
-    public void Class_With_Subclass_Should_Be_Deep_CLoned()
+    public async Task Class_With_Subclass_Should_Be_Deep_CLoned()
     {
         C1 c1 = new C1 { A = 12 };
         C3 cFrom = new C3 { A = c1, B = c1 };
         C3 cTo = cFrom.DeepCloneTo(new C3());
-        Assert.That(ReferenceEquals(cFrom.A, cTo.A), Is.False);
-        Assert.That(ReferenceEquals(cFrom.B, cTo.B), Is.False);
-        Assert.That(ReferenceEquals(cTo.A, cTo.B), Is.True);
+        await Assert.That(ReferenceEquals(cFrom.A, cTo.A)).IsFalse();
+        await Assert.That(ReferenceEquals(cFrom.B, cTo.B)).IsFalse();
+        await Assert.That(ReferenceEquals(cTo.A, cTo.B)).IsTrue();
     }
 
     [Test]
-    [TestCase(false)]
-    [TestCase(true)]
-    public void Copy_To_Null_Should_Return_Null(bool isDeep)
+    [NotInParallel("FastClonerGlobalState")]
+    public async Task DeepCloneTo_RuntimeMutations_ReflectAndRestoreOnConfiguredRail()
+    {
+        C1 shared = new C1 { A = 12, B = "shared" };
+        C3 source = new C3 { A = shared, B = shared };
+
+        C3 baseline = source.DeepCloneTo(new C3());
+        await Assert.That(ReferenceEquals(source.A, baseline.A)).IsFalse();
+        await Assert.That(ReferenceEquals(baseline.A, baseline.B)).IsTrue();
+
+        try
+        {
+            FastCloner.SetTypeBehavior<C1>(CloneBehavior.Reference);
+            C3 referenced = source.DeepCloneTo(new C3());
+            await Assert.That(ReferenceEquals(source.A, referenced.A)).IsTrue();
+            await Assert.That(ReferenceEquals(referenced.A, referenced.B)).IsTrue();
+        }
+        finally
+        {
+            FastCloner.ClearTypeBehavior<C1>();
+        }
+
+        C3 restored = source.DeepCloneTo(new C3());
+        await Assert.That(ReferenceEquals(source.A, restored.A)).IsFalse();
+        await Assert.That(ReferenceEquals(restored.A, restored.B)).IsTrue();
+    }
+
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Copy_To_Null_Should_Return_Null(bool isDeep)
     {
         C1 c1 = new C1();
         if (isDeep)
-            Assert.That(c1.DeepCloneTo((C1)null), Is.Null);
+            await Assert.That(c1.DeepCloneTo((C1)null)).IsNull();
         else
-            Assert.That(c1.ShallowCloneTo((C1)null), Is.Null);
+            await Assert.That(c1.ShallowCloneTo((C1)null)).IsNull();
     }
 
     [Test]
-    [TestCase(false)]
-    [TestCase(true)]
-    public void Copy_From_Null_Should_Throw_Error(bool isDeep)
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Copy_From_Null_Should_Throw_Error(bool isDeep)
     {
         C1 c1 = null;
         if (isDeep)
             // ReSharper disable once ExpressionIsAlwaysNull
-            Assert.Throws<ArgumentNullException>(() => c1.DeepCloneTo(new C1()));
+            await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            {
+                c1.DeepCloneTo(new C1());
+                return Task.CompletedTask;
+            });
         else
             // ReSharper disable once ExpressionIsAlwaysNull
-            Assert.Throws<ArgumentNullException>(() => c1.ShallowCloneTo(new C1()));
+            await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            {
+                c1.ShallowCloneTo(new C1());
+                return Task.CompletedTask;
+            });
     }
 
     [Test]
-    [TestCase(false)]
-    [TestCase(true)]
-    public void Invalid_Inheritance_Should_Throw_Error(bool isDeep)
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Invalid_Inheritance_Should_Throw_Error(bool isDeep)
     {
         C1 c1 = new C4();
         if (isDeep)
             // ReSharper disable once ExpressionIsAlwaysNull
-            Assert.Throws<InvalidOperationException>(() => c1.DeepCloneTo(new C2()));
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            {
+                c1.DeepCloneTo(new C2());
+                return Task.CompletedTask;
+            });
         else
             // ReSharper disable once ExpressionIsAlwaysNull
-            Assert.Throws<InvalidOperationException>(() => c1.ShallowCloneTo(new C2()));
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            {
+                c1.ShallowCloneTo(new C2());
+                return Task.CompletedTask;
+            });
     }
 
     [Test]
-    [TestCase(false)]
-    [TestCase(true)]
-    public void Struct_As_Interface_ShouldNot_Be_Cloned(bool isDeep)
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Struct_As_Interface_ShouldNot_Be_Cloned(bool isDeep)
     {
         S1 sFrom = new S1 { A = 42 };
         S1 sTo = new S1();
@@ -556,95 +615,107 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         objTo.A = 23;
         if (isDeep)
             // ReSharper disable once ExpressionIsAlwaysNull
-            Assert.Throws<InvalidOperationException>(() => ((I1)sFrom).DeepCloneTo(objTo));
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            {
+                ((I1)sFrom).DeepCloneTo(objTo);
+                return Task.CompletedTask;
+            });
         else
             // ReSharper disable once ExpressionIsAlwaysNull
-            Assert.Throws<InvalidOperationException>(() => ((I1)sFrom).ShallowCloneTo(objTo));
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            {
+                ((I1)sFrom).ShallowCloneTo(objTo);
+                return Task.CompletedTask;
+            });
     }
 
     [Test]
-    public void String_Should_Not_Be_Cloned()
+    public async Task String_Should_Not_Be_Cloned()
     {
         string s1 = "abc";
         string s2 = "def";
-        Assert.Throws<InvalidOperationException>(() => s1.ShallowCloneTo(s2));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        {
+            s1.ShallowCloneTo(s2);
+            return Task.CompletedTask;
+        });
     }
 
     [Test]
-    [TestCase(false)]
-    [TestCase(true)]
-    public void Array_Should_Be_Cloned_Correct_Size(bool isDeep)
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Array_Should_Be_Cloned_Correct_Size(bool isDeep)
     {
         int[] arrFrom = [1, 2, 3];
         int[] arrTo = [4, 5, 6];
         if (isDeep) arrFrom.DeepCloneTo(arrTo);
         else arrFrom.ShallowCloneTo(arrTo);
-        Assert.That(arrTo.Length, Is.EqualTo(3));
-        Assert.That(arrTo[0], Is.EqualTo(1));
-        Assert.That(arrTo[1], Is.EqualTo(2));
-        Assert.That(arrTo[2], Is.EqualTo(3));
+        await Assert.That(arrTo.Length).IsEqualTo(3);
+        await Assert.That(arrTo[0]).IsEqualTo(1);
+        await Assert.That(arrTo[1]).IsEqualTo(2);
+        await Assert.That(arrTo[2]).IsEqualTo(3);
     }
 
     [Test]
-    [TestCase(false)]
-    [TestCase(true)]
-    public void Array_Should_Be_Cloned_From_Is_Bigger(bool isDeep)
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Array_Should_Be_Cloned_From_Is_Bigger(bool isDeep)
     {
         int[] arrFrom = [1, 2, 3];
         int[] arrTo = [4, 5];
         if (isDeep) arrFrom.DeepCloneTo(arrTo);
         else arrFrom.ShallowCloneTo(arrTo);
-        Assert.That(arrTo.Length, Is.EqualTo(2));
-        Assert.That(arrTo[0], Is.EqualTo(1));
-        Assert.That(arrTo[1], Is.EqualTo(2));
+        await Assert.That(arrTo.Length).IsEqualTo(2);
+        await Assert.That(arrTo[0]).IsEqualTo(1);
+        await Assert.That(arrTo[1]).IsEqualTo(2);
     }
 
     [Test]
-    [TestCase(false)]
-    [TestCase(true)]
-    public void Array_Should_Be_Cloned_From_Is_Smaller(bool isDeep)
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Array_Should_Be_Cloned_From_Is_Smaller(bool isDeep)
     {
         int[] arrFrom = [1, 2];
         int[] arrTo = [4, 5, 6];
         if (isDeep) arrFrom.DeepCloneTo(arrTo);
         else arrFrom.ShallowCloneTo(arrTo);
-        Assert.That(arrTo.Length, Is.EqualTo(3));
-        Assert.That(arrTo[0], Is.EqualTo(1));
-        Assert.That(arrTo[1], Is.EqualTo(2));
-        Assert.That(arrTo[2], Is.EqualTo(6));
+        await Assert.That(arrTo.Length).IsEqualTo(3);
+        await Assert.That(arrTo[0]).IsEqualTo(1);
+        await Assert.That(arrTo[1]).IsEqualTo(2);
+        await Assert.That(arrTo[2]).IsEqualTo(6);
     }
 
     [Test]
-    public void Shallow_Array_Should_Be_Cloned()
+    public async Task Shallow_Array_Should_Be_Cloned()
     {
         C1 c1 = new C1();
         C1[] arrFrom = [c1, c1, c1];
         C1[] arrTo = new C1[4];
         arrFrom.ShallowCloneTo(arrTo);
-        Assert.That(arrTo.Length, Is.EqualTo(4));
-        Assert.That(arrTo[0], Is.EqualTo(c1));
-        Assert.That(arrTo[1], Is.EqualTo(c1));
-        Assert.That(arrTo[2], Is.EqualTo(c1));
-        Assert.That(arrTo[3], Is.Null);
+        await Assert.That(arrTo.Length).IsEqualTo(4);
+        await Assert.That(arrTo[0]).IsEqualTo(c1);
+        await Assert.That(arrTo[1]).IsEqualTo(c1);
+        await Assert.That(arrTo[2]).IsEqualTo(c1);
+        await Assert.That(arrTo[3]).IsNull();
     }
 
     [Test]
-    public void Deep_Array_Should_Be_Cloned()
+    public async Task Deep_Array_Should_Be_Cloned()
     {
         C4 c1 = new C4();
         C3 c3 = new C3 { A = c1, B = c1 };
         C3[] arrFrom = [c3, c3, c3];
         C3[] arrTo = new C3[4];
         arrFrom.DeepCloneTo(arrTo);
-        Assert.That(arrTo.Length, Is.EqualTo(4));
+        await Assert.That(arrTo.Length).IsEqualTo(4);
 #pragma warning disable NUnit2021 // Incompatible types for EqualTo constraint
-        Assert.That(arrTo[0], Is.Not.EqualTo(c1));
+        await Assert.That(arrTo[0]).IsNotSameReferenceAs(c1);
 #pragma warning restore NUnit2021 // Incompatible types for EqualTo constraint
-        Assert.That(arrTo[0], Is.EqualTo(arrTo[1]));
-        Assert.That(arrTo[1], Is.EqualTo(arrTo[2]));
-        Assert.That(ReferenceEquals(arrTo[2].A, c1), Is.Not.True);
-        Assert.That(arrTo[2].A, Is.EqualTo(arrTo[2].B));
-        Assert.That(arrTo[3], Is.Null);
+        await Assert.That(arrTo[0]).IsEqualTo(arrTo[1]);
+        await Assert.That(arrTo[1]).IsEqualTo(arrTo[2]);
+        await Assert.That(ReferenceEquals(arrTo[2].A, c1)).IsFalse();
+        await Assert.That(arrTo[2].A).IsEqualTo(arrTo[2].B);
+        await Assert.That(arrTo[3]).IsNull();
     }
 
     public struct StructWithRef
@@ -654,7 +725,7 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
 
     [Test]
-    public void Deep_Array_Of_Struct_With_Ref_Should_Use_Source_Values()
+    public async Task Deep_Array_Of_Struct_With_Ref_Should_Use_Source_Values()
     {
         StructWithRef[] arrFrom =
         [
@@ -671,23 +742,24 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
 
         arrFrom.DeepCloneTo(arrTo);
 
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(arrTo[0].Marker, Is.EqualTo(101));
-            Assert.That(arrTo[1].Marker, Is.EqualTo(202));
-            Assert.That(arrTo[0].Ref.A, Is.EqualTo(10));
-            Assert.That(arrTo[1].Ref.A, Is.EqualTo(20));
-            Assert.That(arrTo[0].Ref.B, Is.EqualTo("from-1"));
-            Assert.That(arrTo[1].Ref.B, Is.EqualTo("from-2"));
-            Assert.That(arrTo[0].Ref, Is.Not.SameAs(arrFrom[0].Ref));
-            Assert.That(arrTo[1].Ref, Is.Not.SameAs(arrFrom[1].Ref));
-        });
+            await Assert.That(arrTo[0].Marker).IsEqualTo(101);
+            await Assert.That(arrTo[1].Marker).IsEqualTo(202);
+            await Assert.That(arrTo[0].Ref.A).IsEqualTo(10);
+            await Assert.That(arrTo[1].Ref.A).IsEqualTo(20);
+            await Assert.That(arrTo[0].Ref.B).IsEqualTo("from-1");
+            await Assert.That(arrTo[1].Ref.B).IsEqualTo("from-2");
+            await Assert.That(arrTo[0].Ref).IsNotSameReferenceAs(arrFrom[0].Ref);
+            await Assert.That(arrTo[1].Ref).IsNotSameReferenceAs(arrFrom[1].Ref);
+
+        }
     }
 
     [Test]
-    [TestCase(false)]
-    [TestCase(true)]
-    public void Non_Zero_Based_Array_Should_Be_Cloned(bool isDeep)
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Non_Zero_Based_Array_Should_Be_Cloned(bool isDeep)
     {
         Array arrFrom = Array.CreateInstance(typeof(int),
             [2],
@@ -700,15 +772,15 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         arrFrom.SetValue(2, 2);
         if (isDeep) arrFrom.DeepCloneTo(arrTo);
         else arrFrom.ShallowCloneTo(arrTo);
-        Assert.That(arrTo.Length, Is.EqualTo(2));
-        Assert.That(arrTo.GetValue(0), Is.EqualTo(1));
-        Assert.That(arrTo.GetValue(1), Is.EqualTo(2));
+        await Assert.That(arrTo.Length).IsEqualTo(2);
+        await Assert.That(arrTo.GetValue(0)).IsEqualTo(1);
+        await Assert.That(arrTo.GetValue(1)).IsEqualTo(2);
     }
 
     [Test]
-    [TestCase(false)]
-    [TestCase(true)]
-    public void MultiDim_Array_Should_Be_Cloned(bool isDeep)
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task MultiDim_Array_Should_Be_Cloned(bool isDeep)
     {
         Array arrFrom = Array.CreateInstance(typeof(int),
             [2, 2],
@@ -721,33 +793,33 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         arrFrom.SetValue(2, 2, 2);
         if (isDeep) arrFrom.DeepCloneTo(arrTo);
         else arrFrom.ShallowCloneTo(arrTo);
-        Assert.That(arrTo.Length, Is.EqualTo(1));
-        Assert.That(arrTo.GetValue(0, 0), Is.EqualTo(1));
+        await Assert.That(arrTo.Length).IsEqualTo(1);
+        await Assert.That(arrTo.GetValue(0, 0)).IsEqualTo(1);
     }
 
     [Test]
-    [TestCase(false)]
-    [TestCase(true)]
-    public void TwoDim_Array_Should_Be_Cloned(bool isDeep)
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task TwoDim_Array_Should_Be_Cloned(bool isDeep)
     {
         int[,] arrFrom = { { 1, 2 }, { 3, 4 } };
         // with offset. its ok
         int[,] arrTo = new int[3, 1];
         if (isDeep) arrFrom.DeepCloneTo(arrTo);
         else arrFrom.ShallowCloneTo(arrTo);
-        Assert.That(arrTo[0, 0], Is.EqualTo(1));
-        Assert.That(arrTo[1, 0], Is.EqualTo(3));
+        await Assert.That(arrTo[0, 0]).IsEqualTo(1);
+        await Assert.That(arrTo[1, 0]).IsEqualTo(3);
 
         arrTo = new int[2, 2];
         if (isDeep) arrFrom.DeepCloneTo(arrTo);
         else arrFrom.ShallowCloneTo(arrTo);
-        Assert.That(arrTo[0, 0], Is.EqualTo(1));
-        Assert.That(arrTo[0, 1], Is.EqualTo(2));
-        Assert.That(arrTo[1, 0], Is.EqualTo(3));
+        await Assert.That(arrTo[0, 0]).IsEqualTo(1);
+        await Assert.That(arrTo[0, 1]).IsEqualTo(2);
+        await Assert.That(arrTo[1, 0]).IsEqualTo(3);
     }
 
     [Test]
-    public void MultiDim_Array_Should_Be_Cloned3()
+    public async Task MultiDim_Array_Should_Be_Cloned3()
     {
         const int cnt1 = 4;
         const int cnt2 = 5;
@@ -758,85 +830,85 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
                 for (int i3 = 0; i3 < cnt3; i3++)
                     arr[i1, i2, i3] = i1 * 100 + i2 * 10 + i3;
         int[,,] clone = arr.DeepCloneTo(new int[cnt1, cnt2, cnt3]);
-        Assert.That(ReferenceEquals(arr, clone), Is.False);
+        await Assert.That(ReferenceEquals(arr, clone)).IsFalse();
         for (int i1 = 0; i1 < cnt1; i1++)
             for (int i2 = 0; i2 < cnt2; i2++)
                 for (int i3 = 0; i3 < cnt3; i3++)
-                    Assert.That(arr[i1, i2, i3], Is.EqualTo(i1 * 100 + i2 * 10 + i3));
+                    await Assert.That(arr[i1, i2, i3]).IsEqualTo(i1 * 100 + i2 * 10 + i3);
     }
 
     [Test]
     public void MultiDimensional_Array_Should_Be_Cloned()
     {
         // Issue #25
-        Array.CreateInstance(typeof(int), new[] { 0, 0 }).DeepCloneTo(new int[0, 0]);
-        Array.CreateInstance(typeof(int), new[] { 1, 0 }).DeepCloneTo(new int[1, 0]);
-        Array.CreateInstance(typeof(int), new[] { 0, 1 }).DeepCloneTo(new int[0, 1]);
-        Array.CreateInstance(typeof(int), new[] { 1, 1 }).DeepCloneTo(new int[1, 1]);
+        Array.CreateInstance(typeof(int), [0, 0]).DeepCloneTo(new int[0, 0]);
+        Array.CreateInstance(typeof(int), [1, 0]).DeepCloneTo(new int[1, 0]);
+        Array.CreateInstance(typeof(int), [0, 1]).DeepCloneTo(new int[0, 1]);
+        Array.CreateInstance(typeof(int), [1, 1]).DeepCloneTo(new int[1, 1]);
 
-        Array.CreateInstance(typeof(int), new[] { 0, 0, 0 }).DeepCloneTo(new int[0, 0, 0]);
-        Array.CreateInstance(typeof(int), new[] { 1, 0, 0 }).DeepCloneTo(new int[1, 0, 0]);
-        Array.CreateInstance(typeof(int), new[] { 0, 1, 0 }).DeepCloneTo(new int[0, 1, 0]);
-        Array.CreateInstance(typeof(int), new[] { 0, 0, 1 }).DeepCloneTo(new int[0, 0, 1]);
-        Array.CreateInstance(typeof(int), new[] { 1, 1, 1 }).DeepCloneTo(new int[1, 1, 1]);
+        Array.CreateInstance(typeof(int), [0, 0, 0]).DeepCloneTo(new int[0, 0, 0]);
+        Array.CreateInstance(typeof(int), [1, 0, 0]).DeepCloneTo(new int[1, 0, 0]);
+        Array.CreateInstance(typeof(int), [0, 1, 0]).DeepCloneTo(new int[0, 1, 0]);
+        Array.CreateInstance(typeof(int), [0, 0, 1]).DeepCloneTo(new int[0, 0, 1]);
+        Array.CreateInstance(typeof(int), [1, 1, 1]).DeepCloneTo(new int[1, 1, 1]);
     }
 
     [Test]
-    public void Shallow_Clone_Of_MultiDim_Array_Should_Not_Perform_Deep()
+    public async Task Shallow_Clone_Of_MultiDim_Array_Should_Not_Perform_Deep()
     {
         C1 c1 = new C1();
         C1[,] arrFrom = { { c1, c1 }, { c1, c1 } };
         // with offset. its ok
         C1[,] arrTo = new C1[3, 1];
         arrFrom.ShallowCloneTo(arrTo);
-        Assert.That(ReferenceEquals(c1, arrTo[0, 0]), Is.True);
-        Assert.That(ReferenceEquals(c1, arrTo[1, 0]), Is.True);
+        await Assert.That(ReferenceEquals(c1, arrTo[0, 0])).IsTrue();
+        await Assert.That(ReferenceEquals(c1, arrTo[1, 0])).IsTrue();
 
         C1[,,] arrFrom2 = new C1[1, 1, 1];
         arrFrom2[0, 0, 0] = c1;
         C1[,,] arrTo2 = new C1[1, 1, 1];
         arrFrom2.ShallowCloneTo(arrTo2);
-        Assert.That(ReferenceEquals(c1, arrTo2[0, 0, 0]), Is.True);
+        await Assert.That(ReferenceEquals(c1, arrTo2[0, 0, 0])).IsTrue();
     }
 
     [Test]
-    public void Deep_Clone_Of_MultiDim_Array_Should_Perform_Deep()
+    public async Task Deep_Clone_Of_MultiDim_Array_Should_Perform_Deep()
     {
         C1 c1 = new C1();
         C1[,] arrFrom = { { c1, c1 }, { c1, c1 } };
         // with offset. its ok
         C1[,] arrTo = new C1[3, 1];
         arrFrom.DeepCloneTo(arrTo);
-        Assert.That(ReferenceEquals(c1, arrTo[0, 0]), Is.False);
-        Assert.That(ReferenceEquals(arrTo[0, 0], arrTo[1, 0]), Is.True);
+        await Assert.That(ReferenceEquals(c1, arrTo[0, 0])).IsFalse();
+        await Assert.That(ReferenceEquals(arrTo[0, 0], arrTo[1, 0])).IsTrue();
 
         C1[,,] arrFrom2 = new C1[1, 1, 2];
         arrFrom2[0, 0, 0] = c1;
         arrFrom2[0, 0, 1] = c1;
         C1[,,] arrTo2 = new C1[1, 1, 2];
         arrFrom2.DeepCloneTo(arrTo2);
-        Assert.That(ReferenceEquals(c1, arrTo2[0, 0, 0]), Is.False);
-        Assert.That(ReferenceEquals(arrTo2[0, 0, 1], arrTo2[0, 0, 0]), Is.True);
+        await Assert.That(ReferenceEquals(c1, arrTo2[0, 0, 0])).IsFalse();
+        await Assert.That(ReferenceEquals(arrTo2[0, 0, 1], arrTo2[0, 0, 0])).IsTrue();
     }
 
     [Test]
-    public void Dictionary_Should_Be_Deeply_Cloned()
+    public async Task Dictionary_Should_Be_Deeply_Cloned()
     {
         Dictionary<string, string> d1 = new Dictionary<string, string>{ { "A", "B" }, { "C", "D" } };
         Dictionary<string, string> d2 = new Dictionary<string, string>();
         d1.DeepCloneTo(d2);
         d1["A"] = "E";
-        Assert.That(d2.Count, Is.EqualTo(2));
-        Assert.That(d2["A"], Is.EqualTo("B"));
-        Assert.That(d2["C"], Is.EqualTo("D"));
+        await Assert.That(d2.Count).IsEqualTo(2);
+        await Assert.That(d2["A"]).IsEqualTo("B");
+        await Assert.That(d2["C"]).IsEqualTo("D");
 
         // big dictionary
         d1.Clear();
         for (int i = 0; i < 1000; i++)
             d1[i.ToString()] = i.ToString();
         d1.DeepCloneTo(d2);
-        Assert.That(d2.Count, Is.EqualTo(1000));
-        Assert.That(d2["557"], Is.EqualTo("557"));
+        await Assert.That(d2.Count).IsEqualTo(1000);
+        await Assert.That(d2["557"]).IsEqualTo("557");
     }
 
     public class D1
@@ -856,16 +928,16 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
 
     [Test]
-    public void Inner_Implementation_In_Class_Should_Work()
+    public async Task Inner_Implementation_In_Class_Should_Work()
     {
         D1 baseObject = new D1 { A = 12 };
         D2 wrapper = new D2(baseObject);
-        Assert.That(wrapper.A, Is.EqualTo(12));
-        Assert.That(wrapper.B, Is.EqualTo(14));
+        await Assert.That(wrapper.A).IsEqualTo(12);
+        await Assert.That(wrapper.B).IsEqualTo(14);
     }
     
     [Test]
-    public void DictionaryWithStringKeys_FastPath_ShouldCloneCorrectly()
+    public async Task DictionaryWithStringKeys_FastPath_ShouldCloneCorrectly()
     {
         // Arrange - string keys have stable hash semantics (fast path)
         Dictionary<string, int> original = new Dictionary<string, int>
@@ -879,21 +951,23 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Dictionary<string, int> cloned = original.DeepClone();
         
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original));
-            Assert.That(cloned.Count, Is.EqualTo(3));
-            Assert.That(cloned["one"], Is.EqualTo(1));
-            Assert.That(cloned["two"], Is.EqualTo(2));
-            Assert.That(cloned["three"], Is.EqualTo(3));
-            Assert.That(cloned.ContainsKey("one"), Is.True);
-            Assert.That(cloned.ContainsKey("two"), Is.True);
-            Assert.That(cloned.ContainsKey("three"), Is.True);
-        });
+            await Assert.That(cloned).IsNotSameReferenceAs(original);
+            await Assert.That(cloned.Count).IsEqualTo(3);
+            await Assert.That(cloned["one"]).IsEqualTo(1);
+            await Assert.That(cloned["two"]).IsEqualTo(2);
+            await Assert.That(cloned["three"]).IsEqualTo(3);
+            await Assert.That(cloned.ContainsKey("one")).IsTrue();
+            await Assert.That(cloned.ContainsKey("two")).IsTrue();
+            await Assert.That(cloned.ContainsKey("three")).IsTrue();
+
+            // Assert
+        }
     }
     
     [Test]
-    public void DictionaryWithIntKeys_FastPath_ShouldCloneCorrectly()
+    public async Task DictionaryWithIntKeys_FastPath_ShouldCloneCorrectly()
     {
         // Arrange - int keys have stable hash semantics (fast path)
         Dictionary<int, string> original = new Dictionary<int, string>
@@ -907,21 +981,23 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Dictionary<int, string> cloned = original.DeepClone();
         
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original));
-            Assert.That(cloned.Count, Is.EqualTo(3));
-            Assert.That(cloned[1], Is.EqualTo("one"));
-            Assert.That(cloned[2], Is.EqualTo("two"));
-            Assert.That(cloned[100], Is.EqualTo("hundred"));
-            Assert.That(cloned.ContainsKey(1), Is.True);
-            Assert.That(cloned.ContainsKey(2), Is.True);
-            Assert.That(cloned.ContainsKey(100), Is.True);
-        });
+            await Assert.That(cloned).IsNotSameReferenceAs(original);
+            await Assert.That(cloned.Count).IsEqualTo(3);
+            await Assert.That(cloned[1]).IsEqualTo("one");
+            await Assert.That(cloned[2]).IsEqualTo("two");
+            await Assert.That(cloned[100]).IsEqualTo("hundred");
+            await Assert.That(cloned.ContainsKey(1)).IsTrue();
+            await Assert.That(cloned.ContainsKey(2)).IsTrue();
+            await Assert.That(cloned.ContainsKey(100)).IsTrue();
+
+            // Assert
+        }
     }
     
     [Test]
-    public void DictionaryWithGuidKeys_FastPath_ShouldCloneCorrectly()
+    public async Task DictionaryWithGuidKeys_FastPath_ShouldCloneCorrectly()
     {
         // Arrange - Guid keys have stable hash semantics (fast path)
         Guid key1 = Guid.NewGuid();
@@ -937,21 +1013,23 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Dictionary<Guid, string> cloned = original.DeepClone();
         
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original));
-            Assert.That(cloned.Count, Is.EqualTo(2));
-            Assert.That(cloned[key1], Is.EqualTo("value1"));
-            Assert.That(cloned[key2], Is.EqualTo("value2"));
-            Assert.That(cloned.ContainsKey(key1), Is.True);
-            Assert.That(cloned.ContainsKey(key2), Is.True);
-        });
+            await Assert.That(cloned).IsNotSameReferenceAs(original);
+            await Assert.That(cloned.Count).IsEqualTo(2);
+            await Assert.That(cloned[key1]).IsEqualTo("value1");
+            await Assert.That(cloned[key2]).IsEqualTo("value2");
+            await Assert.That(cloned.ContainsKey(key1)).IsTrue();
+            await Assert.That(cloned.ContainsKey(key2)).IsTrue();
+
+            // Assert
+        }
     }
     
     public record RecordKey(string Name, int Id);
     
     [Test]
-    public void DictionaryWithRecordKeys_FastPath_ShouldCloneCorrectly()
+    public async Task DictionaryWithRecordKeys_FastPath_ShouldCloneCorrectly()
     {
         // Arrange - record keys have compiler-generated GetHashCode (fast path)
         RecordKey key1 = new RecordKey("Alice", 1);
@@ -969,25 +1047,27 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         RecordKey clonedKey2 = cloned.Keys.First(k => k.Name == "Bob");
         
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original));
-            Assert.That(cloned.Count, Is.EqualTo(2));
-            
+            await Assert.That(cloned).IsNotSameReferenceAs(original);
+            await Assert.That(cloned.Count).IsEqualTo(2);
+
             // Records should be cloned (not same reference)
-            Assert.That(clonedKey1, Is.Not.SameAs(key1));
-            Assert.That(clonedKey2, Is.Not.SameAs(key2));
-            
+            await Assert.That(clonedKey1).IsNotSameReferenceAs(key1);
+            await Assert.That(clonedKey2).IsNotSameReferenceAs(key2);
+
             // But should still be equal (value equality)
-            Assert.That(clonedKey1, Is.EqualTo(key1));
-            Assert.That(clonedKey2, Is.EqualTo(key2));
-            
+            await Assert.That(clonedKey1).IsEqualTo(key1);
+            await Assert.That(clonedKey2).IsEqualTo(key2);
+
             // Dictionary lookups should work
-            Assert.That(cloned.ContainsKey(clonedKey1), Is.True);
-            Assert.That(cloned.ContainsKey(clonedKey2), Is.True);
-            Assert.That(cloned[clonedKey1], Is.EqualTo("data1"));
-            Assert.That(cloned[clonedKey2], Is.EqualTo("data2"));
-        });
+            await Assert.That(cloned.ContainsKey(clonedKey1)).IsTrue();
+            await Assert.That(cloned.ContainsKey(clonedKey2)).IsTrue();
+            await Assert.That(cloned[clonedKey1]).IsEqualTo("data1");
+            await Assert.That(cloned[clonedKey2]).IsEqualTo("data2");
+
+            // Assert
+        }
     }
     
     public struct StructKey
@@ -997,7 +1077,7 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
     
     [Test]
-    public void DictionaryWithStructKeys_FastPath_ShouldCloneCorrectly()
+    public async Task DictionaryWithStructKeys_FastPath_ShouldCloneCorrectly()
     {
         // Arrange - struct keys have value-based hash (fast path)
         StructKey key1 = new StructKey { Id = 1, Name = "One" };
@@ -1013,19 +1093,21 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Dictionary<StructKey, string> cloned = original.DeepClone();
         
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original));
-            Assert.That(cloned.Count, Is.EqualTo(2));
-            Assert.That(cloned.ContainsKey(key1), Is.True);
-            Assert.That(cloned.ContainsKey(key2), Is.True);
-            Assert.That(cloned[key1], Is.EqualTo("value1"));
-            Assert.That(cloned[key2], Is.EqualTo("value2"));
-        });
+            await Assert.That(cloned).IsNotSameReferenceAs(original);
+            await Assert.That(cloned.Count).IsEqualTo(2);
+            await Assert.That(cloned.ContainsKey(key1)).IsTrue();
+            await Assert.That(cloned.ContainsKey(key2)).IsTrue();
+            await Assert.That(cloned[key1]).IsEqualTo("value1");
+            await Assert.That(cloned[key2]).IsEqualTo("value2");
+
+            // Assert
+        }
     }
     
     [Test]
-    public void HashSetWithStrings_FastPath_ShouldCloneCorrectly()
+    public async Task HashSetWithStrings_FastPath_ShouldCloneCorrectly()
     {
         // Arrange - string elements have stable hash semantics (fast path)
         HashSet<string> original = ["apple", "banana", "cherry"];
@@ -1034,18 +1116,20 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         HashSet<string> cloned = original.DeepClone();
         
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original));
-            Assert.That(cloned.Count, Is.EqualTo(3));
-            Assert.That(cloned.Contains("apple"), Is.True);
-            Assert.That(cloned.Contains("banana"), Is.True);
-            Assert.That(cloned.Contains("cherry"), Is.True);
-        });
+            await Assert.That(cloned).IsNotSameReferenceAs(original);
+            await Assert.That(cloned.Count).IsEqualTo(3);
+            await Assert.That(cloned.Contains("apple")).IsTrue();
+            await Assert.That(cloned.Contains("banana")).IsTrue();
+            await Assert.That(cloned.Contains("cherry")).IsTrue();
+
+            // Assert
+        }
     }
     
     [Test]
-    public void HashSetWithInts_FastPath_ShouldCloneCorrectly()
+    public async Task HashSetWithInts_FastPath_ShouldCloneCorrectly()
     {
         // Arrange - int elements have stable hash semantics (fast path)
         HashSet<int> original = [1, 2, 3, 100, 999];
@@ -1054,20 +1138,22 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         HashSet<int> cloned = original.DeepClone();
         
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original));
-            Assert.That(cloned.Count, Is.EqualTo(5));
-            Assert.That(cloned.Contains(1), Is.True);
-            Assert.That(cloned.Contains(2), Is.True);
-            Assert.That(cloned.Contains(3), Is.True);
-            Assert.That(cloned.Contains(100), Is.True);
-            Assert.That(cloned.Contains(999), Is.True);
-        });
+            await Assert.That(cloned).IsNotSameReferenceAs(original);
+            await Assert.That(cloned.Count).IsEqualTo(5);
+            await Assert.That(cloned.Contains(1)).IsTrue();
+            await Assert.That(cloned.Contains(2)).IsTrue();
+            await Assert.That(cloned.Contains(3)).IsTrue();
+            await Assert.That(cloned.Contains(100)).IsTrue();
+            await Assert.That(cloned.Contains(999)).IsTrue();
+
+            // Assert
+        }
     }
     
     [Test]
-    public void HashSetWithRecords_FastPath_ShouldCloneCorrectly()
+    public async Task HashSetWithRecords_FastPath_ShouldCloneCorrectly()
     {
         // Arrange - record elements have compiler-generated GetHashCode (fast path)
         RecordKey item1 = new RecordKey("Alice", 1);
@@ -1081,27 +1167,29 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         RecordKey clonedItem2 = cloned.First(k => k.Name == "Bob");
         
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original));
-            Assert.That(cloned.Count, Is.EqualTo(2));
-            
+            await Assert.That(cloned).IsNotSameReferenceAs(original);
+            await Assert.That(cloned.Count).IsEqualTo(2);
+
             // Records should be cloned (not same reference)
-            Assert.That(clonedItem1, Is.Not.SameAs(item1));
-            Assert.That(clonedItem2, Is.Not.SameAs(item2));
-            
+            await Assert.That(clonedItem1).IsNotSameReferenceAs(item1);
+            await Assert.That(clonedItem2).IsNotSameReferenceAs(item2);
+
             // But should still be equal (value equality)
-            Assert.That(clonedItem1, Is.EqualTo(item1));
-            Assert.That(clonedItem2, Is.EqualTo(item2));
-            
+            await Assert.That(clonedItem1).IsEqualTo(item1);
+            await Assert.That(clonedItem2).IsEqualTo(item2);
+
             // Set lookups should work
-            Assert.That(cloned.Contains(clonedItem1), Is.True);
-            Assert.That(cloned.Contains(clonedItem2), Is.True);
-        });
+            await Assert.That(cloned.Contains(clonedItem1)).IsTrue();
+            await Assert.That(cloned.Contains(clonedItem2)).IsTrue();
+
+            // Assert
+        }
     }
     
     [Test]
-    public void DictionaryWithReferenceKeys_SlowPath_ShouldCloneCorrectly()
+    public async Task DictionaryWithReferenceKeys_SlowPath_ShouldCloneCorrectly()
     {
         // Arrange - KeyClass uses default GetHashCode (identity-based, slow path)
         KeyClass key1 = new KeyClass { Value = "Key1" };
@@ -1119,25 +1207,27 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         KeyClass clonedKey2 = cloned.Keys.First(k => k.Value == "Key2");
         
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original));
-            Assert.That(cloned.Count, Is.EqualTo(2));
-            
+            await Assert.That(cloned).IsNotSameReferenceAs(original);
+            await Assert.That(cloned.Count).IsEqualTo(2);
+
             // Keys should be cloned (not same reference)
-            Assert.That(clonedKey1, Is.Not.SameAs(key1));
-            Assert.That(clonedKey2, Is.Not.SameAs(key2));
-            
+            await Assert.That(clonedKey1).IsNotSameReferenceAs(key1);
+            await Assert.That(clonedKey2).IsNotSameReferenceAs(key2);
+
             // Dictionary lookups should work with cloned keys (slow path ensures this)
-            Assert.That(cloned.ContainsKey(clonedKey1), Is.True);
-            Assert.That(cloned.ContainsKey(clonedKey2), Is.True);
-            Assert.That(cloned[clonedKey1], Is.EqualTo(100));
-            Assert.That(cloned[clonedKey2], Is.EqualTo(200));
-        });
+            await Assert.That(cloned.ContainsKey(clonedKey1)).IsTrue();
+            await Assert.That(cloned.ContainsKey(clonedKey2)).IsTrue();
+            await Assert.That(cloned[clonedKey1]).IsEqualTo(100);
+            await Assert.That(cloned[clonedKey2]).IsEqualTo(200);
+
+            // Assert
+        }
     }
     
     [Test]
-    public void HashSetWithReferenceElements_SlowPath_ShouldCloneCorrectly()
+    public async Task HashSetWithReferenceElements_SlowPath_ShouldCloneCorrectly()
     {
         // Arrange - KeyClass uses default GetHashCode (identity-based, slow path)
         KeyClass item1 = new KeyClass { Value = "Item1" };
@@ -1151,23 +1241,25 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         KeyClass clonedItem2 = cloned.First(k => k.Value == "Item2");
         
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original));
-            Assert.That(cloned.Count, Is.EqualTo(2));
-            
+            await Assert.That(cloned).IsNotSameReferenceAs(original);
+            await Assert.That(cloned.Count).IsEqualTo(2);
+
             // Elements should be cloned (not same reference)
-            Assert.That(clonedItem1, Is.Not.SameAs(item1));
-            Assert.That(clonedItem2, Is.Not.SameAs(item2));
-            
+            await Assert.That(clonedItem1).IsNotSameReferenceAs(item1);
+            await Assert.That(clonedItem2).IsNotSameReferenceAs(item2);
+
             // Set lookups should work with cloned elements (slow path ensures this)
-            Assert.That(cloned.Contains(clonedItem1), Is.True);
-            Assert.That(cloned.Contains(clonedItem2), Is.True);
-        });
+            await Assert.That(cloned.Contains(clonedItem1)).IsTrue();
+            await Assert.That(cloned.Contains(clonedItem2)).IsTrue();
+
+            // Assert
+        }
     }
     
     [Test]
-    public void LargeDictionary_FastPath_ShouldCloneEfficiently()
+    public async Task LargeDictionary_FastPath_ShouldCloneEfficiently()
     {
         // Arrange - large dictionary with string keys (fast path)
         Dictionary<string, int> original = new Dictionary<string, int>();
@@ -1180,21 +1272,23 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Dictionary<string, int> cloned = original.DeepClone();
         
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original));
-            Assert.That(cloned.Count, Is.EqualTo(10000));
-            
+            await Assert.That(cloned).IsNotSameReferenceAs(original);
+            await Assert.That(cloned.Count).IsEqualTo(10000);
+
             // Verify some random entries
-            Assert.That(cloned["key_0"], Is.EqualTo(0));
-            Assert.That(cloned["key_5000"], Is.EqualTo(5000));
-            Assert.That(cloned["key_9999"], Is.EqualTo(9999));
-            Assert.That(cloned.ContainsKey("key_1234"), Is.True);
-        });
+            await Assert.That(cloned["key_0"]).IsEqualTo(0);
+            await Assert.That(cloned["key_5000"]).IsEqualTo(5000);
+            await Assert.That(cloned["key_9999"]).IsEqualTo(9999);
+            await Assert.That(cloned.ContainsKey("key_1234")).IsTrue();
+
+            // Assert
+        }
     }
     
     [Test]
-    public void LargeExpandoObject_ShouldCloneCorrectly()
+    public async Task LargeExpandoObject_ShouldCloneCorrectly()
     {
         // Arrange - this is the "Large" benchmark scenario (100 properties of various types)
         dynamic original = new System.Dynamic.ExpandoObject();
@@ -1227,36 +1321,38 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         IDictionary<string, object?> clonedDict = cloned;
         
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That((object)cloned, Is.Not.SameAs((object)original));
-            Assert.That(clonedDict.Count, Is.EqualTo(100));
-            
+            await Assert.That((object)cloned).IsNotSameReferenceAs((object)original);
+            await Assert.That(clonedDict.Count).IsEqualTo(100);
+
             // Verify string properties
-            Assert.That(clonedDict["StringProp_0"], Is.EqualTo("String value 0"));
-            Assert.That(clonedDict["StringProp_50"], Is.EqualTo("String value 50"));
-            
+            await Assert.That(clonedDict["StringProp_0"]).IsEqualTo("String value 0");
+            await Assert.That(clonedDict["StringProp_50"]).IsEqualTo("String value 50");
+
             // Verify int properties
-            Assert.That(clonedDict["IntProp_1"], Is.EqualTo(10));
-            Assert.That(clonedDict["IntProp_51"], Is.EqualTo(510));
-            
+            await Assert.That(clonedDict["IntProp_1"]).IsEqualTo(10);
+            await Assert.That(clonedDict["IntProp_51"]).IsEqualTo(510);
+
             // Verify double properties  
-            Assert.That(clonedDict["DoubleProp_2"], Is.EqualTo(3.0));
-            Assert.That(clonedDict["DoubleProp_52"], Is.EqualTo(78.0));
-            
+            await Assert.That(clonedDict["DoubleProp_2"]).IsEqualTo(3.0);
+            await Assert.That(clonedDict["DoubleProp_52"]).IsEqualTo(78.0);
+
             // Verify nested anonymous types are cloned
             dynamic nested4 = clonedDict["NestedProp_4"];
-            Assert.That((int)nested4.NestedId, Is.EqualTo(4));
-            Assert.That((string)nested4.NestedValue, Is.EqualTo("Nested 4"));
-            
+            await Assert.That((int)nested4.NestedId).IsEqualTo(4);
+            await Assert.That((string)nested4.NestedValue).IsEqualTo("Nested 4");
+
             dynamic nested99 = clonedDict["NestedProp_99"];
-            Assert.That((int)nested99.NestedId, Is.EqualTo(99));
-            Assert.That((string)nested99.NestedValue, Is.EqualTo("Nested 99"));
-        });
+            await Assert.That((int)nested99.NestedId).IsEqualTo(99);
+            await Assert.That((string)nested99.NestedValue).IsEqualTo("Nested 99");
+
+            // Assert
+        }
     }
     
     [Test]
-    public void LargeExpandoObject_WithNestedExpandos_ShouldCloneCorrectly()
+    public async Task LargeExpandoObject_WithNestedExpandos_ShouldCloneCorrectly()
     {
         // Arrange - nested ExpandoObjects similar to benchmark
         dynamic root = new System.Dynamic.ExpandoObject();
@@ -1280,33 +1376,35 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         dynamic cloned = FastCloner.DeepClone(root);
         
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That((object)cloned, Is.Not.SameAs((object)root));
-            Assert.That((string)cloned.Name, Is.EqualTo("Root"));
-            Assert.That((int)cloned.Level, Is.EqualTo(0));
-            
+            await Assert.That((object)cloned).IsNotSameReferenceAs((object)root);
+            await Assert.That((string)cloned.Name).IsEqualTo("Root");
+            await Assert.That((int)cloned.Level).IsEqualTo(0);
+
             // Verify nested structure is cloned
             List<object> clonedChildren = cloned.Children;
-            Assert.That(clonedChildren, Is.Not.SameAs((List<object>)root.Children));
-            Assert.That(clonedChildren.Count, Is.EqualTo(1));
-            
+            await Assert.That(clonedChildren).IsNotSameReferenceAs((List<object>)root.Children);
+            await Assert.That(clonedChildren.Count).IsEqualTo(1);
+
             dynamic clonedChild1 = clonedChildren[0];
-            Assert.That((object)clonedChild1, Is.Not.SameAs((object)child1));
-            Assert.That((string)clonedChild1.Name, Is.EqualTo("Child1"));
-            
+            await Assert.That((object)clonedChild1).IsNotSameReferenceAs((object)child1);
+            await Assert.That((string)clonedChild1.Name).IsEqualTo("Child1");
+
             dynamic clonedGrandchild = clonedChild1.Child;
-            Assert.That((object)clonedGrandchild, Is.Not.SameAs((object)grandchild));
-            Assert.That((string)clonedGrandchild.Name, Is.EqualTo("Grandchild"));
-            
+            await Assert.That((object)clonedGrandchild).IsNotSameReferenceAs((object)grandchild);
+            await Assert.That((string)clonedGrandchild.Name).IsEqualTo("Grandchild");
+
             string[] clonedTags = clonedGrandchild.Tags;
-            Assert.That(clonedTags, Is.Not.SameAs((string[])grandchild.Tags));
-            Assert.That(clonedTags, Is.EqualTo(new[] { "tag1", "tag2", "tag3" }));
-        });
+            await Assert.That(clonedTags).IsNotSameReferenceAs((string[])grandchild.Tags);
+            await Assert.That(clonedTags).IsEquivalentTo(["tag1", "tag2", "tag3"]);
+
+            // Assert
+        }
     }
     
     [Test]
-    public void ExpandoObject_WithCircularReference_ShouldCloneCorrectly()
+    public async Task ExpandoObject_WithCircularReference_ShouldCloneCorrectly()
     {
         // Arrange - circular reference similar to benchmark
         dynamic parent = new System.Dynamic.ExpandoObject();
@@ -1325,29 +1423,31 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         dynamic cloned = FastCloner.DeepClone(parent);
         
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That((object)cloned, Is.Not.SameAs((object)parent));
-            Assert.That((string)cloned.Name, Is.EqualTo("Parent"));
-            Assert.That((int)cloned.Id, Is.EqualTo(1));
-            
+            await Assert.That((object)cloned).IsNotSameReferenceAs((object)parent);
+            await Assert.That((string)cloned.Name).IsEqualTo("Parent");
+            await Assert.That((int)cloned.Id).IsEqualTo(1);
+
             // Verify circular reference is preserved
             dynamic clonedChild = cloned.Child;
-            Assert.That((object)clonedChild, Is.Not.SameAs((object)child));
-            Assert.That((string)clonedChild.Name, Is.EqualTo("Child"));
-            
+            await Assert.That((object)clonedChild).IsNotSameReferenceAs((object)child);
+            await Assert.That((string)clonedChild.Name).IsEqualTo("Child");
+
             // Child's parent should point to cloned parent, not original
-            Assert.That((object)clonedChild.Parent, Is.SameAs((object)cloned));
-            Assert.That((object)clonedChild.Parent, Is.Not.SameAs((object)parent));
-            
+            await Assert.That((object)clonedChild.Parent).IsSameReferenceAs((object)cloned);
+            await Assert.That((object)clonedChild.Parent).IsNotSameReferenceAs((object)parent);
+
             // Self reference should point to cloned parent
-            Assert.That((object)cloned.Self, Is.SameAs((object)cloned));
-            Assert.That((object)cloned.Self, Is.Not.SameAs((object)parent));
-        });
+            await Assert.That((object)cloned.Self).IsSameReferenceAs((object)cloned);
+            await Assert.That((object)cloned.Self).IsNotSameReferenceAs((object)parent);
+
+            // Assert
+        }
     }
     
     [Test]
-    public void LargeExpandoObject_BenchmarkScenario_VerifyDeepClone()
+    public async Task LargeExpandoObject_BenchmarkScenario_VerifyDeepClone()
     {
         dynamic original = new System.Dynamic.ExpandoObject();
         IDictionary<string, object?> originalDict = original;
@@ -1378,50 +1478,46 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         dynamic cloned = FastCloner.DeepClone(original);
         IDictionary<string, object?> clonedDict = cloned;
         
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
             // 1. Clone is a different object instance
-            Assert.That((object)cloned, Is.Not.SameAs((object)original), 
-                "Clone must be a different object instance");
-            
+            await Assert.That((object)cloned).IsNotSameReferenceAs((object)original).Because("Clone must be a different object instance");
+
             // 2. All 100 properties are present
-            Assert.That(clonedDict.Count, Is.EqualTo(100), 
-                "Clone must have all 100 properties");
-            
+            await Assert.That(clonedDict.Count).IsEqualTo(100).Because("Clone must have all 100 properties");
+
             // 3. Modifying clone does NOT affect original (independence test)
             clonedDict["StringProp_0"] = "MODIFIED";
-            Assert.That(originalDict["StringProp_0"], Is.EqualTo("String value 0"), 
-                "Modifying clone must not affect original string");
-            
+            await Assert.That(originalDict["StringProp_0"]).IsEqualTo("String value 0").Because("Modifying clone must not affect original string");
+
             clonedDict["IntProp_1"] = 99999;
-            Assert.That(originalDict["IntProp_1"], Is.EqualTo(10), 
-                "Modifying clone must not affect original int");
-            
+            await Assert.That(originalDict["IntProp_1"]).IsEqualTo(10).Because("Modifying clone must not affect original int");
+
             // 4. Anonymous types are immutable, so sharing is correct - verify values match
             dynamic originalNested4 = originalDict["NestedProp_4"];
             dynamic clonedNested4 = clonedDict["NestedProp_4"];
-            Assert.That((int)clonedNested4.NestedId, Is.EqualTo(4));
-            Assert.That((string)clonedNested4.NestedValue, Is.EqualTo("Nested 4"));
-            
+            await Assert.That((int)clonedNested4.NestedId).IsEqualTo(4);
+            await Assert.That((string)clonedNested4.NestedValue).IsEqualTo("Nested 4");
+
             // 5. Verify multiple nested values are correct
             dynamic clonedNested99 = clonedDict["NestedProp_99"];
-            Assert.That((int)clonedNested99.NestedId, Is.EqualTo(99));
-            Assert.That((string)clonedNested99.NestedValue, Is.EqualTo("Nested 99"));
-            
+            await Assert.That((int)clonedNested99.NestedId).IsEqualTo(99);
+            await Assert.That((string)clonedNested99.NestedValue).IsEqualTo("Nested 99");
+
             // 6. Original values unchanged after all modifications
-            Assert.That(originalDict["StringProp_50"], Is.EqualTo("String value 50"));
-            Assert.That(originalDict["IntProp_51"], Is.EqualTo(510));
-            Assert.That(originalDict["DoubleProp_52"], Is.EqualTo(78.0));
-            
+            await Assert.That(originalDict["StringProp_50"]).IsEqualTo("String value 50");
+            await Assert.That(originalDict["IntProp_51"]).IsEqualTo(510);
+            await Assert.That(originalDict["DoubleProp_52"]).IsEqualTo(78.0);
+
             // 7. Replacing nested property in clone doesn't affect original
             clonedDict["NestedProp_4"] = new { NestedId = 999, NestedValue = "Replaced" };
-            Assert.That((int)originalNested4.NestedId, Is.EqualTo(4), 
-                "Original nested value unchanged after replacing in clone");
-        });
+            await Assert.That((int)originalNested4.NestedId).IsEqualTo(4).Because("Original nested value unchanged after replacing in clone");
+
+        }
     }
     
     [Test]
-    public void LargeExpandoObject_ModifyClonedNestedObjects_OriginalUnchanged()
+    public async Task LargeExpandoObject_ModifyClonedNestedObjects_OriginalUnchanged()
     {
         // Arrange - ExpandoObject with mutable nested objects
         dynamic original = new System.Dynamic.ExpandoObject();
@@ -1443,32 +1539,32 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         cloned.NestedExpando.NewProp = "AddedProperty";
         
         // Assert - original is completely unchanged
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
             // List modifications don't affect original
             List<string> originalList = original.MutableList;
-            Assert.That(originalList.Count, Is.EqualTo(3), "Original list count unchanged");
-            Assert.That(originalList[0], Is.EqualTo("Item1"), "Original list items unchanged");
-            Assert.That(originalList.Contains("NewItem"), Is.False, "Original list doesn't have new item");
-            
+            await Assert.That(originalList.Count).IsEqualTo(3).Because("Original list count unchanged");
+            await Assert.That(originalList[0]).IsEqualTo("Item1").Because("Original list items unchanged");
+            await Assert.That(originalList.Contains("NewItem")).IsFalse().Because("Original list doesn't have new item");
+
             // Dictionary modifications don't affect original
             Dictionary<string, int> originalDictionary = original.MutableDict;
-            Assert.That(originalDictionary["Key1"], Is.EqualTo(1), "Original dict values unchanged");
-            Assert.That(originalDictionary.ContainsKey("NewKey"), Is.False, "Original dict doesn't have new key");
-            Assert.That(originalDictionary.Count, Is.EqualTo(2), "Original dict count unchanged");
-            
+            await Assert.That(originalDictionary["Key1"]).IsEqualTo(1).Because("Original dict values unchanged");
+            await Assert.That(originalDictionary.ContainsKey("NewKey")).IsFalse().Because("Original dict doesn't have new key");
+            await Assert.That(originalDictionary.Count).IsEqualTo(2).Because("Original dict count unchanged");
+
             // Nested ExpandoObject modifications don't affect original
-            Assert.That((string)original.NestedExpando.Value, Is.EqualTo("OriginalValue"), 
-                "Original nested expando value unchanged");
-            
+            await Assert.That((string)original.NestedExpando.Value).IsEqualTo("OriginalValue").Because("Original nested expando value unchanged");
+
             IDictionary<string, object?> originalNestedDict = original.NestedExpando;
-            Assert.That(originalNestedDict.ContainsKey("NewProp"), Is.False, 
-                "Original nested expando doesn't have new property");
-            
+            await Assert.That(originalNestedDict.ContainsKey("NewProp")).IsFalse().Because("Original nested expando doesn't have new property");
+
             // Verify cloned values are actually modified
-            Assert.That(cloned.MutableList.Count, Is.EqualTo(4));
-            Assert.That(cloned.MutableDict["Key1"], Is.EqualTo(999));
-            Assert.That((string)cloned.NestedExpando.Value, Is.EqualTo("ModifiedValue"));
-        });
+            await Assert.That((int)cloned.MutableList.Count).IsEqualTo(4);
+            await Assert.That((int)cloned.MutableDict["Key1"]).IsEqualTo(999);
+            await Assert.That((string)cloned.NestedExpando.Value).IsEqualTo("ModifiedValue");
+
+            // Assert - original is completely unchanged
+        }
     }
 }

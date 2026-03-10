@@ -2,7 +2,7 @@ using System;
 using System.Reflection;
 using FastCloner.SourceGenerator.Shared;
 using FastCloner.Tests;
-using NUnit.Framework;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests
 {
@@ -17,14 +17,12 @@ namespace FastCloner.Tests
     {
         public T Value { get; set; }
     }
-
-    [TestFixture]
     [SourceGeneratorCompatible]
     public class IncludeAttributeTests
     {
         [Test]
         [SourceGeneratorCompatible]
-        public void GenericClassWithInclude_Should_Clone_Included_Type_Via_Reflection()
+        public async Task GenericClassWithInclude_Should_Clone_Included_Type_Via_Reflection()
         {
             // We use reflection to create the type and invoke the clone method
             // to ensure that MyCls<Bar> does not appear in the source code
@@ -40,21 +38,21 @@ namespace FastCloner.Tests
             
             // Find the generated extension method
             Type? extensionsType = typeof(IncludeAttributeTests).Assembly.GetType("FastCloner.Tests.MyClsFastDeepCloneExtensions");
-            Assert.That(extensionsType, Is.Not.Null, "Generated extension class not found");
-            
+            await Assert.That(extensionsType).IsNotNull().Because("Generated extension class not found");
+
             MethodInfo? method = extensionsType.GetMethod("FastDeepClone");
-            Assert.That(method, Is.Not.Null, "FastDeepClone method not found");
-            
+            await Assert.That(method).IsNotNull().Because("FastDeepClone method not found");
+
             MethodInfo genericMethod = method.MakeGenericMethod(typeof(Bar));
-            object? clone = genericMethod.Invoke(null, new[] { instance });
+            object? clone = genericMethod.Invoke(null, [instance]);
             
-            Assert.That(clone, Is.Not.Null);
-            Assert.That(clone.GetType(), Is.EqualTo(closedType));
-            Assert.That(clone, Is.Not.SameAs(instance));
-            
+            await Assert.That(clone).IsNotNull();
+            await Assert.That(clone.GetType()).IsEqualTo(closedType);
+            await Assert.That(clone).IsNotSameReferenceAs(instance);
+
             object? cloneValue = closedType.GetProperty("Value").GetValue(clone);
-            Assert.That(cloneValue, Is.Not.SameAs(bar)); // Should be deep cloned if Bar is handled correctly
-            Assert.That(((Bar)cloneValue).Name, Is.EqualTo("test"));
+            await Assert.That(cloneValue).IsNotSameReferenceAs(bar); // Should be deep cloned if Bar is handled correctly
+            await Assert.That(((Bar)cloneValue).Name).IsEqualTo("test");
         }
     }
 }

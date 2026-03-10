@@ -7,21 +7,69 @@ namespace FastCloner;
 /// </summary>
 public static class FastCloner
 {
-    internal static volatile bool DisableOptionalFeatures;
+    private static readonly object configSync = new();
+    private static long nextConfigCacheKey;
+    private static FastClonerPublishedEngine publishedEngine = FastClonerPublishedEngine.StartupDefault;
+
+    internal static FastClonerPublishedEngine GetPublishedEngine() => Volatile.Read(ref publishedEngine);
+    internal static FastClonerRuntimeConfig GetRuntimeConfigSnapshot() => GetPublishedEngine().RuntimeConfig;
+    internal static bool IsPublishedConfigDefault() => GetPublishedEngine().UsesStartupDefaultRail;
+    internal static long GetPublishedCacheKey() => GetPublishedEngine().CacheKey;
+    internal static FastClonerRuntimeConfig? TryGetPublishedNonDefaultConfig()
+    {
+        FastClonerPublishedEngine engine = GetPublishedEngine();
+        return engine.UsesStartupDefaultRail ? null : engine.RuntimeConfig;
+    }
+
+    internal static bool DisableOptionalFeatures
+    {
+        get
+        {
+            FastClonerRuntimeConfig? current = FastClonerRuntimeConfigScope.TryGetCurrent();
+            if (current is not null)
+                return current.DisableOptionalFeatures;
+
+            FastClonerPublishedEngine engine = GetPublishedEngine();
+            return engine.UsesStartupDefaultRail ? false : engine.RuntimeConfig.DisableOptionalFeatures;
+        }
+    }
 
     internal static void SetDisableOptionalFeatures(bool value)
     {
-        if (DisableOptionalFeatures == value)
-            return;
+        lock (configSync)
+        {
+            FastClonerRuntimeConfig current = GetRuntimeConfigSnapshot();
+            if (current.DisableOptionalFeatures == value)
+                return;
 
-        DisableOptionalFeatures = value;
-        RefreshCachesAfterBehaviorStateChange();
+            publishedEngine = CreatePublishedEngine(
+                current.MaxRecursionDepth,
+                value,
+                current.CloneTypeBehaviors());
+        }
     }
 
     /// <summary>
     /// Cloning objects with nest level above this threshold uses iterative approach instead of recursion.
     /// </summary>
-    public static int MaxRecursionDepth { get; set; } = 1_000;
+    public static int MaxRecursionDepth
+    {
+        get => FastClonerRuntimeConfigScope.Current.MaxRecursionDepth;
+        set
+        {
+            lock (configSync)
+            {
+                FastClonerRuntimeConfig current = GetRuntimeConfigSnapshot();
+                if (current.MaxRecursionDepth == value)
+                    return;
+
+                publishedEngine = CreatePublishedEngine(
+                    value,
+                    current.DisableOptionalFeatures,
+                    current.CloneTypeBehaviors());
+            }
+        }
+    }
     
     /// <summary>
     /// Performs deep (full) copy of object and related graph
@@ -68,18 +116,29 @@ public static class FastCloner
     /// </remarks>
     public static void SetTypeBehavior(Type type, CloneBehavior behavior)
     {
-        if (behavior == CloneBehavior.Clone)
+        lock (configSync)
         {
-            // Clone is the default - remove any custom behavior
-            if (FastClonerCache.TypeBehaviors.TryRemove(type, out _))
+            FastClonerRuntimeConfig current = GetRuntimeConfigSnapshot();
+            Dictionary<Type, CloneBehavior> typeBehaviors = current.CloneTypeBehaviors();
+
+            if (behavior == CloneBehavior.Clone)
             {
-                RefreshCachesAfterBehaviorStateChange();
+                if (!typeBehaviors.Remove(type))
+                    return;
             }
-        }
-        else
-        {
-            FastClonerCache.TypeBehaviors[type] = behavior;
-            RefreshCachesAfterBehaviorStateChange();
+            else if (typeBehaviors.TryGetValue(type, out CloneBehavior currentBehavior) && currentBehavior == behavior)
+            {
+                return;
+            }
+            else
+            {
+                typeBehaviors[type] = behavior;
+            }
+
+            publishedEngine = CreatePublishedEngine(
+                current.MaxRecursionDepth,
+                current.DisableOptionalFeatures,
+                typeBehaviors);
         }
     }
 
@@ -95,7 +154,7 @@ public static class FastCloner
     /// </summary>
     /// <param name="type">The type to query.</param>
     /// <returns>The configured behavior, or null if no custom behavior is set.</returns>
-    public static CloneBehavior? GetTypeBehavior(Type type) => FastClonerCache.GetTypeBehavior(type);
+    public static CloneBehavior? GetTypeBehavior(Type type) => GetRuntimeConfigSnapshot().GetTypeBehavior(type);
 
     /// <summary>
     /// Gets the configured cloning behavior for a type, or null if using default behavior.
@@ -109,7 +168,7 @@ public static class FastCloner
     /// </summary>
     public static Dictionary<Type, CloneBehavior> GetTypeBehaviors()
     {
-        return new Dictionary<Type, CloneBehavior>(FastClonerCache.TypeBehaviors);
+        return GetRuntimeConfigSnapshot().CloneTypeBehaviors();
     }
 
     /// <summary>
@@ -122,12 +181,19 @@ public static class FastCloner
     /// </remarks>
     public static bool ClearTypeBehavior(Type type)
     {
-        bool removed = FastClonerCache.TypeBehaviors.TryRemove(type, out _);
-        if (removed)
+        lock (configSync)
         {
-            RefreshCachesAfterBehaviorStateChange();
+            FastClonerRuntimeConfig current = GetRuntimeConfigSnapshot();
+            Dictionary<Type, CloneBehavior> typeBehaviors = current.CloneTypeBehaviors();
+            if (!typeBehaviors.Remove(type))
+                return false;
+
+            publishedEngine = CreatePublishedEngine(
+                current.MaxRecursionDepth,
+                current.DisableOptionalFeatures,
+                typeBehaviors);
+            return true;
         }
-        return removed;
     }
 
     /// <summary>
@@ -145,14 +211,31 @@ public static class FastCloner
     /// </remarks>
     public static void ClearAllTypeBehaviors()
     {
-        FastClonerCache.TypeBehaviors.Clear();
-        RefreshCachesAfterBehaviorStateChange();
+        lock (configSync)
+        {
+            FastClonerRuntimeConfig current = GetRuntimeConfigSnapshot();
+            if (!current.HasTypeBehaviorOverrides)
+                return;
+
+            publishedEngine = CreatePublishedEngine(
+                current.MaxRecursionDepth,
+                current.DisableOptionalFeatures,
+                new Dictionary<Type, CloneBehavior>());
+        }
     }
 
-    private static void RefreshCachesAfterBehaviorStateChange()
+    private static FastClonerPublishedEngine CreatePublishedEngine(
+        int maxRecursionDepth,
+        bool disableOptionalFeatures,
+        Dictionary<Type, CloneBehavior>? typeBehaviors)
     {
-        FastClonerSafeTypes.ClearKnownTypesCache();
-        FastClonerCache.ClearCache();
-        FastClonerCache.RecalculateTypeBehaviorState();
+        long cacheKey = Interlocked.Increment(ref nextConfigCacheKey);
+        FastClonerRuntimeConfig config = FastClonerRuntimeConfig.Create(
+            maxRecursionDepth,
+            disableOptionalFeatures,
+            typeBehaviors,
+            cacheKey,
+            useStartupDefaultSingleton: false);
+        return FastClonerPublishedEngine.CreateConfigured(config);
     }
 }

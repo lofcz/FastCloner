@@ -38,6 +38,8 @@ public enum CloneBehavior
 /// </summary>
 internal static class ClonerCache<T>
 {
+    private readonly record struct CacheIdentity(long ClearVersion, long ConfigCacheKey);
+
     internal readonly struct CacheEntry(
         Func<T, FastCloneState, T>? cloner,
         bool isSafe,
@@ -62,17 +64,30 @@ internal static class ClonerCache<T>
     private static bool canUseNoTrackingState;
     private static FastClonerCache.TypeCloneMetadata? metadata;
     private static long version = -1;
+    private static readonly ConcurrentDictionary<CacheIdentity, CacheEntry> versionedEntries = new();
 
-    public static CacheEntry GetCurrent()
+    public static CacheEntry GetCurrent(FastClonerRuntimeConfig config)
     {
         long currentVersion = FastClonerCache.GetCacheVersion();
+
+        if (config.CacheKey != 0)
+        {
+            CacheIdentity identity = new(currentVersion, config.CacheKey);
+            return versionedEntries.GetOrAdd(identity, _ => Refresh(config, currentVersion));
+        }
+
         if (Volatile.Read(ref version) != currentVersion)
         {
             lock (sync)
             {
                 if (version != currentVersion)
                 {
-                    Refresh(currentVersion);
+                    CacheEntry cacheEntry = Refresh(config, currentVersion);
+                    cloner = cacheEntry.Cloner;
+                    isSafe = cacheEntry.IsSafe;
+                    canUseNoTrackingState = cacheEntry.CanUseNoTrackingState;
+                    metadata = cacheEntry.Metadata;
+                    Volatile.Write(ref version, currentVersion);
                 }
             }
         }
@@ -80,15 +95,17 @@ internal static class ClonerCache<T>
         return new CacheEntry(cloner, isSafe, canUseNoTrackingState, metadata, currentVersion);
     }
 
-    private static void Refresh(long currentVersion)
+    private static CacheEntry Refresh(FastClonerRuntimeConfig config, long currentVersion)
     {
         Type type = typeof(T);
+        using FastClonerRuntimeConfigScope.Scope _ = FastClonerRuntimeConfigScope.Use(config);
+
         FastClonerCache.TypeCloneMetadata typeMetadata = FastClonerGenerator.GetTypeMetadata(type);
         bool computedIsSafe = FastClonerSafeTypes.CanReturnSameObject(type);
         bool computedCanUseNoTrackingState =
             !type.IsValueType &&
             typeMetadata is { CyclePolicy: FastClonerCache.CyclePolicy.None, HasBehaviorSensitiveMembers: false } &&
-            !FastClonerCache.HasActiveTypeBehaviorOverrides;
+            !config.HasActiveTypeBehaviorOverrides;
         Func<T, FastCloneState, T>? computedCloner = null;
 
         if (!computedIsSafe)
@@ -107,11 +124,7 @@ internal static class ClonerCache<T>
             }
         }
 
-        cloner = computedCloner;
-        isSafe = computedIsSafe;
-        canUseNoTrackingState = computedCanUseNoTrackingState;
-        metadata = typeMetadata;
-        Volatile.Write(ref version, currentVersion);
+        return new CacheEntry(computedCloner, computedIsSafe, computedCanUseNoTrackingState, typeMetadata, currentVersion);
     }
 }
 
@@ -172,50 +185,81 @@ internal static class FastClonerCache
         public bool HasDirectSelfReference { get; init; }
     }
 
-    internal static readonly ConcurrentDictionary<Type, CloneBehavior> TypeBehaviors = [];
-    internal static volatile bool HasTypeBehaviorOverrides;
-    internal static volatile bool HasActiveTypeBehaviorOverrides;
+    private static FastClonerRuntimeConfig? TryGetCurrentConfig() => FastClonerRuntimeConfigScope.TryGetCurrent();
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static long GetAmbientCacheKey()
+    {
+        FastClonerRuntimeConfig? current = TryGetCurrentConfig();
+        return current?.CacheKey ?? FastCloner.GetPublishedCacheKey();
+    }
+
+    internal static bool HasTypeBehaviorOverrides
+    {
+        get
+        {
+            FastClonerRuntimeConfig? current = TryGetCurrentConfig();
+            if (current is not null)
+                return current.HasTypeBehaviorOverrides;
+
+            return FastCloner.GetRuntimeConfigSnapshot().HasTypeBehaviorOverrides;
+        }
+    }
+
+    internal static bool HasActiveTypeBehaviorOverrides
+    {
+        get
+        {
+            FastClonerRuntimeConfig? current = TryGetCurrentConfig();
+            if (current is not null)
+                return current.HasActiveTypeBehaviorOverrides;
+
+            return FastCloner.GetRuntimeConfigSnapshot().HasActiveTypeBehaviorOverrides;
+        }
+    }
 
     internal static bool IsTypeIgnored(Type type)
     {
-        return HasActiveTypeBehaviorOverrides &&
-               TypeBehaviors.TryGetValue(type, out CloneBehavior behavior) &&
-               behavior == CloneBehavior.Ignore;
+        FastClonerRuntimeConfig? current = TryGetCurrentConfig();
+        if (current is not null)
+            return current.IsTypeIgnored(type);
+
+        return FastCloner.GetRuntimeConfigSnapshot().IsTypeIgnored(type);
     }
 
-    internal static volatile bool HasSafeTypeOverrides;
+    internal static bool HasSafeTypeOverrides
+    {
+        get
+        {
+            FastClonerRuntimeConfig? current = TryGetCurrentConfig();
+            if (current is not null)
+                return current.HasSafeTypeOverrides;
+
+            return FastCloner.GetRuntimeConfigSnapshot().HasSafeTypeOverrides;
+        }
+    }
     
     internal static bool IsTypeReference(Type type)
     {
-        return HasActiveTypeBehaviorOverrides &&
-               TypeBehaviors.TryGetValue(type, out CloneBehavior behavior) &&
-               behavior == CloneBehavior.Reference;
+        FastClonerRuntimeConfig? current = TryGetCurrentConfig();
+        if (current is not null)
+            return current.IsTypeReference(type);
+
+        return FastCloner.GetRuntimeConfigSnapshot().IsTypeReference(type);
     }
     
     internal static CloneBehavior? GetTypeBehavior(Type type)
     {
-        return TypeBehaviors.TryGetValue(type, out CloneBehavior behavior) ? behavior : null;
+        FastClonerRuntimeConfig? current = TryGetCurrentConfig();
+        if (current is not null)
+            return current.GetTypeBehavior(type);
+
+        return FastCloner.GetRuntimeConfigSnapshot().GetTypeBehavior(type);
     }
 
     internal static void RecalculateTypeBehaviorState()
     {
-        HasTypeBehaviorOverrides = !TypeBehaviors.IsEmpty;
-        HasActiveTypeBehaviorOverrides = HasTypeBehaviorOverrides && !FastCloner.DisableOptionalFeatures;
-        HasSafeTypeOverrides = CalculateHasSafeTypeOverrides();
-    }
-
-    private static bool CalculateHasSafeTypeOverrides()
-    {
-        if (!HasTypeBehaviorOverrides)
-            return false;
-
-        foreach (KeyValuePair<Type, CloneBehavior> kvp in TypeBehaviors)
-        {
-            if (kvp.Value == CloneBehavior.Ignore && FastClonerSafeTypes.DefaultKnownTypes.ContainsKey(kvp.Key))
-                return true;
-        }
-
-        return false;
+        // Runtime config snapshots precompute this state.
     }
     
     private static readonly ClrCache<object?> classCache = new ClrCache<object?>();
@@ -288,29 +332,99 @@ internal static class FastClonerCache
         BumpCacheVersion();
     }
 
+    private readonly struct ConfigTypeKey(long cacheKey, IntPtr typeHandle) : IEquatable<ConfigTypeKey>
+    {
+        public long CacheKey { get; } = cacheKey;
+        public IntPtr TypeHandle { get; } = typeHandle;
+
+        public bool Equals(ConfigTypeKey other)
+        {
+            return CacheKey == other.CacheKey && TypeHandle == other.TypeHandle;
+        }
+
+        public override bool Equals(object? obj)
+        {
+            return obj is ConfigTypeKey other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                return (CacheKey.GetHashCode() * 397) ^ TypeHandle.GetHashCode();
+            }
+        }
+    }
+
     private sealed class ClrCache<TValue>
     {
-        private readonly ConcurrentDictionary<IntPtr, TValue> cache = new ConcurrentDictionary<IntPtr, TValue>();
-        
+        private readonly ConcurrentDictionary<IntPtr, TValue> defaultCache = new ConcurrentDictionary<IntPtr, TValue>();
+        private readonly ConcurrentDictionary<ConfigTypeKey, TValue> versionedCache = new ConcurrentDictionary<ConfigTypeKey, TValue>();
+
         public TValue GetOrAdd(Type type, Func<Type, TValue> valueFactory)
         {
             IntPtr handle = type.TypeHandle.Value;
-            return cache.TryGetValue(handle, out TValue? existing) ? existing : cache.GetOrAdd(handle, _ => valueFactory(type));
+            long cacheKey = GetAmbientCacheKey();
+            if (cacheKey == 0)
+            {
+                return defaultCache.TryGetValue(handle, out TValue? existing)
+                    ? existing
+                    : defaultCache.GetOrAdd(handle, _ => valueFactory(type));
+            }
+
+            return versionedCache.GetOrAdd(new ConfigTypeKey(cacheKey, handle), _ => valueFactory(type));
         }
 
-        public void Clear() => cache.Clear();
+        public void Clear()
+        {
+            defaultCache.Clear();
+            versionedCache.Clear();
+        }
     }
-    
+
+    private readonly struct ConfigGenericKey<TKey>(long cacheKey, TKey key) : IEquatable<ConfigGenericKey<TKey>> where TKey : notnull
+    {
+        public long CacheKey { get; } = cacheKey;
+        public TKey Key { get; } = key;
+
+        public bool Equals(ConfigGenericKey<TKey> other)
+        {
+            return CacheKey == other.CacheKey && EqualityComparer<TKey>.Default.Equals(Key, other.Key);
+        }
+
+        public override bool Equals(object? obj)
+        {
+            return obj is ConfigGenericKey<TKey> other && Equals(other);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                return (CacheKey.GetHashCode() * 397) ^ EqualityComparer<TKey>.Default.GetHashCode(Key);
+            }
+        }
+    }
+
     private sealed class GenericClrCache<TKey, TValue> where TKey : notnull
     {
-        private readonly ConcurrentDictionary<TKey, TValue> cache = new ConcurrentDictionary<TKey, TValue>();
+        private readonly ConcurrentDictionary<TKey, TValue> defaultCache = new ConcurrentDictionary<TKey, TValue>();
+        private readonly ConcurrentDictionary<ConfigGenericKey<TKey>, TValue> versionedCache = new ConcurrentDictionary<ConfigGenericKey<TKey>, TValue>();
         
         public TValue GetOrAdd(TKey key, Func<TKey, TValue> valueFactory)
         {
-            return cache.GetOrAdd(key, valueFactory);
+            long cacheKey = GetAmbientCacheKey();
+            if (cacheKey == 0)
+                return defaultCache.GetOrAdd(key, valueFactory);
+
+            return versionedCache.GetOrAdd(new ConfigGenericKey<TKey>(cacheKey, key), _ => valueFactory(key));
         }
 
-        public void Clear() => cache.Clear();
+        public void Clear()
+        {
+            defaultCache.Clear();
+            versionedCache.Clear();
+        }
     }
 
     private readonly struct TypeNameKey(Type type, string name) : IEquatable<TypeNameKey>
@@ -340,25 +454,50 @@ internal static class FastClonerCache
     private sealed class ConcurrentLazyCache<TValue>
     {
 #if MODERN
-        private readonly ConcurrentDictionary<(IntPtr, IntPtr), TValue> cache = new ConcurrentDictionary<(IntPtr, IntPtr), TValue>();
+        private readonly ConcurrentDictionary<(IntPtr, IntPtr), TValue> defaultCache = new ConcurrentDictionary<(IntPtr, IntPtr), TValue>();
+        private readonly ConcurrentDictionary<(long CacheKey, IntPtr From, IntPtr To), TValue> versionedCache = new ConcurrentDictionary<(long CacheKey, IntPtr From, IntPtr To), TValue>();
 
         public TValue GetOrAdd(Type from, Type to, Func<Type, Type, TValue> valueFactory)
         {
-            (IntPtr, IntPtr) key = (from.TypeHandle.Value, to.TypeHandle.Value);
-            return cache.GetOrAdd(key, _ => valueFactory(from, to));
+            long cacheKey = GetAmbientCacheKey();
+            if (cacheKey == 0)
+            {
+                (IntPtr, IntPtr) key = (from.TypeHandle.Value, to.TypeHandle.Value);
+                return defaultCache.GetOrAdd(key, _ => valueFactory(from, to));
+            }
+
+            return versionedCache.GetOrAdd((cacheKey, from.TypeHandle.Value, to.TypeHandle.Value), _ => valueFactory(from, to));
         }
 
-        public void Clear() => cache.Clear();
+        public void Clear()
+        {
+            defaultCache.Clear();
+            versionedCache.Clear();
+        }
 #else
-        private readonly ConcurrentDictionary<Tuple<IntPtr, IntPtr>, TValue> cache = new ConcurrentDictionary<Tuple<IntPtr, IntPtr>, TValue>();
+        private readonly ConcurrentDictionary<Tuple<IntPtr, IntPtr>, TValue> defaultCache = new ConcurrentDictionary<Tuple<IntPtr, IntPtr>, TValue>();
+        private readonly ConcurrentDictionary<Tuple<long, IntPtr, IntPtr>, TValue> versionedCache = new ConcurrentDictionary<Tuple<long, IntPtr, IntPtr>, TValue>();
         
         public TValue GetOrAdd(Type from, Type to, Func<Type, Type, TValue> valueFactory)
         {
-            Tuple<IntPtr, IntPtr> key = Tuple.Create(from.TypeHandle.Value, to.TypeHandle.Value);
-            return cache.TryGetValue(key, out TValue? cached) ? cached : cache.GetOrAdd(key, _ => valueFactory(from, to));
+            long cacheKey = GetAmbientCacheKey();
+            if (cacheKey == 0)
+            {
+                Tuple<IntPtr, IntPtr> key = Tuple.Create(from.TypeHandle.Value, to.TypeHandle.Value);
+                return defaultCache.TryGetValue(key, out TValue? cached) ? cached : defaultCache.GetOrAdd(key, _ => valueFactory(from, to));
+            }
+
+            Tuple<long, IntPtr, IntPtr> versionedKey = Tuple.Create(cacheKey, from.TypeHandle.Value, to.TypeHandle.Value);
+            return versionedCache.TryGetValue(versionedKey, out TValue? versionedCached)
+                ? versionedCached
+                : versionedCache.GetOrAdd(versionedKey, _ => valueFactory(from, to));
         }
 
-        public void Clear() => cache.Clear();
+        public void Clear()
+        {
+            defaultCache.Clear();
+            versionedCache.Clear();
+        }
 #endif
     }
 }

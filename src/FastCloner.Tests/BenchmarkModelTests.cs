@@ -1,4 +1,5 @@
 using FastCloner.SourceGenerator.Shared;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
 
@@ -84,12 +85,10 @@ public enum UserRole
     Admin = 2,
     Owner = 3,
 }
-
-[TestFixture]
 public class BenchmarkModelTests
 {
     [Test]
-    public void ComplexModel_DeepClone_ShouldCloneAllProperties()
+    public async Task ComplexModel_DeepClone_ShouldCloneAllProperties()
     {
         // Arrange
         ComplexModel original = CreateComplexModel();
@@ -98,46 +97,46 @@ public class BenchmarkModelTests
         ComplexModel clone = original.FastDeepClone();
 
         // Assert - verify it's a different instance
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.Not.SameAs(original));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsNotSameReferenceAs(original);
 
         // Verify top-level properties
-        Assert.That(clone.Id, Is.EqualTo(original.Id));
-        Assert.That(clone.Name, Is.EqualTo(original.Name));
-        Assert.That(clone.Version, Is.EqualTo(original.Version));
-        Assert.That(clone.CreatedAt, Is.EqualTo(original.CreatedAt));
-        Assert.That(clone.UpdatedAt, Is.EqualTo(original.UpdatedAt));
+        await Assert.That(clone.Id).IsEqualTo(original.Id);
+        await Assert.That(clone.Name).IsEqualTo(original.Name);
+        await Assert.That(clone.Version).IsEqualTo(original.Version);
+        await Assert.That(clone.CreatedAt).IsEqualTo(original.CreatedAt);
+        await Assert.That(clone.UpdatedAt).IsEqualTo(original.UpdatedAt);
 
         // Verify Owner is deep cloned
-        Assert.That(clone.Owner, Is.Not.Null);
-        Assert.That(clone.Owner, Is.Not.SameAs(original.Owner));
-        Assert.That(clone.Owner!.UserId, Is.EqualTo(original.Owner!.UserId));
-        Assert.That(clone.Owner.Contact, Is.Not.SameAs(original.Owner.Contact));
+        await Assert.That(clone.Owner).IsNotNull();
+        await Assert.That(clone.Owner).IsNotSameReferenceAs(original.Owner);
+        await Assert.That(clone.Owner!.UserId).IsEqualTo(original.Owner!.UserId);
+        await Assert.That(clone.Owner.Contact).IsNotSameReferenceAs(original.Owner.Contact);
 
         // Verify Contributors is deep cloned
-        Assert.That(clone.Contributors, Is.Not.Null);
-        Assert.That(clone.Contributors, Is.Not.SameAs(original.Contributors));
-        Assert.That(clone.Contributors!.Count, Is.EqualTo(original.Contributors!.Count));
-        Assert.That(clone.Contributors[0], Is.Not.SameAs(original.Contributors[0]));
+        await Assert.That(clone.Contributors).IsNotNull();
+        await Assert.That(clone.Contributors).IsNotSameReferenceAs(original.Contributors);
+        await Assert.That(clone.Contributors!.Count).IsEqualTo(original.Contributors!.Count);
+        await Assert.That(clone.Contributors[0]).IsNotSameReferenceAs(original.Contributors[0]);
 
         // Verify Metadata is deep cloned
-        Assert.That(clone.Metadata, Is.Not.Null);
-        Assert.That(clone.Metadata, Is.Not.SameAs(original.Metadata));
+        await Assert.That(clone.Metadata).IsNotNull();
+        await Assert.That(clone.Metadata).IsNotSameReferenceAs(original.Metadata);
 
         // Verify Items is deep cloned
-        Assert.That(clone.Items, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
-        Assert.That(clone.Items![0], Is.Not.SameAs(original.Items![0]));
-        Assert.That(clone.Items[0].SubItems, Is.Not.SameAs(original.Items[0].SubItems));
+        await Assert.That(clone.Items).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
+        await Assert.That(clone.Items![0]).IsNotSameReferenceAs(original.Items![0]);
+        await Assert.That(clone.Items[0].SubItems).IsNotSameReferenceAs(original.Items[0].SubItems);
 
         // Verify Settings is deep cloned
-        Assert.That(clone.Settings, Is.Not.Null);
-        Assert.That(clone.Settings, Is.Not.SameAs(original.Settings));
-        Assert.That(clone.Settings!.Advanced, Is.Not.SameAs(original.Settings!.Advanced));
+        await Assert.That(clone.Settings).IsNotNull();
+        await Assert.That(clone.Settings).IsNotSameReferenceAs(original.Settings);
+        await Assert.That(clone.Settings!.Advanced).IsNotSameReferenceAs(original.Settings!.Advanced);
     }
 
     [Test]
-    public void ComplexModel_ModifyClone_ShouldNotAffectOriginal()
+    public async Task ComplexModel_ModifyClone_ShouldNotAffectOriginal()
     {
         // Arrange
         ComplexModel original = CreateComplexModel();
@@ -151,11 +150,11 @@ public class BenchmarkModelTests
         clone.Settings!.Advanced!.CacheSize = 9999;
 
         // Assert - original should be unchanged
-        Assert.That(original.Name, Is.EqualTo("Test Model"));
-        Assert.That(original.Owner!.UserName, Is.EqualTo("John Doe"));
-        Assert.That(original.Contributors![0].Email, Is.EqualTo("contributor1@example.com"));
-        Assert.That(original.Items![0].Title, Is.EqualTo("Item 1"));
-        Assert.That(original.Settings!.Advanced!.CacheSize, Is.EqualTo(1024));
+        await Assert.That(original.Name).IsEqualTo("Test Model");
+        await Assert.That(original.Owner!.UserName).IsEqualTo("John Doe");
+        await Assert.That(original.Contributors![0].Email).IsEqualTo("contributor1@example.com");
+        await Assert.That(original.Items![0].Title).IsEqualTo("Item 1");
+        await Assert.That(original.Settings!.Advanced!.CacheSize).IsEqualTo(1024);
     }
 
     private static ComplexModel CreateComplexModel()
