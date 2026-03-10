@@ -36,13 +36,16 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
         
     - name: Restore dependencies
-      run: dotnet restore src/FastClonerCi.slnf
+      working-directory: src
+      run: dotnet restore FastClonerCi.slnf
 
     - name: Build
-      run: dotnet build src/FastClonerCi.slnf --no-restore
+      working-directory: src
+      run: dotnet build FastClonerCi.slnf --no-restore
 
     - name: Test
-      run: dotnet test src/FastClonerCi.slnf --no-build --verbosity normal
+      working-directory: src
+      run: dotnet test FastClonerCi.slnf --no-build --verbosity normal
 
     - name: Update GitHub status check
       if: always()
@@ -73,7 +76,8 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
         
     - name: Build FastCloner for netstandard2.0
-      run: dotnet build src/FastCloner/ --framework netstandard2.0
+      working-directory: src
+      run: dotnet build FastCloner/ --framework netstandard2.0
 
     - name: Update GitHub status check
       if: always()
@@ -104,7 +108,8 @@ jobs:
         node-version: ${{ env.NODE_VERSION }}
         
     - name: Build FastCloner for net46
-      run: dotnet build src/FastCloner/ --framework net46
+      working-directory: src
+      run: dotnet build FastCloner/ --framework net46
 
     - name: Update GitHub status check
       if: always()

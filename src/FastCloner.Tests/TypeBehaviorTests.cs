@@ -812,6 +812,43 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
 
     [Test]
+    public async Task GlobalConfigPublish_ClearsVersionedCaches_BeforeRefilling()
+    {
+        FastCloner.ClearCache();
+        FastCloner.ClearAllTypeBehaviors();
+        FastCloner.SetDisableOptionalFeatures(false);
+
+        SimpleClass simple = new SimpleClass { IntValue = 7, StringValue = "Seven" };
+        Dictionary<string, SimpleClass> dictionary = new Dictionary<string, SimpleClass>
+        {
+            ["one"] = new SimpleClass { IntValue = 1, StringValue = "One" }
+        };
+
+        FastCloner.MaxRecursionDepth = 999;
+        _ = simple.DeepClone();
+        _ = dictionary.DeepClone();
+
+        int firstVersionedCacheCount = FastClonerCache.GetVersionedCacheEntryCountForTesting();
+        int firstClonerEntryCount = FastClonerCache.GetClonerCacheVersionedEntryCountForTesting<SimpleClass>();
+        int firstKnownTypesCount = FastClonerSafeTypes.GetVersionedKnownTypesCountForTesting();
+        int firstAdaptiveFactoryCount = FastClonerExprGenerator.GetAdaptiveDictionaryFactoryCacheCountForTesting();
+
+        await Assert.That(firstVersionedCacheCount).IsGreaterThan(0);
+        await Assert.That(firstClonerEntryCount).IsGreaterThan(0);
+        await Assert.That(firstKnownTypesCount).IsGreaterThan(0);
+        await Assert.That(firstAdaptiveFactoryCount).IsGreaterThan(0);
+
+        FastCloner.MaxRecursionDepth = 998;
+        _ = simple.DeepClone();
+        _ = dictionary.DeepClone();
+
+        await Assert.That(FastClonerCache.GetVersionedCacheEntryCountForTesting()).IsEqualTo(firstVersionedCacheCount);
+        await Assert.That(FastClonerCache.GetClonerCacheVersionedEntryCountForTesting<SimpleClass>()).IsEqualTo(firstClonerEntryCount);
+        await Assert.That(FastClonerSafeTypes.GetVersionedKnownTypesCountForTesting()).IsEqualTo(firstKnownTypesCount);
+        await Assert.That(FastClonerExprGenerator.GetAdaptiveDictionaryFactoryCacheCountForTesting()).IsEqualTo(firstAdaptiveFactoryCount);
+    }
+
+    [Test]
     public async Task RuntimeConfig_Create_DefaultValues_CanStaySingletonOrBecomeDistinctSnapshot()
     {
         FastClonerRuntimeConfig startupDefault = FastClonerRuntimeConfig.Create(

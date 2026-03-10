@@ -42,10 +42,10 @@ public static class FastCloner
             if (current.DisableOptionalFeatures == value)
                 return;
 
-            publishedEngine = CreatePublishedEngine(
+            PublishEngine(CreatePublishedEngine(
                 current.MaxRecursionDepth,
                 value,
-                current.CloneTypeBehaviors());
+                current.CloneTypeBehaviors()));
         }
     }
 
@@ -63,10 +63,10 @@ public static class FastCloner
                 if (current.MaxRecursionDepth == value)
                     return;
 
-                publishedEngine = CreatePublishedEngine(
+                PublishEngine(CreatePublishedEngine(
                     value,
                     current.DisableOptionalFeatures,
-                    current.CloneTypeBehaviors());
+                    current.CloneTypeBehaviors()));
             }
         }
     }
@@ -135,10 +135,10 @@ public static class FastCloner
                 typeBehaviors[type] = behavior;
             }
 
-            publishedEngine = CreatePublishedEngine(
+            PublishEngine(CreatePublishedEngine(
                 current.MaxRecursionDepth,
                 current.DisableOptionalFeatures,
-                typeBehaviors);
+                typeBehaviors));
         }
     }
 
@@ -188,10 +188,10 @@ public static class FastCloner
             if (!typeBehaviors.Remove(type))
                 return false;
 
-            publishedEngine = CreatePublishedEngine(
+            PublishEngine(CreatePublishedEngine(
                 current.MaxRecursionDepth,
                 current.DisableOptionalFeatures,
-                typeBehaviors);
+                typeBehaviors));
             return true;
         }
     }
@@ -217,11 +217,17 @@ public static class FastCloner
             if (!current.HasTypeBehaviorOverrides)
                 return;
 
-            publishedEngine = CreatePublishedEngine(
+            PublishEngine(CreatePublishedEngine(
                 current.MaxRecursionDepth,
                 current.DisableOptionalFeatures,
-                new Dictionary<Type, CloneBehavior>());
+                new Dictionary<Type, CloneBehavior>()));
         }
+    }
+
+    private static void PublishEngine(FastClonerPublishedEngine engine)
+    {
+        FastClonerCache.ClearVersionedConfigCaches();
+        Volatile.Write(ref publishedEngine, engine);
     }
 
     private static FastClonerPublishedEngine CreatePublishedEngine(

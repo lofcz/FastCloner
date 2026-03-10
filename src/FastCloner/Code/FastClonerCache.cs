@@ -66,6 +66,11 @@ internal static class ClonerCache<T>
     private static long version = -1;
     private static readonly ConcurrentDictionary<CacheIdentity, CacheEntry> versionedEntries = new();
 
+    static ClonerCache()
+    {
+        FastClonerCache.RegisterVersionedCacheClearer(() => versionedEntries.Clear());
+    }
+
     public static CacheEntry GetCurrent(FastClonerRuntimeConfig config)
     {
         long currentVersion = FastClonerCache.GetCacheVersion();
@@ -126,17 +131,25 @@ internal static class ClonerCache<T>
 
         return new CacheEntry(computedCloner, computedIsSafe, computedCanUseNoTrackingState, typeMetadata, currentVersion);
     }
+
+    internal static int GetVersionedEntryCountForTesting() => versionedEntries.Count;
 }
 
 internal static class FastClonerCache
 {
     private static long cacheVersion = 1;
+    private static readonly ConcurrentQueue<Action> versionedCacheClearers = new();
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static long GetCacheVersion() => Interlocked.Read(ref cacheVersion);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static long BumpCacheVersion() => Interlocked.Increment(ref cacheVersion);
+
+    internal static void RegisterVersionedCacheClearer(Action clearAction)
+    {
+        versionedCacheClearers.Enqueue(clearAction);
+    }
 
     internal enum CollectionCloneStrategy
     {
@@ -329,8 +342,71 @@ internal static class FastClonerCache
         valueTypeContainsReferencesCache.Clear();
         collectionPayloadTypeCache.Clear();
         compilerGeneratedTypeCache.Clear();
+        FastClonerSafeTypes.ClearKnownTypesCache();
+        FastClonerExprGenerator.ClearAdaptiveDictionaryFactoryCache();
+
+        foreach (Action clearAction in versionedCacheClearers)
+        {
+            clearAction();
+        }
+
         BumpCacheVersion();
     }
+
+    internal static void ClearVersionedConfigCaches()
+    {
+        classCache.ClearVersioned();
+        typeMetadataCache.ClearVersioned();
+        typeShapeCache.ClearVersioned();
+        structCache.ClearVersioned();
+        deepClassToCache.ClearVersioned();
+        shallowClassToCache.ClearVersioned();
+        typeConvertCache.ClearVersioned();
+        fieldCache.ClearVersioned();
+        memberBehaviorCache.ClearVersioned();
+        attributedTypeBehaviorCache.ClearVersioned();
+        immutableCollectionStatusCache.ClearVersioned();
+        specialTypesCache.ClearVersioned();
+        isTypeSafeHandleCache.ClearVersioned();
+        anonymousTypeStatusCache.ClearVersioned();
+        stableHashSemanticsCache.ClearVersioned();
+        canHaveCyclesCache.ClearVersioned();
+        valueTypeContainsReferencesCache.ClearVersioned();
+        collectionPayloadTypeCache.ClearVersioned();
+        compilerGeneratedTypeCache.ClearVersioned();
+        FastClonerSafeTypes.ClearVersionedKnownTypesCache();
+        FastClonerExprGenerator.ClearAdaptiveDictionaryFactoryCache();
+
+        foreach (Action clearAction in versionedCacheClearers)
+        {
+            clearAction();
+        }
+    }
+
+    internal static int GetVersionedCacheEntryCountForTesting()
+    {
+        return classCache.VersionedCount +
+               typeMetadataCache.VersionedCount +
+               typeShapeCache.VersionedCount +
+               structCache.VersionedCount +
+               deepClassToCache.VersionedCount +
+               shallowClassToCache.VersionedCount +
+               typeConvertCache.VersionedCount +
+               fieldCache.VersionedCount +
+               memberBehaviorCache.VersionedCount +
+               attributedTypeBehaviorCache.VersionedCount +
+               immutableCollectionStatusCache.VersionedCount +
+               specialTypesCache.VersionedCount +
+               isTypeSafeHandleCache.VersionedCount +
+               anonymousTypeStatusCache.VersionedCount +
+               stableHashSemanticsCache.VersionedCount +
+               canHaveCyclesCache.VersionedCount +
+               valueTypeContainsReferencesCache.VersionedCount +
+               collectionPayloadTypeCache.VersionedCount +
+               compilerGeneratedTypeCache.VersionedCount;
+    }
+
+    internal static int GetClonerCacheVersionedEntryCountForTesting<T>() => ClonerCache<T>.GetVersionedEntryCountForTesting();
 
     private readonly struct ConfigTypeKey(long cacheKey, IntPtr typeHandle) : IEquatable<ConfigTypeKey>
     {
@@ -360,6 +436,7 @@ internal static class FastClonerCache
     {
         private readonly ConcurrentDictionary<IntPtr, TValue> defaultCache = new ConcurrentDictionary<IntPtr, TValue>();
         private readonly ConcurrentDictionary<ConfigTypeKey, TValue> versionedCache = new ConcurrentDictionary<ConfigTypeKey, TValue>();
+        public int VersionedCount => versionedCache.Count;
 
         public TValue GetOrAdd(Type type, Func<Type, TValue> valueFactory)
         {
@@ -380,6 +457,8 @@ internal static class FastClonerCache
             defaultCache.Clear();
             versionedCache.Clear();
         }
+
+        public void ClearVersioned() => versionedCache.Clear();
     }
 
     private readonly struct ConfigGenericKey<TKey>(long cacheKey, TKey key) : IEquatable<ConfigGenericKey<TKey>> where TKey : notnull
@@ -410,6 +489,7 @@ internal static class FastClonerCache
     {
         private readonly ConcurrentDictionary<TKey, TValue> defaultCache = new ConcurrentDictionary<TKey, TValue>();
         private readonly ConcurrentDictionary<ConfigGenericKey<TKey>, TValue> versionedCache = new ConcurrentDictionary<ConfigGenericKey<TKey>, TValue>();
+        public int VersionedCount => versionedCache.Count;
         
         public TValue GetOrAdd(TKey key, Func<TKey, TValue> valueFactory)
         {
@@ -425,6 +505,8 @@ internal static class FastClonerCache
             defaultCache.Clear();
             versionedCache.Clear();
         }
+
+        public void ClearVersioned() => versionedCache.Clear();
     }
 
     private readonly struct TypeNameKey(Type type, string name) : IEquatable<TypeNameKey>
@@ -456,6 +538,7 @@ internal static class FastClonerCache
 #if MODERN
         private readonly ConcurrentDictionary<(IntPtr, IntPtr), TValue> defaultCache = new ConcurrentDictionary<(IntPtr, IntPtr), TValue>();
         private readonly ConcurrentDictionary<(long CacheKey, IntPtr From, IntPtr To), TValue> versionedCache = new ConcurrentDictionary<(long CacheKey, IntPtr From, IntPtr To), TValue>();
+        public int VersionedCount => versionedCache.Count;
 
         public TValue GetOrAdd(Type from, Type to, Func<Type, Type, TValue> valueFactory)
         {
@@ -474,9 +557,12 @@ internal static class FastClonerCache
             defaultCache.Clear();
             versionedCache.Clear();
         }
+
+        public void ClearVersioned() => versionedCache.Clear();
 #else
         private readonly ConcurrentDictionary<Tuple<IntPtr, IntPtr>, TValue> defaultCache = new ConcurrentDictionary<Tuple<IntPtr, IntPtr>, TValue>();
         private readonly ConcurrentDictionary<Tuple<long, IntPtr, IntPtr>, TValue> versionedCache = new ConcurrentDictionary<Tuple<long, IntPtr, IntPtr>, TValue>();
+        public int VersionedCount => versionedCache.Count;
         
         public TValue GetOrAdd(Type from, Type to, Func<Type, Type, TValue> valueFactory)
         {
@@ -498,6 +584,8 @@ internal static class FastClonerCache
             defaultCache.Clear();
             versionedCache.Clear();
         }
+
+        public void ClearVersioned() => versionedCache.Clear();
 #endif
     }
 }

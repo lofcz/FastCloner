@@ -55,5 +55,8 @@ Workflow: `.github/workflows/benchmark.yml`
 - Manual run (`workflow_dispatch`): OS checkboxes allow running on Windows, Ubuntu, and macOS.
 - PR runs post an upserted comment with:
   - current `FastCloner` vs `DeepCloner` table
-  - regression/improvement diff against latest successful baseline from `next`
+  - regression/improvement diff against the latest successful baseline from `master`
+- Baseline resolution order for PR runs:
+  - use the latest successful uploaded baseline artifact for the target OS from `master`
+  - if no artifact is available, fall back to a slow path that clones `master`, runs the benchmark suite there, and generates a fresh normalized baseline before comparing
 

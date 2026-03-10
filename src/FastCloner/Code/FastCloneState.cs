@@ -6,6 +6,8 @@ internal sealed class FastCloneState
 {
     private const int InlineKnownRefCapacity = 4;
     private const int MetadataCacheSize = 4;
+    private const int InitialWorkQueueCapacity = 16;
+    private const int MaxRetainedWorkQueueCapacity = 4096;
 
     private const int MaxPoolSize = 16;
     [ThreadStatic]
@@ -118,6 +120,15 @@ internal sealed class FastCloneState
                 localLoops.Clear();
         }
 
+        if (workItems is { } localWorkItems)
+        {
+            if (workCount > 0)
+                Array.Clear(localWorkItems, 0, workCount);
+
+            if (localWorkItems.Length > MaxRetainedWorkQueueCapacity)
+                workItems = null;
+        }
+
         workCount = 0;
         UseWorkList = false;
         callDepth = 0;
@@ -212,10 +223,10 @@ internal sealed class FastCloneState
         if (!TrackReferences)
             return;
 
-        WorkItem[] local = workItems ??= new WorkItem[16];
+        WorkItem[] local = workItems ??= new WorkItem[InitialWorkQueueCapacity];
         if (workCount == local.Length)
         {
-            int newSize = local.Length * 2;
+            int newSize = GetExpandedCapacity(local.Length, workCount + 1);
             WorkItem[] resized = new WorkItem[newSize];
             Array.Copy(local, resized, workCount);
             workItems = local = resized;
@@ -229,15 +240,12 @@ internal sealed class FastCloneState
         if (!TrackReferences || expectedAdditionalItems <= 0)
             return;
 
-        int needed = workCount + expectedAdditionalItems;
-        WorkItem[] local = workItems ??= new WorkItem[Math.Max(16, expectedAdditionalItems)];
+        int needed = checked(workCount + expectedAdditionalItems);
+        WorkItem[] local = workItems ??= new WorkItem[Math.Max(InitialWorkQueueCapacity, expectedAdditionalItems)];
         if (needed <= local.Length)
             return;
 
-        int newSize = local.Length;
-        while (newSize < needed)
-            newSize *= 2;
-
+        int newSize = GetExpandedCapacity(local.Length, needed);
         WorkItem[] resized = new WorkItem[newSize];
         Array.Copy(local, resized, workCount);
         workItems = resized;
@@ -261,11 +269,28 @@ internal sealed class FastCloneState
             return false;
         }
 
-        WorkItem wi = workItems![--workCount];
+        int index = --workCount;
+        WorkItem wi = workItems![index];
+        workItems[index] = default;
         from = wi.From;
         to = wi.To;
         type = wi.Type;
         return true;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int GetExpandedCapacity(int currentCapacity, int minimumRequiredCapacity)
+    {
+        int newSize = currentCapacity;
+        while (newSize < minimumRequiredCapacity)
+        {
+            if (newSize > int.MaxValue / 2)
+                return minimumRequiredCapacity;
+
+            newSize *= 2;
+        }
+
+        return newSize;
     }
 
     public int IncrementDepth() => ++callDepth;

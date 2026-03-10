@@ -300,9 +300,12 @@ internal static class FastClonerSafeTypes
     internal static void ClearKnownTypesCache()
     {
         defaultKnownTypes.Clear();
-        versionedKnownTypes.Clear();
+        ClearVersionedKnownTypesCache();
         InitializeKnownTypes();
     }
+
+    internal static void ClearVersionedKnownTypesCache() => versionedKnownTypes.Clear();
+    internal static int GetVersionedKnownTypesCountForTesting() => versionedKnownTypes.Count;
 
     private static bool TryGetKnownType(Type type, out bool isSafe)
         => TryGetKnownType(type, GetAmbientCacheKey(), out isSafe);

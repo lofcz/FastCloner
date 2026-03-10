@@ -26,6 +26,9 @@ internal static class FastClonerExprGenerator
         fieldSetMethod = typeof(FieldInfo).GetMethod(nameof(FieldInfo.SetValue), [typeof(object), typeof(object)])!;
     }
 
+    internal static void ClearAdaptiveDictionaryFactoryCache() => adaptiveDictionaryFactoryCache.Clear();
+    internal static int GetAdaptiveDictionaryFactoryCacheCountForTesting() => adaptiveDictionaryFactoryCache.Count;
+
     private static MethodInfo GetClassCloneMethod(Type memberType, bool useShallowClassClone, bool skipCycleTracking)
     {
         if (useShallowClassClone)
