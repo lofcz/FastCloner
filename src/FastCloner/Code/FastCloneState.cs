@@ -19,27 +19,14 @@ internal sealed class FastCloneState
     private static FastCloneState? _simpleState;
 
     public bool TrackReferences { get; }
-    public FastClonerRuntimeConfig Configuration { get; private set; } = FastCloner.GetRuntimeConfigSnapshot();
+    public int MaxRecursionDepth { get; private set; } = FastCloner.MaxRecursionDepth;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static FastCloneState GetSimpleState()
     {
         FastCloneState state = _simpleState ?? CreateSimpleState();
-        if (!ReferenceEquals(state.Configuration, FastClonerRuntimeConfig.Default))
-            state.Configuration = FastClonerRuntimeConfig.Default;
-        return state;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static FastCloneState GetSimpleState(FastClonerRuntimeConfig? configuration = null)
-    {
-        FastClonerRuntimeConfig config = configuration ?? FastCloner.GetRuntimeConfigSnapshot();
-        if (ReferenceEquals(config, FastClonerRuntimeConfig.Default))
-            return GetSimpleState();
-
-        FastCloneState state = _simpleState ?? CreateSimpleState();
-        if (!ReferenceEquals(state.Configuration, config))
-            state.Configuration = config;
+        if (state.MaxRecursionDepth != FastCloner.MaxRecursionDepth)
+            state.MaxRecursionDepth = FastCloner.MaxRecursionDepth;
         return state;
     }
 
@@ -51,7 +38,7 @@ internal sealed class FastCloneState
         return state;
     }
 
-    public static FastCloneState RentDefault()
+    public static FastCloneState Rent()
     {
         FastCloneState?[]? pool = _pool;
         if (pool != null && _poolCount > 0)
@@ -61,35 +48,13 @@ internal sealed class FastCloneState
             pool[index] = null;
             if (state != null)
             {
-                if (!ReferenceEquals(state.Configuration, FastClonerRuntimeConfig.Default))
-                    state.Configuration = FastClonerRuntimeConfig.Default;
+                if (state.MaxRecursionDepth != FastCloner.MaxRecursionDepth)
+                    state.MaxRecursionDepth = FastCloner.MaxRecursionDepth;
                 return state;
             }
         }
 
-        return new FastCloneState { Configuration = FastClonerRuntimeConfig.Default };
-    }
-
-    public static FastCloneState Rent(FastClonerRuntimeConfig? configuration = null)
-    {
-        FastClonerRuntimeConfig config = configuration ?? FastCloner.GetRuntimeConfigSnapshot();
-        if (ReferenceEquals(config, FastClonerRuntimeConfig.Default))
-            return RentDefault();
-
-        FastCloneState?[]? pool = _pool;
-        if (pool != null && _poolCount > 0)
-        {
-            int index = --_poolCount;
-            FastCloneState? state = pool[index];
-            pool[index] = null;
-            if (state != null)
-            {
-                if (!ReferenceEquals(state.Configuration, config))
-                    state.Configuration = config;
-                return state;
-            }
-        }
-        return new FastCloneState { Configuration = config };
+        return new FastCloneState { MaxRecursionDepth = FastCloner.MaxRecursionDepth };
     }
 
     public static void Return(FastCloneState state)

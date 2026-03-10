@@ -3135,8 +3135,10 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
 
 
     [Test]
+    [NotInParallel("FastClonerGlobalState")]
     public async Task Lazy_Clone()
     {
+        LazyClass.Counter = 0;
         LazyClass lazy = new LazyClass();
         LazyClass clone = lazy.DeepClone();
         int v = LazyClass.Counter;

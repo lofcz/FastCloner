@@ -91,7 +91,7 @@ jobs:
         }
 
         "BENCHMARK_CSV=$($csv.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
-        "RESULT_DIR=src/benchmark-results/${{ matrix.os }}" | Out-File -FilePath $env:GITHUB_ENV -Append
+        "RESULT_DIR=$($env:GITHUB_WORKSPACE)/src/benchmark-results/${{ matrix.os }}" | Out-File -FilePath $env:GITHUB_ENV -Append
 
     - name: Download latest baseline artifact
       if: steps.run_gate.outputs.should_run == 'true' && github.event_name == 'pull_request'
@@ -255,14 +255,41 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         $commentPath = "$env:RESULT_DIR/pr-comment.md"
-        if (-not (Test-Path $commentPath)) {
-          throw "PR comment report not found: $commentPath"
-        }
-
         $marker = "<!-- deepclone-benchmark-report -->"
-        $body = $marker + "`n" + (Get-Content $commentPath -Raw)
         $repo = "${{ github.repository }}"
         $prNumber = "${{ github.event.pull_request.number }}"
+
+        if (Test-Path $commentPath) {
+          $body = $marker + "`n" + (Get-Content $commentPath -Raw)
+        } else {
+          $summaryPath = "$env:RESULT_DIR/summary.md"
+          $currentReportPath = "$env:RESULT_DIR/current-report.md"
+
+          $fallback = @(
+            "## Deep Clone Benchmarks"
+            ""
+            "- OS: `${{ matrix.os }}`"
+            "- Detailed PR benchmark report was not generated for this run."
+          )
+
+          if (Test-Path $summaryPath) {
+            $fallback += ""
+            $fallback += "### Summary"
+            $fallback += ""
+            $fallback += (Get-Content $summaryPath -Raw)
+          } elseif (Test-Path $currentReportPath) {
+            $fallback += ""
+            $fallback += "### Current FastCloner vs DeepCloner"
+            $fallback += ""
+            $fallback += (Get-Content $currentReportPath -Raw)
+          } else {
+            $fallback += ""
+            $fallback += "Benchmark artifacts should still be attached to this workflow run."
+          }
+
+          $body = $marker + "`n" + ($fallback -join "`n")
+          Write-Host "PR comment report not found at $commentPath. Posting fallback benchmark comment instead."
+        }
 
         $comments = gh api "repos/$repo/issues/$prNumber/comments?per_page=100" | ConvertFrom-Json
         $existing = $comments | Where-Object { $_.body -like "*$marker*" } | Select-Object -First 1

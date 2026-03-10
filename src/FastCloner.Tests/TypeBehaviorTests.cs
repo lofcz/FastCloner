@@ -812,7 +812,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
 
     [Test]
-    public async Task GlobalConfigPublish_ClearsVersionedCaches_BeforeRefilling()
+    public async Task GlobalConfigPublish_BumpsCacheVersion_ForSubsequentReaders()
     {
         FastCloner.ClearCache();
         FastCloner.ClearAllTypeBehaviors();
@@ -824,28 +824,20 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
             ["one"] = new SimpleClass { IntValue = 1, StringValue = "One" }
         };
 
+        long startingVersion = FastClonerCache.GetCacheVersion();
+
         FastCloner.MaxRecursionDepth = 999;
         _ = simple.DeepClone();
         _ = dictionary.DeepClone();
 
-        int firstVersionedCacheCount = FastClonerCache.GetVersionedCacheEntryCountForTesting();
-        int firstClonerEntryCount = FastClonerCache.GetClonerCacheVersionedEntryCountForTesting<SimpleClass>();
-        int firstKnownTypesCount = FastClonerSafeTypes.GetVersionedKnownTypesCountForTesting();
-        int firstAdaptiveFactoryCount = FastClonerExprGenerator.GetAdaptiveDictionaryFactoryCacheCountForTesting();
-
-        await Assert.That(firstVersionedCacheCount).IsGreaterThan(0);
-        await Assert.That(firstClonerEntryCount).IsGreaterThan(0);
-        await Assert.That(firstKnownTypesCount).IsGreaterThan(0);
-        await Assert.That(firstAdaptiveFactoryCount).IsGreaterThan(0);
+        long firstMutationVersion = FastClonerCache.GetCacheVersion();
+        await Assert.That(firstMutationVersion).IsGreaterThan(startingVersion);
 
         FastCloner.MaxRecursionDepth = 998;
         _ = simple.DeepClone();
         _ = dictionary.DeepClone();
 
-        await Assert.That(FastClonerCache.GetVersionedCacheEntryCountForTesting()).IsEqualTo(firstVersionedCacheCount);
-        await Assert.That(FastClonerCache.GetClonerCacheVersionedEntryCountForTesting<SimpleClass>()).IsEqualTo(firstClonerEntryCount);
-        await Assert.That(FastClonerSafeTypes.GetVersionedKnownTypesCountForTesting()).IsEqualTo(firstKnownTypesCount);
-        await Assert.That(FastClonerExprGenerator.GetAdaptiveDictionaryFactoryCacheCountForTesting()).IsEqualTo(firstAdaptiveFactoryCount);
+        await Assert.That(FastClonerCache.GetCacheVersion()).IsGreaterThan(firstMutationVersion);
     }
 
     [Test]
@@ -874,7 +866,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
 
     [Test]
-    public async Task PublishedEngine_RestoringDefaults_DoesNotReturnToStartupRail()
+    public async Task PublishedEngine_RestoringDefaults_ReturnsToStartupRail()
     {
         FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Reference);
         FastClonerPublishedEngine mutated = FastCloner.GetPublishedEngine();
@@ -887,9 +879,9 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         FastCloner.MaxRecursionDepth = 1000;
 
         FastClonerPublishedEngine restored = FastCloner.GetPublishedEngine();
-        await Assert.That(restored.UsesStartupDefaultRail).IsFalse();
-        await Assert.That(ReferenceEquals(restored.RuntimeConfig, FastClonerRuntimeConfig.Default)).IsFalse();
-        await Assert.That(restored.RuntimeConfig.CacheKey).IsGreaterThan(mutated.RuntimeConfig.CacheKey);
+        await Assert.That(restored.UsesStartupDefaultRail).IsTrue();
+        await Assert.That(ReferenceEquals(restored.RuntimeConfig, FastClonerRuntimeConfig.Default)).IsTrue();
+        await Assert.That(restored.RuntimeConfig.CacheKey).IsEqualTo(0);
         await Assert.That(restored.RuntimeConfig.MaxRecursionDepth).IsEqualTo(FastClonerRuntimeConfig.Default.MaxRecursionDepth);
         await Assert.That(restored.RuntimeConfig.DisableOptionalFeatures).IsEqualTo(FastClonerRuntimeConfig.Default.DisableOptionalFeatures);
         await Assert.That(restored.RuntimeConfig.TypeBehaviors.Count).IsEqualTo(0);

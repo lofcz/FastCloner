@@ -68,39 +68,7 @@ internal static class FastClonerSafeTypes
 #endif
     };
 
-    private readonly struct ConfigKnownTypeKey(long cacheKey, Type type) : IEquatable<ConfigKnownTypeKey>
-    {
-        public long CacheKey { get; } = cacheKey;
-        public Type Type { get; } = type;
-
-        public bool Equals(ConfigKnownTypeKey other)
-        {
-            return CacheKey == other.CacheKey && ReferenceEquals(Type, other.Type);
-        }
-
-        public override bool Equals(object? obj)
-        {
-            return obj is ConfigKnownTypeKey other && Equals(other);
-        }
-
-        public override int GetHashCode()
-        {
-            unchecked
-            {
-                return (CacheKey.GetHashCode() * 397) ^ RuntimeHelpers.GetHashCode(Type);
-            }
-        }
-    }
-
-    private static readonly ConcurrentDictionary<Type, bool> defaultKnownTypes = [];
-    private static readonly ConcurrentDictionary<ConfigKnownTypeKey, bool> versionedKnownTypes = [];
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static long GetAmbientCacheKey()
-    {
-        FastClonerRuntimeConfig? current = FastClonerRuntimeConfigScope.TryGetCurrent();
-        return current?.CacheKey ?? FastCloner.GetPublishedCacheKey();
-    }
+    private static ConcurrentDictionary<Type, bool> knownTypes = [];
 
     static FastClonerSafeTypes()
     {
@@ -109,9 +77,10 @@ internal static class FastClonerSafeTypes
 
     private static void InitializeKnownTypes()
     {
+        ConcurrentDictionary<Type, bool> localKnownTypes = knownTypes;
         foreach (KeyValuePair<Type, bool> x in DefaultKnownTypes)
         {
-            defaultKnownTypes.TryAdd(x.Key, x.Value);
+            localKnownTypes.TryAdd(x.Key, x.Value);
         }
         
         List<Type?> safeTypes =
@@ -122,7 +91,7 @@ internal static class FastClonerSafeTypes
 
         foreach (Type x in safeTypes.OfType<Type>())
         {
-            defaultKnownTypes.TryAdd(x, true);
+            localKnownTypes.TryAdd(x, true);
         }
     }
     
@@ -221,16 +190,13 @@ internal static class FastClonerSafeTypes
     }
     
     private static bool CanReturnSameType(Type type, HashSet<Type>? processingTypes = null)
-        => CanReturnSameType(type, FastClonerRuntimeConfigScope.Current, processingTypes);
-
-    private static bool CanReturnSameType(Type type, FastClonerRuntimeConfig config, HashSet<Type>? processingTypes = null)
     {
-        if (config.IsTypeReference(type))
+        if (FastClonerCache.IsTypeReference(type))
         {
             return true;
         }
 
-        if (TryGetKnownType(type, config.CacheKey, out bool isSafe))
+        if (knownTypes.TryGetValue(type, out bool isSafe))
         {
             return isSafe;
         }
@@ -238,16 +204,16 @@ internal static class FastClonerSafeTypes
         if (type.IsGenericType)
         {
             Type? genericDef = type.GetGenericTypeDefinition();
-            if (TryGetKnownType(genericDef, config.CacheKey, out bool isGenericSafe))
+            if (knownTypes.TryGetValue(genericDef, out bool isGenericSafe))
             {
-                CacheKnownType(type, config.CacheKey, isGenericSafe);
+                knownTypes.TryAdd(type, isGenericSafe);
                 return isGenericSafe;
             }
         }
 
         if (typeof(Delegate).IsAssignableFrom(type))
         {
-            CacheKnownType(type, config.CacheKey, true);
+            knownTypes.TryAdd(type, true);
             return true;
         }
         
@@ -255,13 +221,13 @@ internal static class FastClonerSafeTypes
 
         if (fullName is null || IsSafeSystemType(type) || fullName.Contains("EqualityComparer") && IsSpecialEqualityComparer(fullName))
         {
-            CacheKnownType(type, config.CacheKey, true);
+            knownTypes.TryAdd(type, true);
             return true;
         }
 
         if (!IsAnonymousType(type) && !type.IsValueType())
         {
-            CacheKnownType(type, config.CacheKey, false);
+            knownTypes.TryAdd(type, false);
             return false;
         }
 
@@ -281,58 +247,25 @@ internal static class FastClonerSafeTypes
                 continue;
             }
 
-            if (CanReturnSameType(fieldType, config, processingTypes))
+            if (CanReturnSameType(fieldType, processingTypes))
             {
                 continue;
             }
             
-            CacheKnownType(type, config.CacheKey, false);
+            knownTypes.TryAdd(type, false);
             return false;
         }
 
-        CacheKnownType(type, config.CacheKey, true);
+        knownTypes.TryAdd(type, true);
         return true;
     }
 
     public static bool CanReturnSameObject(Type type) => CanReturnSameType(type);
-    public static bool CanReturnSameObject(Type type, FastClonerRuntimeConfig config) => CanReturnSameType(type, config);
     
     internal static void ClearKnownTypesCache()
     {
-        defaultKnownTypes.Clear();
-        ClearVersionedKnownTypesCache();
+        knownTypes = [];
         InitializeKnownTypes();
-    }
-
-    internal static void ClearVersionedKnownTypesCache() => versionedKnownTypes.Clear();
-    internal static int GetVersionedKnownTypesCountForTesting() => versionedKnownTypes.Count;
-
-    private static bool TryGetKnownType(Type type, out bool isSafe)
-        => TryGetKnownType(type, GetAmbientCacheKey(), out isSafe);
-
-    private static bool TryGetKnownType(Type type, long cacheKey, out bool isSafe)
-    {
-        if (cacheKey == 0)
-            return defaultKnownTypes.TryGetValue(type, out isSafe);
-
-        if (versionedKnownTypes.TryGetValue(new ConfigKnownTypeKey(cacheKey, type), out isSafe))
-            return true;
-
-        return defaultKnownTypes.TryGetValue(type, out isSafe);
-    }
-
-    private static void CacheKnownType(Type type, bool isSafe)
-        => CacheKnownType(type, GetAmbientCacheKey(), isSafe);
-
-    private static void CacheKnownType(Type type, long cacheKey, bool isSafe)
-    {
-        if (cacheKey == 0)
-        {
-            defaultKnownTypes.TryAdd(type, isSafe);
-            return;
-        }
-
-        versionedKnownTypes.TryAdd(new ConfigKnownTypeKey(cacheKey, type), isSafe);
     }
     
     /// <summary>

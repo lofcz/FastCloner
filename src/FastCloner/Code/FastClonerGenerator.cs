@@ -262,87 +262,16 @@ internal static class FastClonerGenerator
             return default;
         }
 
-        FastClonerPublishedEngine engine = FastCloner.GetPublishedEngine();
-        return engine.UsesStartupDefaultRail
-            ? CloneObjectDefault(obj)
-            : CloneObjectConfigured(obj, engine.RuntimeConfig);
-    }
-
-    private static T CloneObjectDefault<T>(T obj)
-    {
-        Type concreteTypeOfObj = obj!.GetType();
+        Type concreteTypeOfObj = obj.GetType();
         Type typeOfT = typeof(T);
-
-        if (!typeOfT.IsValueType && concreteTypeOfObj == typeOfT)
-        {
-            if (TryCloneSafeArrayRootDefault(obj, concreteTypeOfObj, out T? safeArrayClone))
-                return safeArrayClone!;
-
-            ClonerCache<T>.CacheEntry cacheEntry = ClonerCache<T>.GetCurrent(FastClonerRuntimeConfig.Default);
-            if (cacheEntry.IsSafe)
-            {
-                return obj;
-            }
-
-            if (cacheEntry.Cloner is not null)
-            {
-                return cacheEntry.CanUseNoTrackingState
-                    ? cacheEntry.Cloner(obj, FastCloneState.GetSimpleState())
-                    : CloneRootWithTrackedState(obj, cacheEntry.Cloner, cacheEntry.Metadata!, FastClonerRuntimeConfig.Default);
-            }
-        }
-
-        if (FastClonerSafeTypes.DefaultKnownTypes.TryGetValue(concreteTypeOfObj, out _))
-        {
-            return obj;
-        }
-
-        switch (obj)
-        {
-            case ValueType:
-            {
-                if (typeOfT == concreteTypeOfObj)
-                {
-                    bool hasIgnoredMembers = FastClonerExprGenerator.GetTypeShape(concreteTypeOfObj).ContainsIgnoredMembers;
-
-                    if (hasIgnoredMembers || !FastClonerSafeTypes.CanReturnSameObject(concreteTypeOfObj))
-                    {
-                        FastCloneState structState = FastCloneState.RentDefault();
-                        try
-                        {
-                            return CloneStructInternal(obj, structState);
-                        }
-                        finally
-                        {
-                            FastCloneState.Return(structState);
-                        }
-                    }
-
-                    return obj;
-                }
-
-                break;
-            }
-        }
-
-        if (!typeOfT.IsValueType && concreteTypeOfObj != typeOfT)
-            return (T)ClonePolymorphicDefault(obj!, concreteTypeOfObj)!;
-
-        return (T)CloneClassRootDefault(obj!, concreteTypeOfObj)!;
-    }
-
-    private static T CloneObjectConfigured<T>(T obj, FastClonerRuntimeConfig config)
-    {
-        Type concreteTypeOfObj = obj!.GetType();
-        Type typeOfT = typeof(T);
-        bool hasOptionalTypeOverrides = config.HasActiveTypeBehaviorOverrides;
+        bool hasOptionalTypeOverrides = FastClonerCache.HasActiveTypeBehaviorOverrides;
 
         if (!typeOfT.IsValueType && concreteTypeOfObj == typeOfT && !hasOptionalTypeOverrides)
         {
-            if (TryCloneSafeArrayRootConfigured(obj, concreteTypeOfObj, config, out T? safeArrayClone))
+            if (TryCloneSafeArrayRoot(obj, concreteTypeOfObj, out T? safeArrayClone))
                 return safeArrayClone;
 
-            ClonerCache<T>.CacheEntry cacheEntry = ClonerCache<T>.GetCurrent(config);
+            ClonerCache<T>.CacheEntry cacheEntry = ClonerCache<T>.GetCurrent();
             if (cacheEntry.IsSafe)
             {
                 return obj;
@@ -350,15 +279,15 @@ internal static class FastClonerGenerator
 
             if (cacheEntry.Cloner is not null)
             {
-                return cacheEntry.CanUseNoTrackingState ?
-                    cacheEntry.Cloner(obj, FastCloneState.GetSimpleState(config)) :
-                    CloneRootWithTrackedStateWithScope(obj, cacheEntry.Cloner, cacheEntry.Metadata!, config);
+                return cacheEntry.CanUseNoTrackingState ? 
+                    cacheEntry.Cloner(obj, FastCloneState.GetSimpleState()) : 
+                    CloneRootWithTrackedState(obj, cacheEntry.Cloner, cacheEntry.Metadata!);
             }
         }
 
         if (hasOptionalTypeOverrides)
         {
-            CloneBehavior? behavior = config.GetTypeBehavior(concreteTypeOfObj);
+            CloneBehavior? behavior = FastClonerCache.GetTypeBehavior(concreteTypeOfObj);
             switch (behavior)
             {
                 case CloneBehavior.Ignore:
@@ -381,11 +310,11 @@ internal static class FastClonerGenerator
             {
                 if (typeOfT == concreteTypeOfObj)
                 {
-                    bool hasIgnoredMembers = GetTypeShapeConfigured(concreteTypeOfObj, config).ContainsIgnoredMembers;
+                    bool hasIgnoredMembers = FastClonerExprGenerator.GetTypeShape(concreteTypeOfObj).ContainsIgnoredMembers;
 
-                    if (hasIgnoredMembers || !CanReturnSameObjectConfigured(concreteTypeOfObj, config))
+                    if (hasIgnoredMembers || !FastClonerSafeTypes.CanReturnSameObject(concreteTypeOfObj))
                     {
-                        FastCloneState structState = FastCloneState.Rent(config);
+                        FastCloneState structState = FastCloneState.Rent();
                         try
                         {
                             return CloneStructInternal(obj, structState);
@@ -404,12 +333,12 @@ internal static class FastClonerGenerator
         }
 
         if (!typeOfT.IsValueType && concreteTypeOfObj != typeOfT)
-            return (T?)ClonePolymorphicConfigured(obj!, concreteTypeOfObj, config);
+            return (T?)ClonePolymorphic(obj, concreteTypeOfObj);
 
-        return (T?)CloneClassRootConfigured(obj!, concreteTypeOfObj, config);
+        return (T?)CloneClassRoot(obj, concreteTypeOfObj);
     }
 
-    private static bool TryCloneSafeArrayRootDefault<T>(T obj, Type runtimeType, out T? cloned)
+    private static bool TryCloneSafeArrayRoot<T>(T obj, Type runtimeType, out T? cloned)
     {
         cloned = default;
 
@@ -425,24 +354,8 @@ internal static class FastClonerGenerator
         return true;
     }
 
-    private static bool TryCloneSafeArrayRootConfigured<T>(T obj, Type runtimeType, FastClonerRuntimeConfig config, out T? cloned)
-    {
-        cloned = default;
-
-        if (!runtimeType.IsArray || runtimeType.GetArrayRank() != 1)
-            return false;
-
-        Type? elementType = runtimeType.GetElementType();
-        if (elementType is null || !CanReturnSameObjectConfigured(elementType, config))
-            return false;
-
-        Array array = (Array)(object)obj!;
-        cloned = (T)array.Clone();
-        return true;
-    }
-
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static object? ClonePolymorphicDefault(object obj, Type runtimeType)
+    private static object? ClonePolymorphic(object obj, Type runtimeType)
     {
         if (!runtimeType.IsValueType && FastClonerSafeTypes.CanReturnSameObject(runtimeType) || runtimeType.IsPrimitive || runtimeType.IsEnum)
             return obj;
@@ -451,31 +364,14 @@ internal static class FastClonerGenerator
         {
             Type? targetType = del.Target?.GetType();
             if (targetType is not null && FastClonerCache.GetOrAddCompilerGeneratedType(targetType, t => t.GetCustomAttribute<CompilerGeneratedAttribute>() is not null))
-                return CloneClassRootDefault(obj, runtimeType);
+                return CloneClassRoot(obj, runtimeType);
             return obj;
         }
 
-        return CloneClassRootDefault(obj, runtimeType);
+        return CloneClassRoot(obj, runtimeType);
     }
 
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private static object? ClonePolymorphicConfigured(object obj, Type runtimeType, FastClonerRuntimeConfig config)
-    {
-        if (!runtimeType.IsValueType && CanReturnSameObjectConfigured(runtimeType, config) || runtimeType.IsPrimitive || runtimeType.IsEnum)
-            return obj;
-
-        if (obj is Delegate del)
-        {
-            Type? targetType = del.Target?.GetType();
-            if (targetType is not null && FastClonerCache.GetOrAddCompilerGeneratedType(targetType, t => t.GetCustomAttribute<CompilerGeneratedAttribute>() is not null))
-                return CloneClassRootConfigured(obj, runtimeType, config);
-            return obj;
-        }
-
-        return CloneClassRootConfigured(obj, runtimeType, config);
-    }
-
-    private static object? CloneClassRootDefault(object obj, Type rootType)
+    private static object? CloneClassRoot(object obj, Type rootType)
     {
         FastClonerCache.TypeCloneMetadata metadata = GetTypeMetadata(rootType);
         Func<object, FastCloneState, object>? cloner = metadata.RecursiveCloner;
@@ -489,36 +385,12 @@ internal static class FastClonerGenerator
             (metadata is { CyclePolicy: FastClonerCache.CyclePolicy.None, HasBehaviorSensitiveMembers: false } && !rootType.IsValueType))
             return cloner(obj, FastCloneState.GetSimpleState());
 
-        return CloneRootWithTrackedState(obj, cloner, metadata, FastClonerRuntimeConfig.Default);
+        return CloneRootWithTrackedState(obj, cloner, metadata);
     }
 
-    private static object? CloneClassRootConfigured(object obj, Type rootType, FastClonerRuntimeConfig config)
+    private static T CloneRootWithTrackedState<T>(T obj, Func<T, FastCloneState, T> cloner, FastClonerCache.TypeCloneMetadata metadata)
     {
-        FastClonerCache.TypeCloneMetadata metadata = GetTypeMetadataConfigured(rootType, config);
-        Func<object, FastCloneState, object>? cloner = metadata.RecursiveCloner;
-
-        // null -> should return same type
-        if (cloner is null)
-        {
-            return obj;
-        }
-
-        if (metadata.CanSkipReferenceTracking ||
-            (metadata is { CyclePolicy: FastClonerCache.CyclePolicy.None, HasBehaviorSensitiveMembers: false } && !rootType.IsValueType))
-            return cloner(obj, FastCloneState.GetSimpleState(config));
-
-        return CloneRootWithTrackedStateWithScope(obj, cloner, metadata, config);
-    }
-
-    private static T CloneRootWithTrackedStateWithScope<T>(T obj, Func<T, FastCloneState, T> cloner, FastClonerCache.TypeCloneMetadata metadata, FastClonerRuntimeConfig config)
-    {
-        using FastClonerRuntimeConfigScope.Scope configScope = FastClonerRuntimeConfigScope.Use(config);
-        return CloneRootWithTrackedState(obj, cloner, metadata, config);
-    }
-
-    private static T CloneRootWithTrackedState<T>(T obj, Func<T, FastCloneState, T> cloner, FastClonerCache.TypeCloneMetadata metadata, FastClonerRuntimeConfig config)
-    {
-        FastCloneState state = ReferenceEquals(config, FastClonerRuntimeConfig.Default) ? FastCloneState.RentDefault() : FastCloneState.Rent(config);
+        FastCloneState state = FastCloneState.Rent();
         state.UseWorkList = metadata.CyclePolicy == FastClonerCache.CyclePolicy.Worklist;
 
         try
@@ -528,7 +400,7 @@ internal static class FastClonerGenerator
             {
                 int current = state.IncrementDepth();
 
-                if (current >= config.MaxRecursionDepth)
+                if (current >= FastCloner.MaxRecursionDepth)
                 {
                     state.DecrementDepth();
                     state.UseWorkList = true;
@@ -722,57 +594,26 @@ internal static class FastClonerGenerator
         return false;
     }
 
-    private static bool CanReturnSameObjectConfigured(Type type, FastClonerRuntimeConfig config)
-    {
-        if (ReferenceEquals(FastClonerRuntimeConfigScope.Current, config))
-            return FastClonerSafeTypes.CanReturnSameObject(type);
-
-        using FastClonerRuntimeConfigScope.Scope configScope = FastClonerRuntimeConfigScope.Use(config);
-        return FastClonerSafeTypes.CanReturnSameObject(type);
-    }
-
-    private static FastClonerCache.TypeCloneMetadata GetTypeMetadataConfigured(Type type, FastClonerRuntimeConfig config)
-    {
-        if (ReferenceEquals(FastClonerRuntimeConfigScope.Current, config))
-            return GetTypeMetadata(type);
-
-        using FastClonerRuntimeConfigScope.Scope configScope = FastClonerRuntimeConfigScope.Use(config);
-        return GetTypeMetadata(type);
-    }
-
-    private static FastClonerCache.TypeShape GetTypeShapeConfigured(Type type, FastClonerRuntimeConfig config)
-    {
-        if (ReferenceEquals(FastClonerRuntimeConfigScope.Current, config))
-            return FastClonerExprGenerator.GetTypeShape(type);
-
-        using FastClonerRuntimeConfigScope.Scope configScope = FastClonerRuntimeConfigScope.Use(config);
-        return FastClonerExprGenerator.GetTypeShape(type);
-    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool HasActiveTypeBehaviorOverrides(FastCloneState state) => FastClonerCache.HasActiveTypeBehaviorOverrides;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool HasActiveTypeBehaviorOverrides(FastCloneState state) => state.Configuration.HasActiveTypeBehaviorOverrides;
+    private static bool HasSafeTypeOverrides(FastCloneState state) => FastClonerCache.HasSafeTypeOverrides;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool HasSafeTypeOverrides(FastCloneState state) => state.Configuration.HasSafeTypeOverrides;
+    private static CloneBehavior? GetTypeBehavior(Type type, FastCloneState state) => FastClonerCache.GetTypeBehavior(type);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static CloneBehavior? GetTypeBehavior(Type type, FastCloneState state) => state.Configuration.GetTypeBehavior(type);
+    private static bool IsTypeIgnored(Type type, FastCloneState state) => FastClonerCache.IsTypeIgnored(type);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsTypeIgnored(Type type, FastCloneState state) => state.Configuration.IsTypeIgnored(type);
+    private static int GetMaxRecursionDepth(FastCloneState state) => state.MaxRecursionDepth;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int GetMaxRecursionDepth(FastCloneState state) => state.Configuration.MaxRecursionDepth;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool CanReturnSameObject(Type type, FastCloneState state) => FastClonerSafeTypes.CanReturnSameObject(type, state.Configuration);
+    private static bool CanReturnSameObject(Type type, FastCloneState state) => FastClonerSafeTypes.CanReturnSameObject(type);
     
     internal static object? CloneClassInternal(object? obj, FastCloneState state)
     {
-        if (ReferenceEquals(FastClonerRuntimeConfigScope.Current, state.Configuration))
-            return CloneClassInternalCore(obj, state);
-
-        using FastClonerRuntimeConfigScope.Scope configScope = FastClonerRuntimeConfigScope.Use(state.Configuration);
         return CloneClassInternalCore(obj, state);
     }
 
@@ -791,10 +632,6 @@ internal static class FastClonerGenerator
 
     internal static object? CloneClassInternalNoTracking(object? obj, FastCloneState state)
     {
-        if (ReferenceEquals(FastClonerRuntimeConfigScope.Current, state.Configuration))
-            return CloneClassInternalNoTrackingCore(obj, state);
-
-        using FastClonerRuntimeConfigScope.Scope configScope = FastClonerRuntimeConfigScope.Use(state.Configuration);
         return CloneClassInternalNoTrackingCore(obj, state);
     }
 
@@ -814,10 +651,6 @@ internal static class FastClonerGenerator
 
     internal static object? CloneClassInternalTyped(object obj, Type objType, FastCloneState state)
     {
-        if (ReferenceEquals(FastClonerRuntimeConfigScope.Current, state.Configuration))
-            return CloneClassInternalTypedCore(obj, objType, state);
-
-        using FastClonerRuntimeConfigScope.Scope configScope = FastClonerRuntimeConfigScope.Use(state.Configuration);
         return CloneClassInternalTypedCore(obj, objType, state);
     }
 
@@ -960,10 +793,6 @@ internal static class FastClonerGenerator
     
     internal static object? CloneClassShallowAndTrack(object? obj, FastCloneState state)
     {
-        if (ReferenceEquals(FastClonerRuntimeConfigScope.Current, state.Configuration))
-            return CloneClassShallowAndTrackCore(obj, state);
-
-        using FastClonerRuntimeConfigScope.Scope configScope = FastClonerRuntimeConfigScope.Use(state.Configuration);
         return CloneClassShallowAndTrackCore(obj, state);
     }
 
@@ -1718,15 +1547,6 @@ internal static class FastClonerGenerator
 
         if (objFrom == null)
             throw new ArgumentNullException(nameof(objFrom), "Cannot copy null object to another");
-
-        FastClonerPublishedEngine engine = FastCloner.GetPublishedEngine();
-        return engine.UsesStartupDefaultRail
-            ? CloneObjectToDefault(objFrom, objTo, isDeep)
-            : CloneObjectToConfigured(objFrom, objTo, isDeep, engine.RuntimeConfig);
-    }
-
-    private static object? CloneObjectToDefault(object objFrom, object objTo, bool isDeep)
-    {
         Type type = objFrom.GetType();
         if (!type.IsInstanceOfType(objTo))
             throw new InvalidOperationException("From object should be derived from From object, but From object has type " + objFrom.GetType().FullName + " and to " + objTo.GetType().FullName);
@@ -1739,7 +1559,7 @@ internal static class FastClonerGenerator
         if (cloner is null)
             return objTo;
         
-        FastCloneState state = FastCloneState.RentDefault();
+        FastCloneState state = FastCloneState.Rent();
         try
         {
             object result = cloner(objFrom, objTo, state);
@@ -1764,58 +1584,6 @@ internal static class FastClonerGenerator
                     lastWorkType = workItemType;
                     lastClonerTo = clonerTo;
                 }
-                clonerTo(from, to, state);
-            }
-
-            return result;
-        }
-        finally
-        {
-            FastCloneState.Return(state);
-        }
-    }
-
-    private static object? CloneObjectToConfigured(object objFrom, object objTo, bool isDeep, FastClonerRuntimeConfig config)
-    {
-        using FastClonerRuntimeConfigScope.Scope configScope = FastClonerRuntimeConfigScope.Use(config);
-        Type type = objFrom.GetType();
-        if (!type.IsInstanceOfType(objTo))
-            throw new InvalidOperationException("From object should be derived from From object, but From object has type " + objFrom.GetType().FullName + " and to " + objTo.GetType().FullName);
-        if (objFrom is string)
-            throw new InvalidOperationException("It is forbidden to clone strings");
-        Func<object, object, FastCloneState, object>? cloner = (Func<object, object, FastCloneState, object>?)(isDeep
-            ? FastClonerCache.GetOrAddDeepClassTo(type, t => ClonerToExprGenerator.GenerateClonerInternal(t, true))
-            : FastClonerCache.GetOrAddShallowClassTo(type, t => ClonerToExprGenerator.GenerateClonerInternal(t, false)));
-
-        if (cloner is null)
-            return objTo;
-
-        FastCloneState state = FastCloneState.Rent(config);
-        try
-        {
-            object result = cloner(objFrom, objTo, state);
-
-            if (!isDeep)
-            {
-                return result;
-            }
-
-            Type? lastWorkType = null;
-            Func<object, object, FastCloneState, object>? lastClonerTo = null;
-            while (state.TryPop(out object from, out object to, out Type workItemType))
-            {
-                Func<object, object, FastCloneState, object> clonerTo;
-                if (workItemType == lastWorkType && lastClonerTo is not null)
-                {
-                    clonerTo = lastClonerTo;
-                }
-                else
-                {
-                    clonerTo = (Func<object, object, FastCloneState, object>)FastClonerCache.GetOrAddDeepClassTo(workItemType, t => ClonerToExprGenerator.GenerateClonerInternal(t, true));
-                    lastWorkType = workItemType;
-                    lastClonerTo = clonerTo;
-                }
-
                 clonerTo(from, to, state);
             }
 

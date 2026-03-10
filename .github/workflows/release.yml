@@ -111,23 +111,172 @@ jobs:
         echo "SHOULD_RELEASE=$SHOULD_RELEASE" >> $GITHUB_ENV
         echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
 
-    # Generate release notes with commits and changed projects
-    - name: Generate Release Notes
+    # Generate fallback release notes and collect context for optional AI summarization.
+    - name: Generate Release Notes Context
       if: env.SHOULD_RELEASE == 'true'
       id: release_notes
       run: |
         PREVIOUS_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
         if [ -z "$PREVIOUS_TAG" ]; then
           COMMITS=$(git log --pretty=format:"- %s" --no-merges)
+          FILE_STATS=$(git diff --stat --find-renames HEAD~1 HEAD 2>/dev/null || echo "No diff stat available.")
+          CHANGED_FILES=$(git diff --name-only --find-renames HEAD~1 HEAD 2>/dev/null || echo "No changed files available.")
         else
           COMMITS=$(git log ${PREVIOUS_TAG}..HEAD --pretty=format:"- %s" --no-merges)
+          FILE_STATS=$(git diff --stat --find-renames ${PREVIOUS_TAG}..HEAD)
+          CHANGED_FILES=$(git diff --name-only --find-renames ${PREVIOUS_TAG}..HEAD)
         fi
+
+        echo "RELEASE_NOTES_FALLBACK<<EOF" >> $GITHUB_ENV
+        echo "## What's Changed" >> $GITHUB_ENV
+        echo "$COMMITS" >> $GITHUB_ENV
+        echo -e "\n## Updated Projects" >> $GITHUB_ENV
+        echo "${{ env.CHANGED_PROJECTS }}" >> $GITHUB_ENV
+        echo "EOF" >> $GITHUB_ENV
+
         echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
         echo "## What's Changed" >> $GITHUB_ENV
         echo "$COMMITS" >> $GITHUB_ENV
         echo -e "\n## Updated Projects" >> $GITHUB_ENV
         echo "${{ env.CHANGED_PROJECTS }}" >> $GITHUB_ENV
         echo "EOF" >> $GITHUB_ENV
+
+        echo "RELEASE_CONTEXT<<EOF" >> $GITHUB_ENV
+        echo "Release type: ${{ github.event.inputs.release_type }}" >> $GITHUB_ENV
+        echo "Target version: v${{ env.NEW_VERSION }}" >> $GITHUB_ENV
+        echo "Previous tag: ${PREVIOUS_TAG:-none}" >> $GITHUB_ENV
+        echo >> $GITHUB_ENV
+        echo "Updated projects:" >> $GITHUB_ENV
+        echo "${{ env.CHANGED_PROJECTS }}" >> $GITHUB_ENV
+        echo >> $GITHUB_ENV
+        echo "Commits:" >> $GITHUB_ENV
+        echo "$COMMITS" >> $GITHUB_ENV
+        echo >> $GITHUB_ENV
+        echo "Changed files:" >> $GITHUB_ENV
+        echo "$CHANGED_FILES" >> $GITHUB_ENV
+        echo >> $GITHUB_ENV
+        echo "Diff stat:" >> $GITHUB_ENV
+        echo "$FILE_STATS" >> $GITHUB_ENV
+        echo "EOF" >> $GITHUB_ENV
+
+    - name: Generate AI Release Notes
+      if: env.SHOULD_RELEASE == 'true'
+      env:
+        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      run: |
+        python <<'PY'
+        import json
+        import os
+        import sys
+        import urllib.request
+
+        github_env = os.environ["GITHUB_ENV"]
+        openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
+        anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        fallback = os.environ.get("RELEASE_NOTES_FALLBACK", "").strip()
+        context = os.environ.get("RELEASE_CONTEXT", "").strip()
+
+        if openai_key:
+            print(f"::add-mask::{openai_key}")
+        if anthropic_key:
+            print(f"::add-mask::{anthropic_key}")
+
+        prompt = f"""
+        Write release notes in polished, concise markdown for an open source .NET library release.
+        Group the notes into these sections when relevant:
+        - ## Features
+        - ## Fixes
+        - ## Chores
+
+        Requirements:
+        - Keep it concise and useful.
+        - Use flat bullet lists only.
+        - Omit empty sections.
+        - Focus on user-visible value and meaningful maintenance work.
+        - Do not mention version-bump automation, CI internals, or speculate.
+        - Return markdown only, with no preamble or code fences.
+
+        Release context:
+        {context}
+        """.strip()
+
+        def write_env(key: str, value: str) -> None:
+            with open(github_env, "a", encoding="utf-8") as fh:
+                fh.write(f"{key}<<EOF\n{value}\nEOF\n")
+
+        def call_anthropic() -> str:
+            payload = {
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 500,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+            req = urllib.request.Request(
+                "https://api.anthropic.com/v1/messages",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "x-api-key": anthropic_key,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            content = data.get("content", [])
+            parts = [item.get("text", "") for item in content if item.get("type") == "text"]
+            return "\n".join(part for part in parts if part).strip()
+
+        def call_openai() -> str:
+            payload = {
+                "model": "gpt-5.4-2026-03-05",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.2,
+            }
+            req = urllib.request.Request(
+                "https://api.openai.com/v1/chat/completions",
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {openai_key}",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            return data["choices"][0]["message"]["content"].strip()
+
+        try:
+            notes = ""
+            provider = "none"
+
+            if anthropic_key:
+                provider = "anthropic"
+                notes = call_anthropic()
+            elif openai_key:
+                provider = "openai"
+                notes = call_openai()
+
+            if not notes:
+                print("AI release notes unavailable; using fallback notes.")
+                if not fallback:
+                    sys.exit(0)
+                write_env("RELEASE_NOTES", fallback)
+                with open(github_env, "a", encoding="utf-8") as fh:
+                    fh.write("AI_RELEASE_NOTES_PROVIDER=none\n")
+                sys.exit(0)
+
+            write_env("RELEASE_NOTES", notes)
+            with open(github_env, "a", encoding="utf-8") as fh:
+                fh.write(f"AI_RELEASE_NOTES_PROVIDER={provider}\n")
+            print(f"Generated AI release notes via {provider}.")
+        except Exception:
+            print("AI release notes generation failed; using fallback notes.")
+            if fallback:
+                write_env("RELEASE_NOTES", fallback)
+            with open(github_env, "a", encoding="utf-8") as fh:
+                fh.write("AI_RELEASE_NOTES_PROVIDER=fallback\n")
+        PY
     
     # Restore project dependencies
     - name: Restore dependencies
