@@ -45,7 +45,7 @@ jobs:
 
     - name: Test
       working-directory: src
-      run: dotnet test FastClonerCi.slnf --no-build --verbosity normal
+      run: dotnet test --solution FastClonerCi.slnf --no-build --verbosity normal
 
     - name: Update GitHub status check
       if: always()
