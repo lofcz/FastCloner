@@ -22,6 +22,7 @@ on:
 
 env:
   DOTNET_VERSION: "10.0.103"
+  BASELINE_BRANCH: "next"
 
 permissions:
   contents: read
@@ -68,19 +69,21 @@ jobs:
 
     - name: Restore benchmark project
       if: steps.run_gate.outputs.should_run == 'true'
-      run: dotnet restore src/FastCloner.Benchmark.CI/FastCloner.Benchmark.CI.csproj
+      working-directory: src
+      run: dotnet restore FastCloner.Benchmark.CI/FastCloner.Benchmark.CI.csproj
 
     - name: Run deep clone benchmarks
       if: steps.run_gate.outputs.should_run == 'true'
+      working-directory: src
       shell: pwsh
       run: >
-        dotnet run -c Release --project src/FastCloner.Benchmark.CI/FastCloner.Benchmark.CI.csproj -- --filter *DeepCloneBenchmarks*
+        dotnet run -c Release --project FastCloner.Benchmark.CI/FastCloner.Benchmark.CI.csproj -- --filter *DeepCloneBenchmarks*
 
     - name: Resolve benchmark CSV path
       if: steps.run_gate.outputs.should_run == 'true'
       shell: pwsh
       run: |
-        $csv = Get-ChildItem -Path "BenchmarkDotNet.Artifacts/results" -Filter "*DeepCloneBenchmarks-report.csv" -Recurse |
+        $csv = Get-ChildItem -Path "src/BenchmarkDotNet.Artifacts/results" -Filter "*DeepCloneBenchmarks-report.csv" -Recurse |
           Sort-Object LastWriteTime -Descending |
           Select-Object -First 1
         if (-not $csv) {
@@ -88,10 +91,11 @@ jobs:
         }
 
         "BENCHMARK_CSV=$($csv.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
-        "RESULT_DIR=benchmark-results/${{ matrix.os }}" | Out-File -FilePath $env:GITHUB_ENV -Append
+        "RESULT_DIR=$($env:GITHUB_WORKSPACE)/src/benchmark-results/${{ matrix.os }}" | Out-File -FilePath $env:GITHUB_ENV -Append
 
-    - name: Download latest baseline from next
+    - name: Download latest baseline artifact
       if: steps.run_gate.outputs.should_run == 'true' && github.event_name == 'pull_request'
+      id: baseline_lookup
       shell: pwsh
       env:
         GH_TOKEN: ${{ github.token }}
@@ -99,8 +103,11 @@ jobs:
         $repo = "${{ github.repository }}"
         $workflowFile = "benchmark.yml"
         $artifactName = "deepclone-baseline-${{ matrix.os }}"
+        $baselineBranch = "${{ env.BASELINE_BRANCH }}"
 
-        $runsResponse = gh api "repos/$repo/actions/workflows/$workflowFile/runs?branch=next&event=push&status=success&per_page=50"
+        "baseline_branch=$baselineBranch" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+        $runsResponse = gh api "repos/$repo/actions/workflows/$workflowFile/runs?branch=$baselineBranch&event=push&status=success&per_page=50"
         $runs = ($runsResponse | ConvertFrom-Json).workflow_runs
         $baselineRunId = $null
 
@@ -121,7 +128,9 @@ jobs:
         }
 
         if (-not $baselineRunId) {
-          Write-Host "No baseline artifact found for '$artifactName'."
+          Write-Host "No baseline artifact found for '$artifactName' on branch '$baselineBranch'. Falling back to slow-path baseline generation."
+          "baseline_found=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "baseline_needs_slow_path=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           exit 0
         }
 
@@ -132,12 +141,60 @@ jobs:
         if ($baselineJson) {
           "BASELINE_JSON=$($baselineJson.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
           Write-Host "Using baseline: $($baselineJson.FullName)"
+          "baseline_found=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "baseline_needs_slow_path=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         } else {
-          Write-Host "Downloaded baseline artifact but current-normalized.json was not found."
+          Write-Host "Downloaded baseline artifact but current-normalized.json was not found. Falling back to slow-path baseline generation."
+          "baseline_found=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "baseline_needs_slow_path=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         }
+
+    - name: Clone baseline branch for slow-path comparison
+      if: steps.run_gate.outputs.should_run == 'true' && github.event_name == 'pull_request' && steps.baseline_lookup.outputs.baseline_needs_slow_path == 'true'
+      shell: pwsh
+      run: |
+        $repo = "${{ github.repository }}"
+        $baselineBranch = "${{ steps.baseline_lookup.outputs.baseline_branch }}"
+
+        if (Test-Path baseline-repo) {
+          Remove-Item -Recurse -Force baseline-repo
+        }
+
+        git clone --depth 1 --branch $baselineBranch "https://github.com/$repo.git" baseline-repo
+
+    - name: Restore slow-path baseline benchmark project
+      if: steps.run_gate.outputs.should_run == 'true' && github.event_name == 'pull_request' && steps.baseline_lookup.outputs.baseline_needs_slow_path == 'true'
+      working-directory: baseline-repo/src
+      run: dotnet restore FastCloner.Benchmark.CI/FastCloner.Benchmark.CI.csproj
+
+    - name: Run slow-path baseline benchmarks
+      if: steps.run_gate.outputs.should_run == 'true' && github.event_name == 'pull_request' && steps.baseline_lookup.outputs.baseline_needs_slow_path == 'true'
+      working-directory: baseline-repo/src
+      shell: pwsh
+      run: >
+        dotnet run -c Release --project FastCloner.Benchmark.CI/FastCloner.Benchmark.CI.csproj -- --filter *DeepCloneBenchmarks*
+
+    - name: Generate slow-path baseline normalized report
+      if: steps.run_gate.outputs.should_run == 'true' && github.event_name == 'pull_request' && steps.baseline_lookup.outputs.baseline_needs_slow_path == 'true'
+      working-directory: baseline-repo/src
+      shell: pwsh
+      run: |
+        $csv = Get-ChildItem -Path "BenchmarkDotNet.Artifacts/results" -Filter "*DeepCloneBenchmarks-report.csv" -Recurse |
+          Sort-Object LastWriteTime -Descending |
+          Select-Object -First 1
+        if (-not $csv) {
+          throw "Could not find BenchmarkDotNet CSV output for slow-path baseline benchmarks."
+        }
+
+        dotnet run -c Release --project FastCloner.Benchmark.CI/FastCloner.Benchmark.CI.csproj -- --report --csv $csv.FullName --normalized-json benchmark-results/current-normalized.json
+
+        $baselineJson = Resolve-Path "benchmark-results/current-normalized.json"
+        "BASELINE_JSON=$($baselineJson.Path)" | Out-File -FilePath $env:GITHUB_ENV -Append
+        Write-Host "Generated slow-path baseline: $($baselineJson.Path)"
 
     - name: Generate normalized report and diff
       if: steps.run_gate.outputs.should_run == 'true'
+      working-directory: src
       shell: pwsh
       run: |
         New-Item -ItemType Directory -Force -Path $env:RESULT_DIR | Out-Null
@@ -145,7 +202,7 @@ jobs:
         $args = @(
           "run",
           "-c", "Release",
-          "--project", "src/FastCloner.Benchmark.CI/FastCloner.Benchmark.CI.csproj",
+          "--project", "FastCloner.Benchmark.CI/FastCloner.Benchmark.CI.csproj",
           "--",
           "--report",
           "--csv", $env:BENCHMARK_CSV,
@@ -177,8 +234,8 @@ jobs:
       with:
         name: deepclone-results-${{ matrix.os }}
         path: |
-          benchmark-results/${{ matrix.os }}/**
-          BenchmarkDotNet.Artifacts/results/*DeepCloneBenchmarks*
+          src/benchmark-results/${{ matrix.os }}/**
+          src/BenchmarkDotNet.Artifacts/results/*DeepCloneBenchmarks*
         if-no-files-found: warn
         retention-days: 30
 
@@ -187,7 +244,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: deepclone-baseline-${{ matrix.os }}
-        path: benchmark-results/${{ matrix.os }}/current-normalized.json
+        path: src/benchmark-results/${{ matrix.os }}/current-normalized.json
         if-no-files-found: error
         retention-days: 30
 
@@ -198,14 +255,41 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         $commentPath = "$env:RESULT_DIR/pr-comment.md"
-        if (-not (Test-Path $commentPath)) {
-          throw "PR comment report not found: $commentPath"
-        }
-
         $marker = "<!-- deepclone-benchmark-report -->"
-        $body = $marker + "`n" + (Get-Content $commentPath -Raw)
         $repo = "${{ github.repository }}"
         $prNumber = "${{ github.event.pull_request.number }}"
+
+        if (Test-Path $commentPath) {
+          $body = $marker + "`n" + (Get-Content $commentPath -Raw)
+        } else {
+          $summaryPath = "$env:RESULT_DIR/summary.md"
+          $currentReportPath = "$env:RESULT_DIR/current-report.md"
+
+          $fallback = @(
+            '## Deep Clone Benchmarks'
+            ''
+            '- OS: `${{ matrix.os }}`'
+            '- Detailed PR benchmark report was not generated for this run.'
+          )
+
+          if (Test-Path $summaryPath) {
+            $fallback += ""
+            $fallback += "### Summary"
+            $fallback += ""
+            $fallback += (Get-Content $summaryPath -Raw)
+          } elseif (Test-Path $currentReportPath) {
+            $fallback += ""
+            $fallback += "### Current FastCloner vs DeepCloner"
+            $fallback += ""
+            $fallback += (Get-Content $currentReportPath -Raw)
+          } else {
+            $fallback += ""
+            $fallback += "Benchmark artifacts should still be attached to this workflow run."
+          }
+
+          $body = $marker + "`n" + ($fallback -join "`n")
+          Write-Host "PR comment report not found at $commentPath. Posting fallback benchmark comment instead."
+        }
 
         $comments = gh api "repos/$repo/issues/$prNumber/comments?per_page=100" | ConvertFrom-Json
         $existing = $comments | Where-Object { $_.body -like "*$marker*" } | Select-Object -First 1

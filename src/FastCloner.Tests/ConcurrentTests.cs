@@ -1,10 +1,8 @@
 using System.Collections.Concurrent;
 using FastCloner.Code;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
-
-[TestFixture(Low)]
-[TestFixture(High)]
 public class ConcurrentTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     private class TestClass
@@ -13,7 +11,7 @@ public class ConcurrentTests(int maxRecursionDepth) : BaseTestFixture(maxRecursi
     }
 
     [Test]
-    public void GenerateCloner_IsStoredOnlyOnce()
+    public async Task GenerateCloner_IsStoredOnlyOnce()
     {
         // Arrange
         // clear cache between fixtures
@@ -31,18 +29,20 @@ public class ConcurrentTests(int maxRecursionDepth) : BaseTestFixture(maxRecursi
         Task.WaitAll(tasks);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
             // Factory may be called multiple times under concurrent access (ConcurrentDictionary behavior)
             // but only one result is stored and returned to all callers
-            Assert.That(generatorCallCount.Count, Is.GreaterThanOrEqualTo(1));
-    
+            await Assert.That(generatorCallCount.Count).IsGreaterThanOrEqualTo(1);
+
             object firstResult = tasks[0].Result;
             foreach (Task<object> task in tasks)
             {
-                Assert.That(task.Result, Is.SameAs(firstResult));
+                await Assert.That(task.Result).IsSameReferenceAs(firstResult);
             }
-        });
+
+        // Assert
+        }
         
         return;
 
@@ -71,7 +71,7 @@ public class ConcurrentTests(int maxRecursionDepth) : BaseTestFixture(maxRecursi
     }
     
     [Test]
-    public void CloneObject_WithConcurrentAccess_GeneratesOnlyOneCloner()
+    public async Task CloneObject_WithConcurrentAccess_GeneratesOnlyOneCloner()
     {
         // Arrange
         TestClass obj = new TestClass { Value = 42 };
@@ -85,38 +85,52 @@ public class ConcurrentTests(int maxRecursionDepth) : BaseTestFixture(maxRecursi
         Task.WaitAll(tasks);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
             foreach (Task<TestClass> task in tasks)
             {
                 TestClass clone = task.Result;
-                Assert.That(clone.Value, Is.EqualTo(42));
+                await Assert.That(clone.Value).IsEqualTo(42);
             }
-        });
+
+        // Assert
+        }
     }
     
     [Test]
-    public void GetOrAdd_CanCallValueFactoryMultipleTimes()
+    public async Task GetOrAdd_CanCallValueFactoryMultipleTimes()
     {
         // Arrange
         ConcurrentDictionary<int, string> dictionary = new ConcurrentDictionary<int, string>();
         int callCount = 0;
         const int key = 1;
+        const int workerCount = 16;
+        using CountdownEvent ready = new CountdownEvent(workerCount);
+        using ManualResetEventSlim start = new ManualResetEventSlim(false);
 
         // Act
-        Task<string>[] tasks = Enumerable.Range(0, 10)
-            .Select(_ => Task.Run(() => dictionary.GetOrAdd(key, ValueFactory)))
+        Task<string>[] tasks = Enumerable.Range(0, workerCount)
+            .Select(_ => Task.Factory.StartNew(() =>
+            {
+                ready.Signal();
+                start.Wait();
+                return dictionary.GetOrAdd(key, ValueFactory);
+            }, CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default))
             .ToArray();
-        
+
+        ready.Wait();
+        start.Set();
         Task.WaitAll(tasks);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(dictionary, Has.Count.EqualTo(1));
-            Assert.That(callCount, Is.GreaterThan(1));
-            Assert.That(tasks.Select(t => t.Result).Distinct().Count(), Is.EqualTo(1));
-        });
+            await Assert.That(dictionary).Count().IsEqualTo(1);
+            await Assert.That(callCount).IsGreaterThan(1);
+            await Assert.That(tasks.Select(t => t.Result).Distinct().Count()).IsEqualTo(1);
+
+            // Assert
+        }
         return;
 
         string ValueFactory(int k)

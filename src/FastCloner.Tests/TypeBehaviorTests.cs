@@ -1,10 +1,9 @@
 using System.Collections.Concurrent;
 using FastCloner.Code;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
-
-[TestFixture(Low)]
-[TestFixture(High)]
+[NotInParallel("FastClonerGlobalState")]
 public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     public class SimpleClass
@@ -42,7 +41,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         public MyValueType MyStruct { get; set; }
     }
 
-    [TearDown]
+    [After(Test)]
     public void TearDown()
     {
         FastCloner.SetDisableOptionalFeatures(false);
@@ -50,7 +49,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
 
     [Test]
-    public void SetTypeBehavior_Ignore_PropertyOfIgnoredReferenceType_IsNullAfterCloning()
+    public async Task SetTypeBehavior_Ignore_PropertyOfIgnoredReferenceType_IsNullAfterCloning()
     {
         // Arrange
         ClassWithProperties original = new ClassWithProperties
@@ -67,19 +66,19 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         ClassWithProperties cloned2 = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned, Is.Not.SameAs(original));
-        Assert.That(cloned.Id, Is.EqualTo(original.Id));
-        Assert.That(cloned.SimpleProp, Is.Null, "SimpleProp should be null as its type is ignored.");
-        Assert.That(cloned.AnotherSimpleProp, Is.Not.Null, "AnotherSimpleProp should be cloned.");
-        Assert.That(cloned.AnotherSimpleProp, Is.Not.SameAs(original.AnotherSimpleProp));
-        Assert.That(cloned.AnotherSimpleProp!.DoubleValue, Is.EqualTo(original.AnotherSimpleProp!.DoubleValue));
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned).IsNotSameReferenceAs(original);
+        await Assert.That(cloned.Id).IsEqualTo(original.Id);
+        await Assert.That(cloned.SimpleProp).IsNull().Because("SimpleProp should be null as its type is ignored.");
+        await Assert.That(cloned.AnotherSimpleProp).IsNotNull().Because("AnotherSimpleProp should be cloned.");
+        await Assert.That(cloned.AnotherSimpleProp).IsNotSameReferenceAs(original.AnotherSimpleProp);
+        await Assert.That(cloned.AnotherSimpleProp!.DoubleValue).IsEqualTo(original.AnotherSimpleProp!.DoubleValue);
 
-        Assert.That(cloned2.SimpleProp, Is.Not.Null, "SimpleProp should not null after resetting the ignored types.");
+        await Assert.That(cloned2.SimpleProp).IsNotNull().Because("SimpleProp should not null after resetting the ignored types.");
     }
 
     [Test]
-    public void SetTypeBehavior_Reference_ReturnsSameInstance()
+    public async Task SetTypeBehavior_Reference_ReturnsSameInstance()
     {
         // Arrange
         SimpleClass original = new SimpleClass { IntValue = 42, StringValue = "KeepMe" };
@@ -89,11 +88,11 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         SimpleClass cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.SameAs(original));
+        await Assert.That(cloned).IsSameReferenceAs(original);
     }
 
     [Test]
-    public void SetTypeBehavior_Reference_PropertyOfReferenceType_ReturnsSameInstance()
+    public async Task SetTypeBehavior_Reference_PropertyOfReferenceType_ReturnsSameInstance()
     {
         // Arrange
         ClassWithProperties original = new ClassWithProperties
@@ -107,13 +106,13 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         ClassWithProperties cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned, Is.Not.SameAs(original));
-        Assert.That(cloned.SimpleProp, Is.SameAs(original.SimpleProp));
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned).IsNotSameReferenceAs(original);
+        await Assert.That(cloned.SimpleProp).IsSameReferenceAs(original.SimpleProp);
     }
 
     [Test]
-    public void SetTypeBehavior_Ignore_PropertyOfIgnoredValueType_IsDefaultAfterCloning()
+    public async Task SetTypeBehavior_Ignore_PropertyOfIgnoredValueType_IsDefaultAfterCloning()
     {
         // Arrange
         ClassWithValueTypeProperty original = new ClassWithValueTypeProperty
@@ -127,14 +126,14 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         ClassWithValueTypeProperty cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned.Id, Is.EqualTo(original.Id));
-        Assert.That(cloned.MyStruct, Is.EqualTo(default(MyValueType)), "Ignored value type property should be default.");
-        Assert.That(cloned.MyStruct.Value, Is.EqualTo(0));
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned.Id).IsEqualTo(original.Id);
+        await Assert.That(cloned.MyStruct).IsEqualTo(default(MyValueType)).Because("Ignored value type property should be default.");
+        await Assert.That(cloned.MyStruct.Value).IsEqualTo(0);
     }
 
     [Test]
-    public void SetTypeBehavior_UpdatesBehaviorCorrectly()
+    public async Task SetTypeBehavior_UpdatesBehaviorCorrectly()
     {
         // Arrange
         FastCloner.ClearAllTypeBehaviors();
@@ -150,9 +149,9 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         CloneBehavior? behaviorDeep = FastCloner.GetTypeBehavior<SimpleClass>();
 
         // Assert
-        Assert.That(behaviorIgnore, Is.EqualTo(CloneBehavior.Ignore));
-        Assert.That(behaviorReference, Is.EqualTo(CloneBehavior.Reference));
-        Assert.That(behaviorDeep, Is.Null, "Start behavior (Clone) should remove the entry.");
+        await Assert.That(behaviorIgnore).IsEqualTo(CloneBehavior.Ignore);
+        await Assert.That(behaviorReference).IsEqualTo(CloneBehavior.Reference);
+        await Assert.That(behaviorDeep).IsNull().Because("Start behavior (Clone) should remove the entry.");
     }
 
     public class ClassWithPrimitiveProperties
@@ -198,7 +197,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
 
     [Test]
-    public void SetTypeBehavior_Ignore_RootObjectOfIgnoredType_ReturnsNull()
+    public async Task SetTypeBehavior_Ignore_RootObjectOfIgnoredType_ReturnsNull()
     {
         // Arrange
         ClassToBeIgnored original = new ClassToBeIgnored { Data = "Important Data" };
@@ -208,11 +207,11 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         ClassToBeIgnored cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Null, "Cloning an object of an globally ignored type should return null.");
+        await Assert.That(cloned).IsNull().Because("Cloning an object of an globally ignored type should return null.");
     }
     
     [Test]
-    public void SetTypeBehavior_Ignore_ForPrimitiveIntProperty_SetsToDefault()
+    public async Task SetTypeBehavior_Ignore_ForPrimitiveIntProperty_SetsToDefault()
     {
         // Arrange
         ClassWithPrimitiveProperties original = new ClassWithPrimitiveProperties { IntProp = 123, BoolProp = true, StringProp = "Hello" };
@@ -222,14 +221,14 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         ClassWithPrimitiveProperties cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned.IntProp, Is.EqualTo(0), "Ignored int property should be default.");
-        Assert.That(cloned.BoolProp, Is.EqualTo(original.BoolProp), "BoolProp should not be affected.");
-        Assert.That(cloned.StringProp, Is.EqualTo(original.StringProp), "StringProp should not be affected.");
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned.IntProp).IsEqualTo(0).Because("Ignored int property should be default.");
+        await Assert.That(cloned.BoolProp).IsEqualTo(original.BoolProp).Because("BoolProp should not be affected.");
+        await Assert.That(cloned.StringProp).IsEqualTo(original.StringProp).Because("StringProp should not be affected.");
     }
 
     [Test]
-    public void SetTypeBehavior_IgnoreTypes_MultiplePropertiesOfIgnoredTypes_AreNullOrDefaultForValueTypes()
+    public async Task SetTypeBehavior_IgnoreTypes_MultiplePropertiesOfIgnoredTypes_AreNullOrDefaultForValueTypes()
     {
         // Arrange
         ClassWithProperties original = new ClassWithProperties
@@ -245,14 +244,14 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         ClassWithProperties cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned.Id, Is.EqualTo(original.Id));
-        Assert.That(cloned.SimpleProp, Is.Null, "SimpleProp should be null.");
-        Assert.That(cloned.AnotherSimpleProp, Is.Null, "AnotherSimpleProp should be null.");
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned.Id).IsEqualTo(original.Id);
+        await Assert.That(cloned.SimpleProp).IsNull().Because("SimpleProp should be null.");
+        await Assert.That(cloned.AnotherSimpleProp).IsNull().Because("AnotherSimpleProp should be null.");
     }
 
     [Test]
-    public void SetTypeBehavior_IgnoreTypes_ItemsInCollectionOfIgnoredType_BecomeNullInClonedCollection()
+    public async Task SetTypeBehavior_IgnoreTypes_ItemsInCollectionOfIgnoredType_BecomeNullInClonedCollection()
     {
         // Arrange
         ClassWithProperties original = new ClassWithProperties
@@ -270,17 +269,17 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         ClassWithProperties cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned.Id, Is.EqualTo(original.Id));
-        Assert.That(cloned.ListOfSimpleProp, Is.Not.Null, "Collection itself should be cloned.");
-        Assert.That(cloned.ListOfSimpleProp, Is.Not.SameAs(original.ListOfSimpleProp));
-        Assert.That(cloned.ListOfSimpleProp!.Count, Is.EqualTo(original.ListOfSimpleProp!.Count));
-        Assert.That(cloned.ListOfSimpleProp[0], Is.Null, "First item of ignored type should be null in cloned list.");
-        Assert.That(cloned.ListOfSimpleProp[1], Is.Null, "Second item of ignored type should be null in cloned list.");
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned.Id).IsEqualTo(original.Id);
+        await Assert.That(cloned.ListOfSimpleProp).IsNotNull().Because("Collection itself should be cloned.");
+        await Assert.That(cloned.ListOfSimpleProp).IsNotSameReferenceAs(original.ListOfSimpleProp);
+        await Assert.That(cloned.ListOfSimpleProp!.Count).IsEqualTo(original.ListOfSimpleProp!.Count);
+        await Assert.That(cloned.ListOfSimpleProp[0]).IsNull().Because("First item of ignored type should be null in cloned list.");
+        await Assert.That(cloned.ListOfSimpleProp[1]).IsNull().Because("Second item of ignored type should be null in cloned list.");
     }
 
     [Test]
-    public void SetTypeBehavior_Ignore_StringsInSet_OriginalStringsUsedIfStringIgnored()
+    public async Task SetTypeBehavior_Ignore_StringsInSet_OriginalStringsUsedIfStringIgnored()
     {
         // Arrange
         ClassWithSetProperties original = new ClassWithSetProperties
@@ -294,16 +293,16 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         ClassWithSetProperties cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned.SetOfString, Is.Not.Null);
-        Assert.That(cloned.SetOfString!.Count, Is.EqualTo(2));
-        Assert.That(cloned.SetOfString, Contains.Item("Hello"));
-        Assert.That(cloned.SetOfString, Contains.Item("World"));
-        Assert.That(cloned.SetOfString.Contains(null), Is.False);
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned.SetOfString).IsNotNull();
+        await Assert.That(cloned.SetOfString!.Count).IsEqualTo(2);
+        await Assert.That(cloned.SetOfString).Contains("Hello");
+        await Assert.That(cloned.SetOfString).Contains("World");
+        await Assert.That(cloned.SetOfString.Contains(null)).IsFalse();
     }
     
     [Test]
-    public void SetTypeBehavior_IgnoreType_ItemsInSetOfIgnoredValueType_OriginalItemsUsedIfElementIgnored()
+    public async Task SetTypeBehavior_IgnoreType_ItemsInSetOfIgnoredValueType_OriginalItemsUsedIfElementIgnored()
     {
         // Arrange
         MyValueType item1 = new MyValueType { Value = 10 };
@@ -319,16 +318,16 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         ClassWithSetProperties cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned.SetOfMyValueType, Is.Not.Null);
-        Assert.That(cloned.SetOfMyValueType!.Count, Is.EqualTo(original.SetOfMyValueType!.Count));
-        Assert.That(cloned.SetOfMyValueType, Contains.Item(item1)); // Original item1
-        Assert.That(cloned.SetOfMyValueType, Contains.Item(item2)); // Original item2
-        Assert.That(cloned.SetOfMyValueType.Contains(default), Is.False);
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned.SetOfMyValueType).IsNotNull();
+        await Assert.That(cloned.SetOfMyValueType!.Count).IsEqualTo(original.SetOfMyValueType!.Count);
+        await Assert.That(cloned.SetOfMyValueType).Contains(item1); // Original item1
+        await Assert.That(cloned.SetOfMyValueType).Contains(item2); // Original item2
+        await Assert.That(cloned.SetOfMyValueType.Contains(default)).IsFalse();
     }
 
     [Test]
-    public void SetTypeBehavior_IgnoreType_ItemsInSetOfIgnoredReferenceType_OriginalItemsUsedIfElementIgnored()
+    public async Task SetTypeBehavior_IgnoreType_ItemsInSetOfIgnoredReferenceType_OriginalItemsUsedIfElementIgnored()
     {
         // Arrange
         SimpleClass item1 = new SimpleClass { IntValue = 1, StringValue = "A" };
@@ -343,16 +342,16 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         // Act
         ClassWithSetProperties cloned = original.DeepClone();
 
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned.SetOfSimpleClass, Is.Not.Null);
-        Assert.That(cloned.SetOfSimpleClass, Is.Not.SameAs(original.SetOfSimpleClass));
-        Assert.That(cloned.SetOfSimpleClass!.Count, Is.EqualTo(original.SetOfSimpleClass!.Count));
-        Assert.That(cloned.SetOfSimpleClass, Contains.Item(item1), "Set should contain original item1 instance.");
-        Assert.That(cloned.SetOfSimpleClass, Contains.Item(item2), "Set should contain original item2 instance.");
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned.SetOfSimpleClass).IsNotNull();
+        await Assert.That(cloned.SetOfSimpleClass).IsNotSameReferenceAs(original.SetOfSimpleClass);
+        await Assert.That(cloned.SetOfSimpleClass!.Count).IsEqualTo(original.SetOfSimpleClass!.Count);
+        await Assert.That(cloned.SetOfSimpleClass).Contains(item1).Because("Set should contain original item1 instance.");
+        await Assert.That(cloned.SetOfSimpleClass).Contains(item2).Because("Set should contain original item2 instance.");
     }
 
     [Test]
-    public void SetTypeBehavior_IgnoreType_ItemsIn1DArrayOfIgnoredReferenceType_BecomeNull()
+    public async Task SetTypeBehavior_IgnoreType_ItemsIn1DArrayOfIgnoredReferenceType_BecomeNull()
     {
         // Arrange
         ClassWithArrayProperties original = new ClassWithArrayProperties
@@ -370,17 +369,17 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         ClassWithArrayProperties cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned.Id, Is.EqualTo(original.Id));
-        Assert.That(cloned.ArrayOfSimpleClass, Is.Not.Null);
-        Assert.That(cloned.ArrayOfSimpleClass, Is.Not.SameAs(original.ArrayOfSimpleClass));
-        Assert.That(cloned.ArrayOfSimpleClass!.Length, Is.EqualTo(original.ArrayOfSimpleClass!.Length));
-        Assert.That(cloned.ArrayOfSimpleClass[0], Is.Null, "First item of ignored reference type should be null.");
-        Assert.That(cloned.ArrayOfSimpleClass[1], Is.Null, "Second item of ignored reference type should be null.");
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned.Id).IsEqualTo(original.Id);
+        await Assert.That(cloned.ArrayOfSimpleClass).IsNotNull();
+        await Assert.That(cloned.ArrayOfSimpleClass).IsNotSameReferenceAs(original.ArrayOfSimpleClass);
+        await Assert.That(cloned.ArrayOfSimpleClass!.Length).IsEqualTo(original.ArrayOfSimpleClass!.Length);
+        await Assert.That(cloned.ArrayOfSimpleClass[0]).IsNull().Because("First item of ignored reference type should be null.");
+        await Assert.That(cloned.ArrayOfSimpleClass[1]).IsNull().Because("Second item of ignored reference type should be null.");
     }
     
     [Test]
-    public void SetTypeBehavior_IgnoreType_ItemsIn1DArrayOfIgnoredValueType_BecomeDefault()
+    public async Task SetTypeBehavior_IgnoreType_ItemsIn1DArrayOfIgnoredValueType_BecomeDefault()
     {
         // Arrange
         ClassWithArrayProperties original = new ClassWithArrayProperties
@@ -398,18 +397,18 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         ClassWithArrayProperties cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned.Id, Is.EqualTo(original.Id));
-        Assert.That(cloned.ArrayOfMyValueType, Is.Not.Null);
-        Assert.That(cloned.ArrayOfMyValueType, Is.Not.SameAs(original.ArrayOfMyValueType));
-        Assert.That(cloned.ArrayOfMyValueType!.Length, Is.EqualTo(original.ArrayOfMyValueType!.Length));
-        Assert.That(cloned.ArrayOfMyValueType[0], Is.EqualTo(default(MyValueType)), "First item of ignored value type should be default.");
-        Assert.That(cloned.ArrayOfMyValueType[1], Is.EqualTo(default(MyValueType)), "Second item of ignored value type should be default.");
-        Assert.That(cloned.ArrayOfMyValueType[0].Value, Is.EqualTo(0));
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned.Id).IsEqualTo(original.Id);
+        await Assert.That(cloned.ArrayOfMyValueType).IsNotNull();
+        await Assert.That(cloned.ArrayOfMyValueType).IsNotSameReferenceAs(original.ArrayOfMyValueType);
+        await Assert.That(cloned.ArrayOfMyValueType!.Length).IsEqualTo(original.ArrayOfMyValueType!.Length);
+        await Assert.That(cloned.ArrayOfMyValueType[0]).IsEqualTo(default(MyValueType)).Because("First item of ignored value type should be default.");
+        await Assert.That(cloned.ArrayOfMyValueType[1]).IsEqualTo(default(MyValueType)).Because("Second item of ignored value type should be default.");
+        await Assert.That(cloned.ArrayOfMyValueType[0].Value).IsEqualTo(0);
     }
     
     [Test]
-    public void SetTypeBehavior_IgnoreType_ItemsIn2DArrayOfIgnoredReferenceType_BecomeNull()
+    public async Task SetTypeBehavior_IgnoreType_ItemsIn2DArrayOfIgnoredReferenceType_BecomeNull()
     {
         // Arrange
         ClassWithArrayProperties original = new ClassWithArrayProperties
@@ -427,18 +426,18 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         ClassWithArrayProperties cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned.Id, Is.EqualTo(original.Id));
-        Assert.That(cloned.TwoDArrayOfSimpleClass, Is.Not.Null);
-        Assert.That(cloned.TwoDArrayOfSimpleClass, Is.Not.SameAs(original.TwoDArrayOfSimpleClass));
-        Assert.That(cloned.TwoDArrayOfSimpleClass!.GetLength(0), Is.EqualTo(original.TwoDArrayOfSimpleClass!.GetLength(0)));
-        Assert.That(cloned.TwoDArrayOfSimpleClass!.GetLength(1), Is.EqualTo(original.TwoDArrayOfSimpleClass!.GetLength(1)));
-        Assert.That(cloned.TwoDArrayOfSimpleClass[0, 0], Is.Null);
-        Assert.That(cloned.TwoDArrayOfSimpleClass[1, 0], Is.Null);
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned.Id).IsEqualTo(original.Id);
+        await Assert.That(cloned.TwoDArrayOfSimpleClass).IsNotNull();
+        await Assert.That(cloned.TwoDArrayOfSimpleClass).IsNotSameReferenceAs(original.TwoDArrayOfSimpleClass);
+        await Assert.That(cloned.TwoDArrayOfSimpleClass!.GetLength(0)).IsEqualTo(original.TwoDArrayOfSimpleClass!.GetLength(0));
+        await Assert.That(cloned.TwoDArrayOfSimpleClass!.GetLength(1)).IsEqualTo(original.TwoDArrayOfSimpleClass!.GetLength(1));
+        await Assert.That(cloned.TwoDArrayOfSimpleClass[0, 0]).IsNull();
+        await Assert.That(cloned.TwoDArrayOfSimpleClass[1, 0]).IsNull();
     }
     
     [Test]
-    public void SetTypeBehavior_IgnoreType_PrimitiveIntInArray_BecomesDefault()
+    public async Task SetTypeBehavior_IgnoreType_PrimitiveIntInArray_BecomesDefault()
     {
         // Arrange
         ClassWithArrayProperties original = new ClassWithArrayProperties
@@ -452,16 +451,16 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         ClassWithArrayProperties cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned.ArrayOfInt, Is.Not.Null);
-        Assert.That(cloned.ArrayOfInt!.Length, Is.EqualTo(3));
-        Assert.That(cloned.ArrayOfInt[0], Is.EqualTo(0));
-        Assert.That(cloned.ArrayOfInt[1], Is.EqualTo(0));
-        Assert.That(cloned.ArrayOfInt[2], Is.EqualTo(0));
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned.ArrayOfInt).IsNotNull();
+        await Assert.That(cloned.ArrayOfInt!.Length).IsEqualTo(3);
+        await Assert.That(cloned.ArrayOfInt[0]).IsEqualTo(0);
+        await Assert.That(cloned.ArrayOfInt[1]).IsEqualTo(0);
+        await Assert.That(cloned.ArrayOfInt[2]).IsEqualTo(0);
     }
     
     [Test]
-    public void SetTypeBehavior_IgnoreType_StringInArray_BecomesNull()
+    public async Task SetTypeBehavior_IgnoreType_StringInArray_BecomesNull()
     {
         // Arrange
         ClassWithArrayProperties original = new ClassWithArrayProperties
@@ -475,15 +474,15 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         ClassWithArrayProperties cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned.ArrayOfString, Is.Not.Null);
-        Assert.That(cloned.ArrayOfString!.Length, Is.EqualTo(2));
-        Assert.That(cloned.ArrayOfString[0], Is.Null);
-        Assert.That(cloned.ArrayOfString[1], Is.Null);
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned.ArrayOfString).IsNotNull();
+        await Assert.That(cloned.ArrayOfString!.Length).IsEqualTo(2);
+        await Assert.That(cloned.ArrayOfString[0]).IsNull();
+        await Assert.That(cloned.ArrayOfString[1]).IsNull();
     }
     
     [Test]
-    public void SetTypeBehavior_IgnoreType_StringValuesInDictionary_BecomeNull()
+    public async Task SetTypeBehavior_IgnoreType_StringValuesInDictionary_BecomeNull()
     {
         // Arrange
         ClassWithDictionaryProperties original = new ClassWithDictionaryProperties
@@ -501,15 +500,15 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         ClassWithDictionaryProperties cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned.DictIntString, Is.Not.Null);
-        Assert.That(cloned.DictIntString!.Count, Is.EqualTo(2));
-        Assert.That(cloned.DictIntString[1], Is.Null);
-        Assert.That(cloned.DictIntString[2], Is.Null);
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned.DictIntString).IsNotNull();
+        await Assert.That(cloned.DictIntString!.Count).IsEqualTo(2);
+        await Assert.That(cloned.DictIntString[1]).IsNull();
+        await Assert.That(cloned.DictIntString[2]).IsNull();
     }
 
     [Test]
-    public void SetTypeBehavior_IgnoreType_BothKeyAndValueIgnored_ReferenceTypes_UsesOriginalKeysAndNullValues()
+    public async Task SetTypeBehavior_IgnoreType_BothKeyAndValueIgnored_ReferenceTypes_UsesOriginalKeysAndNullValues()
     {
         // Arrange
         SimpleClass key1 = new SimpleClass { IntValue = 101, StringValue = "Key1" };
@@ -525,14 +524,14 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Dictionary<SimpleClass, AnotherSimpleClass> cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned!.Count, Is.EqualTo(1));
-        Assert.That(cloned.ContainsKey(key1), Is.True, "Should use original key instance as key type is ignored.");
-        Assert.That(cloned[key1], Is.Null, "Value should be null as value type is ignored.");
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned!.Count).IsEqualTo(1);
+        await Assert.That(cloned.ContainsKey(key1)).IsTrue().Because("Should use original key instance as key type is ignored.");
+        await Assert.That(cloned[key1]).IsNull().Because("Value should be null as value type is ignored.");
     }
 
     [Test]
-    public void SetTypeBehavior_IgnoreType_BothKeyAndValueIgnored_ValueTypes_UsesOriginalKeysAndDefaultValues()
+    public async Task SetTypeBehavior_IgnoreType_BothKeyAndValueIgnored_ValueTypes_UsesOriginalKeysAndDefaultValues()
     {
         // Arrange
         MyValueType key1 = new MyValueType { Value = 77 };
@@ -547,14 +546,14 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Dictionary<MyValueType, MyValueType> cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned!.Count, Is.EqualTo(1));
-        Assert.That(cloned.ContainsKey(key1), Is.True, "Should use original key instance as key type is ignored.");
-        Assert.That(cloned[key1], Is.EqualTo(default(MyValueType)), "Value should be default as value type is ignored.");
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned!.Count).IsEqualTo(1);
+        await Assert.That(cloned.ContainsKey(key1)).IsTrue().Because("Should use original key instance as key type is ignored.");
+        await Assert.That(cloned[key1]).IsEqualTo(default(MyValueType)).Because("Value should be default as value type is ignored.");
     }
     
     [Test]
-    public void SetTypeBehavior_IgnoreType_PrimitiveKeyTypeInt_And_ReferenceValueTypeIgnored()
+    public async Task SetTypeBehavior_IgnoreType_PrimitiveKeyTypeInt_And_ReferenceValueTypeIgnored()
     {
         // Arrange
         Dictionary<int, SimpleClass> original = new Dictionary<int, SimpleClass>
@@ -568,14 +567,14 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Dictionary<int, SimpleClass> cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned!.Count, Is.EqualTo(2));
-        Assert.That(cloned[1], Is.Null);
-        Assert.That(cloned[2], Is.Null);
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned!.Count).IsEqualTo(2);
+        await Assert.That(cloned[1]).IsNull();
+        await Assert.That(cloned[2]).IsNull();
     }
     
     [Test]
-    public void SetTypeBehavior_IgnoreType_ReferenceKeyType_And_PrimitiveValueTypeIntIgnored()
+    public async Task SetTypeBehavior_IgnoreType_ReferenceKeyType_And_PrimitiveValueTypeIntIgnored()
     {
         // Arrange
         SimpleClass key1 = new SimpleClass { IntValue = 1, StringValue = "Key1" };
@@ -589,13 +588,13 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         Dictionary<SimpleClass, int> cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned!.Count, Is.EqualTo(1));
-        Assert.That(cloned.FirstOrDefault().Value, Is.EqualTo(0), "Ignored int value should be default.");
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned!.Count).IsEqualTo(1);
+        await Assert.That(cloned.FirstOrDefault().Value).IsEqualTo(0).Because("Ignored int value should be default.");
     }
 
     [Test]
-    public void SetTypeBehavior_MinimalIssue8Ignored()
+    public async Task SetTypeBehavior_MinimalIssue8Ignored()
     {
         // Arrange
         FastCloner.SetTypeBehavior<System.ComponentModel.PropertyChangedEventHandler>(CloneBehavior.Ignore);
@@ -606,13 +605,13 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         IteratorInfo copy = nfo.DeepClone();
 
         // Assert
-        Assert.That(copy, Is.Not.Null);
-        Assert.That(nfo.HasPropertyChanged, Is.True);
-        Assert.That(copy.HasPropertyChanged, Is.False);
+        await Assert.That(copy).IsNotNull();
+        await Assert.That(nfo.HasPropertyChanged).IsTrue();
+        await Assert.That(copy.HasPropertyChanged).IsFalse();
     }
     
     [Test]
-    public void SetTypeBehavior_MinimalIssue8Kept()
+    public async Task SetTypeBehavior_MinimalIssue8Kept()
     {
         // Arrange
         IteratorInfo nfo = new IteratorInfo();
@@ -621,45 +620,45 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         IteratorInfo copy = nfo.DeepClone();
 
         // Assert
-        Assert.That(copy, Is.Not.Null);
-        Assert.That(nfo.HasPropertyChanged, Is.True);
-        Assert.That(copy.HasPropertyChanged, Is.True);
+        await Assert.That(copy).IsNotNull();
+        await Assert.That(nfo.HasPropertyChanged).IsTrue();
+        await Assert.That(copy.HasPropertyChanged).IsTrue();
     }
 
     [Test]
-    public void SetTypeBehavior_ExactTypeClone_Reflects_RuntimeMutations()
+    public async Task SetTypeBehavior_ExactTypeClone_Reflects_RuntimeMutations()
     {
         // Arrange
         SimpleClass original = new SimpleClass { IntValue = 42, StringValue = "Value" };
 
         // Act + Assert (default behavior)
         SimpleClass baseline = original.DeepClone();
-        Assert.That(baseline, Is.Not.Null);
-        Assert.That(baseline, Is.Not.SameAs(original));
-        Assert.That(baseline.IntValue, Is.EqualTo(original.IntValue));
-        Assert.That(baseline.StringValue, Is.EqualTo(original.StringValue));
+        await Assert.That(baseline).IsNotNull();
+        await Assert.That(baseline).IsNotSameReferenceAs(original);
+        await Assert.That(baseline.IntValue).IsEqualTo(original.IntValue);
+        await Assert.That(baseline.StringValue).IsEqualTo(original.StringValue);
 
         // Act + Assert (reference behavior)
         FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Reference);
         SimpleClass referenced = original.DeepClone();
-        Assert.That(referenced, Is.SameAs(original));
+        await Assert.That(referenced).IsSameReferenceAs(original);
 
         // Act + Assert (ignore behavior)
         FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Ignore);
         SimpleClass ignored = original.DeepClone();
-        Assert.That(ignored, Is.Null);
+        await Assert.That(ignored).IsNull();
 
         // Act + Assert (restored default behavior)
         FastCloner.ClearTypeBehavior<SimpleClass>();
         SimpleClass restored = original.DeepClone();
-        Assert.That(restored, Is.Not.Null);
-        Assert.That(restored, Is.Not.SameAs(original));
-        Assert.That(restored.IntValue, Is.EqualTo(original.IntValue));
-        Assert.That(restored.StringValue, Is.EqualTo(original.StringValue));
+        await Assert.That(restored).IsNotNull();
+        await Assert.That(restored).IsNotSameReferenceAs(original);
+        await Assert.That(restored.IntValue).IsEqualTo(original.IntValue);
+        await Assert.That(restored.StringValue).IsEqualTo(original.StringValue);
     }
 
     [Test]
-    public void SetTypeBehavior_Shallow_PerformsShallowCopy()
+    public async Task SetTypeBehavior_Shallow_PerformsShallowCopy()
     {
         // Arrange
         ClassWithProperties original = new ClassWithProperties
@@ -673,36 +672,36 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         ClassWithProperties clone = original.DeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.SameAs(original), "Shallow clone should be a new object");
-        Assert.That(clone.Id, Is.EqualTo(1));
-        Assert.That(clone.SimpleProp, Is.SameAs(original.SimpleProp), "Shallow clone should share references");
-        
+        await Assert.That(clone).IsNotSameReferenceAs(original).Because("Shallow clone should be a new object");
+        await Assert.That(clone.Id).IsEqualTo(1);
+        await Assert.That(clone.SimpleProp).IsSameReferenceAs(original.SimpleProp).Because("Shallow clone should share references");
+
         // Value types should still be independent copies (because it's a new container)
         clone.Id = 2;
-        Assert.That(original.Id, Is.EqualTo(1));
+        await Assert.That(original.Id).IsEqualTo(1);
     }
 
     [Test]
-    public void DisableOptionalFeatures_Toggle_RecomputesActiveTypeBehaviorChecks()
+    public async Task DisableOptionalFeatures_Toggle_RecomputesActiveTypeBehaviorChecks()
     {
         // Arrange
         FastCloner.ClearAllTypeBehaviors();
         FastCloner.SetDisableOptionalFeatures(false);
 
         // Act + Assert
-        Assert.That(FastClonerCache.HasActiveTypeBehaviorOverrides, Is.False);
+        await Assert.That(FastClonerCache.HasActiveTypeBehaviorOverrides).IsFalse();
 
         FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Ignore);
-        Assert.That(FastClonerCache.HasActiveTypeBehaviorOverrides, Is.True);
+        await Assert.That(FastClonerCache.HasActiveTypeBehaviorOverrides).IsTrue();
 
         FastCloner.SetDisableOptionalFeatures(true);
-        Assert.That(FastClonerCache.HasActiveTypeBehaviorOverrides, Is.False);
+        await Assert.That(FastClonerCache.HasActiveTypeBehaviorOverrides).IsFalse();
 
         FastCloner.SetDisableOptionalFeatures(false);
-        Assert.That(FastClonerCache.HasActiveTypeBehaviorOverrides, Is.True);
+        await Assert.That(FastClonerCache.HasActiveTypeBehaviorOverrides).IsTrue();
 
         FastCloner.ClearAllTypeBehaviors();
-        Assert.That(FastClonerCache.HasActiveTypeBehaviorOverrides, Is.False);
+        await Assert.That(FastClonerCache.HasActiveTypeBehaviorOverrides).IsFalse();
     }
 
     public class ClassWithThreeStrings
@@ -725,7 +724,7 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
 
     [Test]
-    public void MemberIgnore_OnlyMiddleString_IsNull()
+    public async Task MemberIgnore_OnlyMiddleString_IsNull()
     {
         // Arrange
         ClassWithMiddleStringIgnored original = new ClassWithMiddleStringIgnored
@@ -740,15 +739,15 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         ClassWithMiddleStringIgnored cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned.Id, Is.EqualTo(99));
-        Assert.That(cloned.First, Is.EqualTo("Alpha"));
-        Assert.That(cloned.Middle, Is.Null);
-        Assert.That(cloned.Last, Is.EqualTo("Gamma"));
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned.Id).IsEqualTo(99);
+        await Assert.That(cloned.First).IsEqualTo("Alpha");
+        await Assert.That(cloned.Middle).IsNull();
+        await Assert.That(cloned.Last).IsEqualTo("Gamma");
     }
 
     [Test]
-    public void SetTypeBehavior_IgnoreString_ClassWithThreeStrings_AllStringsNull()
+    public async Task SetTypeBehavior_IgnoreString_ClassWithThreeStrings_AllStringsNull()
     {
         // Arrange
         ClassWithThreeStrings original = new ClassWithThreeStrings
@@ -764,15 +763,15 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         ClassWithThreeStrings cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned.Id, Is.EqualTo(99));
-        Assert.That(cloned.First, Is.Null);
-        Assert.That(cloned.Middle, Is.Null);
-        Assert.That(cloned.Last, Is.Null);
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned.Id).IsEqualTo(99);
+        await Assert.That(cloned.First).IsNull();
+        await Assert.That(cloned.Middle).IsNull();
+        await Assert.That(cloned.Last).IsNull();
     }
 
     [Test]
-    public void SetTypeBehavior_IgnoreString_MixedObjectArray_OnlyStringsNull()
+    public async Task SetTypeBehavior_IgnoreString_MixedObjectArray_OnlyStringsNull()
     {
         // Arrange
         var original = new object?[] { "Hello", 42, "World", 3.14, "!" };
@@ -782,17 +781,17 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         object?[] cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.Null);
-        Assert.That(cloned.Length, Is.EqualTo(5));
-        Assert.That(cloned[0], Is.Null);
-        Assert.That(cloned[1], Is.EqualTo(42));
-        Assert.That(cloned[2], Is.Null);
-        Assert.That(cloned[3], Is.EqualTo(3.14));
-        Assert.That(cloned[4], Is.Null);
+        await Assert.That(cloned).IsNotNull();
+        await Assert.That(cloned.Length).IsEqualTo(5);
+        await Assert.That(cloned[0]).IsNull();
+        await Assert.That(cloned[1]).IsEqualTo(42);
+        await Assert.That(cloned[2]).IsNull();
+        await Assert.That(cloned[3]).IsEqualTo(3.14);
+        await Assert.That(cloned[4]).IsNull();
     }
 
     [Test]
-    public void DisableOptionalFeatures_WhenEnabled_IgnoresTypeBehaviorOverrides()
+    public async Task DisableOptionalFeatures_WhenEnabled_IgnoresTypeBehaviorOverrides()
     {
         // Arrange
         SimpleClass original = new SimpleClass { IntValue = 42, StringValue = "Value" };
@@ -800,15 +799,91 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
 
         // Act + Assert (overrides active)
         SimpleClass ignored = original.DeepClone();
-        Assert.That(ignored, Is.Null);
+        await Assert.That(ignored).IsNull();
 
         FastCloner.SetDisableOptionalFeatures(true);
         SimpleClass clonedWithOptionalDisabled = original.DeepClone();
-        Assert.That(clonedWithOptionalDisabled, Is.Not.Null);
-        Assert.That(clonedWithOptionalDisabled, Is.Not.SameAs(original));
+        await Assert.That(clonedWithOptionalDisabled).IsNotNull();
+        await Assert.That(clonedWithOptionalDisabled).IsNotSameReferenceAs(original);
 
         FastCloner.SetDisableOptionalFeatures(false);
         SimpleClass ignoredAgain = original.DeepClone();
-        Assert.That(ignoredAgain, Is.Null);
+        await Assert.That(ignoredAgain).IsNull();
+    }
+
+    [Test]
+    public async Task GlobalConfigPublish_BumpsCacheVersion_ForSubsequentReaders()
+    {
+        FastCloner.ClearCache();
+        FastCloner.ClearAllTypeBehaviors();
+        FastCloner.SetDisableOptionalFeatures(false);
+
+        SimpleClass simple = new SimpleClass { IntValue = 7, StringValue = "Seven" };
+        Dictionary<string, SimpleClass> dictionary = new Dictionary<string, SimpleClass>
+        {
+            ["one"] = new SimpleClass { IntValue = 1, StringValue = "One" }
+        };
+
+        long startingVersion = FastClonerCache.GetCacheVersion();
+
+        FastCloner.MaxRecursionDepth = 999;
+        _ = simple.DeepClone();
+        _ = dictionary.DeepClone();
+
+        long firstMutationVersion = FastClonerCache.GetCacheVersion();
+        await Assert.That(firstMutationVersion).IsGreaterThan(startingVersion);
+
+        FastCloner.MaxRecursionDepth = 998;
+        _ = simple.DeepClone();
+        _ = dictionary.DeepClone();
+
+        await Assert.That(FastClonerCache.GetCacheVersion()).IsGreaterThan(firstMutationVersion);
+    }
+
+    [Test]
+    public async Task RuntimeConfig_Create_DefaultValues_CanStaySingletonOrBecomeDistinctSnapshot()
+    {
+        FastClonerRuntimeConfig startupDefault = FastClonerRuntimeConfig.Create(
+            1000,
+            disableOptionalFeatures: false,
+            typeBehaviors: null,
+            cacheKey: 0,
+            useStartupDefaultSingleton: true);
+
+        FastClonerRuntimeConfig settledDefault = FastClonerRuntimeConfig.Create(
+            1000,
+            disableOptionalFeatures: false,
+            typeBehaviors: null,
+            cacheKey: 42,
+            useStartupDefaultSingleton: false);
+
+        await Assert.That(ReferenceEquals(startupDefault, FastClonerRuntimeConfig.Default)).IsTrue();
+        await Assert.That(ReferenceEquals(settledDefault, FastClonerRuntimeConfig.Default)).IsFalse();
+        await Assert.That(settledDefault.CacheKey).IsEqualTo(42);
+        await Assert.That(settledDefault.MaxRecursionDepth).IsEqualTo(FastClonerRuntimeConfig.Default.MaxRecursionDepth);
+        await Assert.That(settledDefault.DisableOptionalFeatures).IsEqualTo(FastClonerRuntimeConfig.Default.DisableOptionalFeatures);
+        await Assert.That(settledDefault.TypeBehaviors.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task PublishedEngine_RestoringDefaults_ReturnsToStartupRail()
+    {
+        FastCloner.SetTypeBehavior<SimpleClass>(CloneBehavior.Reference);
+        FastClonerPublishedEngine mutated = FastCloner.GetPublishedEngine();
+
+        await Assert.That(mutated.UsesStartupDefaultRail).IsFalse();
+        await Assert.That(mutated.RuntimeConfig.CacheKey).IsGreaterThan(0);
+
+        FastCloner.ClearAllTypeBehaviors();
+        FastCloner.SetDisableOptionalFeatures(false);
+        FastCloner.MaxRecursionDepth = 1000;
+
+        FastClonerPublishedEngine restored = FastCloner.GetPublishedEngine();
+        await Assert.That(restored.UsesStartupDefaultRail).IsTrue();
+        await Assert.That(ReferenceEquals(restored.RuntimeConfig, FastClonerRuntimeConfig.Default)).IsTrue();
+        await Assert.That(restored.RuntimeConfig.CacheKey).IsEqualTo(0);
+        await Assert.That(restored.RuntimeConfig.MaxRecursionDepth).IsEqualTo(FastClonerRuntimeConfig.Default.MaxRecursionDepth);
+        await Assert.That(restored.RuntimeConfig.DisableOptionalFeatures).IsEqualTo(FastClonerRuntimeConfig.Default.DisableOptionalFeatures);
+        await Assert.That(restored.RuntimeConfig.TypeBehaviors.Count).IsEqualTo(0);
     }
 }

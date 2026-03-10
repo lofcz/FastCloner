@@ -7,21 +7,48 @@ namespace FastCloner;
 /// </summary>
 public static class FastCloner
 {
-    internal static volatile bool DisableOptionalFeatures;
+    private static readonly object configSync = new();
+    private static long nextConfigCacheKey;
+    private static volatile bool disableOptionalFeatures;
+    private static volatile int maxRecursionDepth = 1_000;
+    private static FastClonerPublishedEngine publishedEngine = FastClonerPublishedEngine.StartupDefault;
+
+    internal static FastClonerPublishedEngine GetPublishedEngine() => Volatile.Read(ref publishedEngine);
+    internal static FastClonerRuntimeConfig GetRuntimeConfigSnapshot() => GetPublishedEngine().RuntimeConfig;
+
+    internal static bool DisableOptionalFeatures
+    {
+        get => disableOptionalFeatures;
+    }
 
     internal static void SetDisableOptionalFeatures(bool value)
     {
-        if (DisableOptionalFeatures == value)
-            return;
+        lock (configSync)
+        {
+            if (disableOptionalFeatures == value)
+                return;
 
-        DisableOptionalFeatures = value;
-        RefreshCachesAfterBehaviorStateChange();
+            PublishEngine(CreatePublishedEngine(maxRecursionDepth, value, GetTypeBehaviors()));
+        }
     }
 
     /// <summary>
     /// Cloning objects with nest level above this threshold uses iterative approach instead of recursion.
     /// </summary>
-    public static int MaxRecursionDepth { get; set; } = 1_000;
+    public static int MaxRecursionDepth
+    {
+        get => maxRecursionDepth;
+        set
+        {
+            lock (configSync)
+            {
+                if (maxRecursionDepth == value)
+                    return;
+
+                PublishEngine(CreatePublishedEngine(value, disableOptionalFeatures, GetTypeBehaviors()));
+            }
+        }
+    }
     
     /// <summary>
     /// Performs deep (full) copy of object and related graph
@@ -68,18 +95,23 @@ public static class FastCloner
     /// </remarks>
     public static void SetTypeBehavior(Type type, CloneBehavior behavior)
     {
-        if (behavior == CloneBehavior.Clone)
+        lock (configSync)
         {
-            // Clone is the default - remove any custom behavior
-            if (FastClonerCache.TypeBehaviors.TryRemove(type, out _))
+            if (behavior == CloneBehavior.Clone)
             {
-                RefreshCachesAfterBehaviorStateChange();
+                if (!FastClonerCache.TypeBehaviors.TryRemove(type, out _))
+                    return;
             }
-        }
-        else
-        {
-            FastClonerCache.TypeBehaviors[type] = behavior;
-            RefreshCachesAfterBehaviorStateChange();
+            else if (FastClonerCache.TypeBehaviors.TryGetValue(type, out CloneBehavior currentBehavior) && currentBehavior == behavior)
+            {
+                return;
+            }
+            else
+            {
+                FastClonerCache.TypeBehaviors[type] = behavior;
+            }
+
+            PublishEngine(CreatePublishedEngine(maxRecursionDepth, disableOptionalFeatures, GetTypeBehaviors()));
         }
     }
 
@@ -122,12 +154,14 @@ public static class FastCloner
     /// </remarks>
     public static bool ClearTypeBehavior(Type type)
     {
-        bool removed = FastClonerCache.TypeBehaviors.TryRemove(type, out _);
-        if (removed)
+        lock (configSync)
         {
-            RefreshCachesAfterBehaviorStateChange();
+            if (!FastClonerCache.TypeBehaviors.TryRemove(type, out _))
+                return false;
+
+            PublishEngine(CreatePublishedEngine(maxRecursionDepth, disableOptionalFeatures, GetTypeBehaviors()));
+            return true;
         }
-        return removed;
     }
 
     /// <summary>
@@ -145,14 +179,39 @@ public static class FastCloner
     /// </remarks>
     public static void ClearAllTypeBehaviors()
     {
-        FastClonerCache.TypeBehaviors.Clear();
-        RefreshCachesAfterBehaviorStateChange();
+        lock (configSync)
+        {
+            if (FastClonerCache.TypeBehaviors.IsEmpty)
+                return;
+
+            FastClonerCache.TypeBehaviors.Clear();
+            PublishEngine(CreatePublishedEngine(maxRecursionDepth, disableOptionalFeatures, new Dictionary<Type, CloneBehavior>()));
+        }
     }
 
-    private static void RefreshCachesAfterBehaviorStateChange()
+    private static void PublishEngine(FastClonerPublishedEngine engine)
     {
-        FastClonerSafeTypes.ClearKnownTypesCache();
-        FastClonerCache.ClearCache();
+        maxRecursionDepth = engine.RuntimeConfig.MaxRecursionDepth;
+        disableOptionalFeatures = engine.RuntimeConfig.DisableOptionalFeatures;
         FastClonerCache.RecalculateTypeBehaviorState();
+        FastClonerCache.ClearCache();
+        Volatile.Write(ref publishedEngine, engine);
+    }
+
+    private static FastClonerPublishedEngine CreatePublishedEngine(
+        int maxRecursionDepth,
+        bool disableOptionalFeatures,
+        Dictionary<Type, CloneBehavior>? typeBehaviors)
+    {
+        long cacheKey = Interlocked.Increment(ref nextConfigCacheKey);
+        FastClonerRuntimeConfig config = FastClonerRuntimeConfig.Create(
+            maxRecursionDepth,
+            disableOptionalFeatures,
+            typeBehaviors,
+            cacheKey,
+            useStartupDefaultSingleton: true);
+        return ReferenceEquals(config, FastClonerRuntimeConfig.Default)
+            ? FastClonerPublishedEngine.StartupDefault
+            : FastClonerPublishedEngine.CreateConfigured(config);
     }
 }

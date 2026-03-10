@@ -1,6 +1,6 @@
 using System.Linq;
 using FastCloner.SourceGenerator.Shared;
-using NUnit.Framework;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
 
@@ -20,8 +20,6 @@ public class ExternalBird : AbstractClassTests.Pet
     public double Wingspan { get; set; }
     public bool CanFly { get; set; }
 }
-
-[TestFixture]
 [SourceGeneratorCompatible]
 public class AbstractClassTests
 {
@@ -158,7 +156,7 @@ public class AbstractClassTests
     
     [Test]
     [SourceGeneratorCompatible]
-    public void Abstract_Dog_Should_Clone_Correctly()
+    public async Task Abstract_Dog_Should_Clone_Correctly()
     {
         // Arrange
         Dog dog = new Dog
@@ -174,20 +172,20 @@ public class AbstractClassTests
         Animal? clone = animal.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.TypeOf<Dog>());
-        Assert.That(clone, Is.Not.SameAs(dog));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsTypeOf<Dog>();
+        await Assert.That(clone).IsNotSameReferenceAs(dog);
+
         Dog clonedDog = (Dog)clone!;
-        Assert.That(clonedDog.Name, Is.EqualTo("Buddy"));
-        Assert.That(clonedDog.Age, Is.EqualTo(5));
-        Assert.That(clonedDog.Breed, Is.EqualTo("Golden Retriever"));
-        Assert.That(clonedDog.IsTrained, Is.True);
+        await Assert.That(clonedDog.Name).IsEqualTo("Buddy");
+        await Assert.That(clonedDog.Age).IsEqualTo(5);
+        await Assert.That(clonedDog.Breed).IsEqualTo("Golden Retriever");
+        await Assert.That(clonedDog.IsTrained).IsTrue();
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Abstract_Cat_Should_Clone_Correctly()
+    public async Task Abstract_Cat_Should_Clone_Correctly()
     {
         // Arrange
         Cat cat = new Cat
@@ -203,15 +201,15 @@ public class AbstractClassTests
         Animal? clone = animal.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.TypeOf<Cat>());
-        Assert.That(clone, Is.Not.SameAs(cat));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsTypeOf<Cat>();
+        await Assert.That(clone).IsNotSameReferenceAs(cat);
+
         Cat clonedCat = (Cat)clone!;
-        Assert.That(clonedCat.Name, Is.EqualTo("Whiskers"));
-        Assert.That(clonedCat.Age, Is.EqualTo(3));
-        Assert.That(clonedCat.Color, Is.EqualTo("Orange"));
-        Assert.That(clonedCat.IsIndoor, Is.True);
+        await Assert.That(clonedCat.Name).IsEqualTo("Whiskers");
+        await Assert.That(clonedCat.Age).IsEqualTo(3);
+        await Assert.That(clonedCat.Color).IsEqualTo("Orange");
+        await Assert.That(clonedCat.IsIndoor).IsTrue();
     }
 
     #endregion
@@ -220,7 +218,7 @@ public class AbstractClassTests
     
     [Test]
     [SourceGeneratorCompatible]
-    public void Abstract_Vehicle_With_Collection_Should_Deep_Clone()
+    public async Task Abstract_Vehicle_With_Collection_Should_Deep_Clone()
     {
         // Arrange
         Car car = new Car
@@ -236,19 +234,19 @@ public class AbstractClassTests
         Vehicle? clone = vehicle.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.TypeOf<Car>());
-        Assert.That(clone!.Features, Is.Not.SameAs(car.Features));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsTypeOf<Car>();
+        await Assert.That(clone!.Features).IsNotSameReferenceAs(car.Features);
+
         Car clonedCar = (Car)clone;
-        Assert.That(clonedCar.Brand, Is.EqualTo("Tesla"));
-        Assert.That(clonedCar.NumberOfDoors, Is.EqualTo(4));
-        Assert.That(clonedCar.IsElectric, Is.True);
-        Assert.That(clonedCar.Features!.Count, Is.EqualTo(3));
-        
+        await Assert.That(clonedCar.Brand).IsEqualTo("Tesla");
+        await Assert.That(clonedCar.NumberOfDoors).IsEqualTo(4);
+        await Assert.That(clonedCar.IsElectric).IsTrue();
+        await Assert.That(clonedCar.Features!.Count).IsEqualTo(3);
+
         // Verify deep clone - modify original
         car.Features![0] = "Manual";
-        Assert.That(clonedCar.Features[0], Is.EqualTo("Autopilot")); // Clone unchanged
+        await Assert.That(clonedCar.Features[0]).IsEqualTo("Autopilot"); // Clone unchanged
     }
 
     #endregion
@@ -257,7 +255,7 @@ public class AbstractClassTests
     
     [Test]
     [SourceGeneratorCompatible]
-    public void MultiLevel_Triangle_Should_Clone_Via_Shape()
+    public async Task MultiLevel_Triangle_Should_Clone_Via_Shape()
     {
         // Arrange
         Triangle triangle = new Triangle
@@ -272,19 +270,19 @@ public class AbstractClassTests
         Shape? clone = shape.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.TypeOf<Triangle>());
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsTypeOf<Triangle>();
+
         Triangle clonedTriangle = (Triangle)clone!;
-        Assert.That(clonedTriangle.Name, Is.EqualTo("Equilateral"));
-        Assert.That(clonedTriangle.NumberOfSides, Is.EqualTo(3));
-        Assert.That(clonedTriangle.Base, Is.EqualTo(10.0));
-        Assert.That(clonedTriangle.Height, Is.EqualTo(8.66));
+        await Assert.That(clonedTriangle.Name).IsEqualTo("Equilateral");
+        await Assert.That(clonedTriangle.NumberOfSides).IsEqualTo(3);
+        await Assert.That(clonedTriangle.Base).IsEqualTo(10.0);
+        await Assert.That(clonedTriangle.Height).IsEqualTo(8.66);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void MultiLevel_Rectangle_Should_Clone_Via_Shape()
+    public async Task MultiLevel_Rectangle_Should_Clone_Via_Shape()
     {
         // Arrange
         Rectangle rectangle = new Rectangle
@@ -299,14 +297,14 @@ public class AbstractClassTests
         Shape? clone = shape.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.TypeOf<Rectangle>());
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsTypeOf<Rectangle>();
+
         Rectangle clonedRect = (Rectangle)clone!;
-        Assert.That(clonedRect.Name, Is.EqualTo("Square"));
-        Assert.That(clonedRect.NumberOfSides, Is.EqualTo(4));
-        Assert.That(clonedRect.Width, Is.EqualTo(5.0));
-        Assert.That(clonedRect.Length, Is.EqualTo(5.0));
+        await Assert.That(clonedRect.Name).IsEqualTo("Square");
+        await Assert.That(clonedRect.NumberOfSides).IsEqualTo(4);
+        await Assert.That(clonedRect.Width).IsEqualTo(5.0);
+        await Assert.That(clonedRect.Length).IsEqualTo(5.0);
     }
 
     #endregion
@@ -315,7 +313,7 @@ public class AbstractClassTests
     
     [Test]
     [SourceGeneratorCompatible]
-    public void Abstract_Employee_With_Complex_Types_Should_Deep_Clone()
+    public async Task Abstract_Employee_With_Complex_Types_Should_Deep_Clone()
     {
         // Arrange
         Manager manager = new Manager
@@ -336,32 +334,32 @@ public class AbstractClassTests
         Employee? clone = employee.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.TypeOf<Manager>());
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsTypeOf<Manager>();
+
         Manager clonedManager = (Manager)clone!;
-        Assert.That(clonedManager.Name, Is.EqualTo("Alice"));
-        Assert.That(clonedManager.Department, Is.EqualTo("Engineering"));
-        
+        await Assert.That(clonedManager.Name).IsEqualTo("Alice");
+        await Assert.That(clonedManager.Department).IsEqualTo("Engineering");
+
         // Verify deep clone of nested object
-        Assert.That(clonedManager.HomeAddress, Is.Not.Null);
-        Assert.That(clonedManager.HomeAddress, Is.Not.SameAs(manager.HomeAddress));
-        Assert.That(clonedManager.HomeAddress!.Street, Is.EqualTo("123 Main St"));
-        Assert.That(clonedManager.HomeAddress.City, Is.EqualTo("Seattle"));
-        
+        await Assert.That(clonedManager.HomeAddress).IsNotNull();
+        await Assert.That(clonedManager.HomeAddress).IsNotSameReferenceAs(manager.HomeAddress);
+        await Assert.That(clonedManager.HomeAddress!.Street).IsEqualTo("123 Main St");
+        await Assert.That(clonedManager.HomeAddress.City).IsEqualTo("Seattle");
+
         // Verify deep clone of list
-        Assert.That(clonedManager.DirectReports, Is.Not.Null);
-        Assert.That(clonedManager.DirectReports, Is.Not.SameAs(manager.DirectReports));
-        Assert.That(clonedManager.DirectReports!.Count, Is.EqualTo(3));
-        
+        await Assert.That(clonedManager.DirectReports).IsNotNull();
+        await Assert.That(clonedManager.DirectReports).IsNotSameReferenceAs(manager.DirectReports);
+        await Assert.That(clonedManager.DirectReports!.Count).IsEqualTo(3);
+
         // Verify independence
         manager.HomeAddress!.City = "Portland";
-        Assert.That(clonedManager.HomeAddress.City, Is.EqualTo("Seattle")); // Clone unchanged
+        await Assert.That(clonedManager.HomeAddress.City).IsEqualTo("Seattle"); // Clone unchanged
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Abstract_Developer_Should_Clone_Correctly()
+    public async Task Abstract_Developer_Should_Clone_Correctly()
     {
         // Arrange
         Developer developer = new Developer
@@ -382,14 +380,14 @@ public class AbstractClassTests
         Employee? clone = employee.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.TypeOf<Developer>());
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsTypeOf<Developer>();
+
         Developer clonedDev = (Developer)clone!;
-        Assert.That(clonedDev.Name, Is.EqualTo("Bob"));
-        Assert.That(clonedDev.Team, Is.EqualTo("Backend"));
-        Assert.That(clonedDev.ProgrammingLanguages!.Count, Is.EqualTo(3));
-        Assert.That(clonedDev.ProgrammingLanguages, Does.Contain("C#"));
+        await Assert.That(clonedDev.Name).IsEqualTo("Bob");
+        await Assert.That(clonedDev.Team).IsEqualTo("Backend");
+        await Assert.That(clonedDev.ProgrammingLanguages!.Count).IsEqualTo(3);
+        await Assert.That(clonedDev.ProgrammingLanguages).Contains("C#");
     }
 
     #endregion
@@ -398,7 +396,7 @@ public class AbstractClassTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void FastClonerInclude_ExternalDog_Should_Clone()
+    public async Task FastClonerInclude_ExternalDog_Should_Clone()
     {
         // Arrange
         ExternalDog dog = new ExternalDog
@@ -413,19 +411,19 @@ public class AbstractClassTests
         Pet? clone = pet.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.TypeOf<ExternalDog>());
-        Assert.That(clone, Is.Not.SameAs(dog));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsTypeOf<ExternalDog>();
+        await Assert.That(clone).IsNotSameReferenceAs(dog);
+
         ExternalDog clonedDog = (ExternalDog)clone!;
-        Assert.That(clonedDog.Name, Is.EqualTo("Rex"));
-        Assert.That(clonedDog.Age, Is.EqualTo(4));
-        Assert.That(clonedDog.Breed, Is.EqualTo("German Shepherd"));
+        await Assert.That(clonedDog.Name).IsEqualTo("Rex");
+        await Assert.That(clonedDog.Age).IsEqualTo(4);
+        await Assert.That(clonedDog.Breed).IsEqualTo("German Shepherd");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void FastClonerInclude_ExternalCat_Should_Clone()
+    public async Task FastClonerInclude_ExternalCat_Should_Clone()
     {
         // Arrange
         ExternalCat cat = new ExternalCat
@@ -440,18 +438,18 @@ public class AbstractClassTests
         Pet? clone = pet.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.TypeOf<ExternalCat>());
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsTypeOf<ExternalCat>();
+
         ExternalCat clonedCat = (ExternalCat)clone!;
-        Assert.That(clonedCat.Name, Is.EqualTo("Mittens"));
-        Assert.That(clonedCat.Age, Is.EqualTo(2));
-        Assert.That(clonedCat.FurColor, Is.EqualTo("Calico"));
+        await Assert.That(clonedCat.Name).IsEqualTo("Mittens");
+        await Assert.That(clonedCat.Age).IsEqualTo(2);
+        await Assert.That(clonedCat.FurColor).IsEqualTo("Calico");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void FastClonerInclude_ExternalBird_Should_Clone()
+    public async Task FastClonerInclude_ExternalBird_Should_Clone()
     {
         // Arrange
         ExternalBird bird = new ExternalBird
@@ -467,19 +465,19 @@ public class AbstractClassTests
         Pet clone = pet.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.TypeOf<ExternalBird>());
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsTypeOf<ExternalBird>();
+
         ExternalBird clonedBird = (ExternalBird)clone!;
-        Assert.That(clonedBird.Name, Is.EqualTo("Tweety"));
-        Assert.That(clonedBird.Age, Is.EqualTo(1));
-        Assert.That(clonedBird.Wingspan, Is.EqualTo(0.3));
-        Assert.That(clonedBird.CanFly, Is.True);
+        await Assert.That(clonedBird.Name).IsEqualTo("Tweety");
+        await Assert.That(clonedBird.Age).IsEqualTo(1);
+        await Assert.That(clonedBird.Wingspan).IsEqualTo(0.3);
+        await Assert.That(clonedBird.CanFly).IsTrue();
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void FastClonerInclude_Multiple_Types_Independence()
+    public async Task FastClonerInclude_Multiple_Types_Independence()
     {
         // Arrange - create instances of all included types
         ExternalDog dog = new ExternalDog { Name = "Buddy", Age = 3, Breed = "Labrador" };
@@ -491,18 +489,18 @@ public class AbstractClassTests
         Pet?[] clones = pets.Select(p => p.FastDeepClone()).ToArray();
         
         // Assert - Each clone is correct type and independent
-        Assert.That(clones[0], Is.TypeOf<ExternalDog>());
-        Assert.That(clones[1], Is.TypeOf<ExternalCat>());
-        Assert.That(clones[2], Is.TypeOf<ExternalBird>());
-        
+        await Assert.That(clones[0]).IsTypeOf<ExternalDog>();
+        await Assert.That(clones[1]).IsTypeOf<ExternalCat>();
+        await Assert.That(clones[2]).IsTypeOf<ExternalBird>();
+
         // Verify independence - modify originals
         dog.Name = "Changed";
         cat.FurColor = "Black";
         bird.CanFly = false;
         
-        Assert.That(((ExternalDog)clones[0]!).Name, Is.EqualTo("Buddy"));
-        Assert.That(((ExternalCat)clones[1]!).FurColor, Is.EqualTo("Orange"));
-        Assert.That(((ExternalBird)clones[2]!).CanFly, Is.True);
+        await Assert.That(((ExternalDog)clones[0]!).Name).IsEqualTo("Buddy");
+        await Assert.That(((ExternalCat)clones[1]!).FurColor).IsEqualTo("Orange");
+        await Assert.That(((ExternalBird)clones[2]!).CanFly).IsTrue();
     }
 
     #endregion
@@ -511,7 +509,7 @@ public class AbstractClassTests
     
     [Test]
     [SourceGeneratorCompatible]
-    public void Null_Abstract_Should_Return_Null()
+    public async Task Null_Abstract_Should_Return_Null()
     {
         // Arrange
         Animal? animal = null;
@@ -520,12 +518,12 @@ public class AbstractClassTests
         Animal? clone = animal.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Null);
+        await Assert.That(clone).IsNull();
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Abstract_With_Null_Properties_Should_Clone()
+    public async Task Abstract_With_Null_Properties_Should_Clone()
     {
         // Arrange
         Dog dog = new Dog
@@ -541,16 +539,15 @@ public class AbstractClassTests
         Animal? clone = animal.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.TypeOf<Dog>());
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsTypeOf<Dog>();
+
         Dog clonedDog = (Dog)clone!;
-        Assert.That(clonedDog.Name, Is.Null);
-        Assert.That(clonedDog.Age, Is.EqualTo(2));
-        Assert.That(clonedDog.Breed, Is.Null);
-        Assert.That(clonedDog.IsTrained, Is.False);
+        await Assert.That(clonedDog.Name).IsNull();
+        await Assert.That(clonedDog.Age).IsEqualTo(2);
+        await Assert.That(clonedDog.Breed).IsNull();
+        await Assert.That(clonedDog.IsTrained).IsFalse();
     }
 
     #endregion
 }
-

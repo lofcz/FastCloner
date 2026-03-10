@@ -1,9 +1,7 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
-
-[TestFixture(Low)]
-[TestFixture(High)]
 public class CtorTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     public class T1
@@ -43,7 +41,7 @@ public class CtorTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDept
     }
 
     [Test]
-    public void GetOrAdd_ParallelAccess_ShouldBeThreadSafe()
+    public async Task GetOrAdd_ParallelAccess_ShouldBeThreadSafe()
     {
         // Arrange
         int iterations = 1000;
@@ -65,22 +63,22 @@ public class CtorTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDept
         }
 
         // Assert
-        Assert.DoesNotThrowAsync(async () => await Task.WhenAll(parallelTasks));
-        Assert.That(typeCache.Count, Is.EqualTo(1));
+        await Assert.That(async () => await Task.WhenAll(parallelTasks)).ThrowsNothing();
+        await Assert.That(typeCache.Count).IsEqualTo(1);
     }
 
     [Test]
-    public void Object_With_Private_Constructor_Should_Be_Cloned()
+    public async Task Object_With_Private_Constructor_Should_Be_Cloned()
     {
         T1 t1 = T1.Create();
         t1.X = 42;
         T1 cloned = t1.DeepClone();
         t1.X = 0;
-        Assert.That(cloned.X, Is.EqualTo(42));
+        await Assert.That(cloned.X).IsEqualTo(42);
     }
 
     [Test]
-    public void Object_With_Complex_Constructor_Should_Be_Cloned()
+    public async Task Object_With_Complex_Constructor_Should_Be_Cloned()
     {
         T2 t2 = new T2(1, 2)
         {
@@ -88,23 +86,23 @@ public class CtorTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDept
         };
         T2 cloned = t2.DeepClone();
         t2.X = 0;
-        Assert.That(cloned.X, Is.EqualTo(42));
+        await Assert.That(cloned.X).IsEqualTo(42);
     }
 
     [Test]
-    public void Anonymous_Object_Should_Be_Cloned()
+    public async Task Anonymous_Object_Should_Be_Cloned()
     {
         var t2 = new { A = 1, B = "x" };
         var cloned = t2.DeepClone();
-        Assert.That(cloned.A, Is.EqualTo(1));
-        Assert.That(cloned.B, Is.EqualTo("x"));
+        await Assert.That(cloned.A).IsEqualTo(1);
+        await Assert.That(cloned.B).IsEqualTo("x");
     }
 
     [Test]
-    public void Cloner_Should_Not_Call_Any_Method_Of_Class_Be_Cloned()
+    public async Task Cloner_Should_Not_Call_Any_Method_Of_Class_Be_Cloned()
     {
-        Assert.DoesNotThrow(() => new ExClass("x").DeepClone());
+        await Assert.That(() => new ExClass("x").DeepClone()).ThrowsNothing();
         ExClass exClass = new ExClass("x");
-        Assert.DoesNotThrow(() => new[] { exClass, exClass }.DeepClone());
+        await Assert.That(() => new[] { exClass, exClass }.DeepClone()).ThrowsNothing();
     }
 }

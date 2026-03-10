@@ -15,7 +15,7 @@ internal static class FastClonerExprGenerator
     private const int AdaptiveDictionaryRebuildThreshold = 32;
     internal static readonly ConcurrentDictionary<Type, Func<Type, bool, ExpressionPosition, object>> CustomTypeHandlers = [];
     private static readonly ConcurrentDictionary<FieldInfo, bool> readonlyFields = new ConcurrentDictionary<FieldInfo, bool>();
-    private static readonly ConcurrentDictionary<AdaptiveDictionaryFactoryKey, Func<ExpressionPosition, object>> adaptiveDictionaryFactoryCache = new ConcurrentDictionary<AdaptiveDictionaryFactoryKey, Func<ExpressionPosition, object>>();
+    private static ConcurrentDictionary<AdaptiveDictionaryFactoryKey, Func<ExpressionPosition, object>> adaptiveDictionaryFactoryCache = new ConcurrentDictionary<AdaptiveDictionaryFactoryKey, Func<ExpressionPosition, object>>();
     private static readonly MethodInfo fieldSetMethod;
     private static readonly Lazy<MethodInfo> isTypeIgnoredMethodInfo = new Lazy<MethodInfo>(() => typeof(FastClonerCache).GetMethod(nameof(FastClonerCache.IsTypeIgnored), BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static, null, [typeof(Type)], null)!, LazyThreadSafetyMode.ExecutionAndPublication);
 
@@ -25,6 +25,9 @@ internal static class FastClonerExprGenerator
     {
         fieldSetMethod = typeof(FieldInfo).GetMethod(nameof(FieldInfo.SetValue), [typeof(object), typeof(object)])!;
     }
+
+    internal static void ClearAdaptiveDictionaryFactoryCache() => adaptiveDictionaryFactoryCache = new ConcurrentDictionary<AdaptiveDictionaryFactoryKey, Func<ExpressionPosition, object>>();
+    internal static int GetAdaptiveDictionaryFactoryCacheCountForTesting() => adaptiveDictionaryFactoryCache.Count;
 
     private static MethodInfo GetClassCloneMethod(Type memberType, bool useShallowClassClone, bool skipCycleTracking)
     {
@@ -1710,7 +1713,10 @@ internal static class FastClonerExprGenerator
                 ? (byte)1
                 : (byte)2;
 
-        AdaptiveDictionaryFactoryKey key = new AdaptiveDictionaryFactoryKey(keyType.TypeHandle.Value, valueType.TypeHandle.Value, variant);
+        AdaptiveDictionaryFactoryKey key = new AdaptiveDictionaryFactoryKey(
+            keyType.TypeHandle.Value,
+            valueType.TypeHandle.Value,
+            variant);
         Func<ExpressionPosition, object> factory = adaptiveDictionaryFactoryCache.GetOrAdd(key, _ =>
         {
             string methodName = variant switch

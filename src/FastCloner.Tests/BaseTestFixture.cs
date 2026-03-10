@@ -1,9 +1,11 @@
 namespace FastCloner.Tests;
 
 /// <summary>
-/// Base class for test fixtures that should run with multiple MaxRecursionDepth values.
-/// Inherit from this class and add [TestFixture(1)] and [TestFixture(1000)] to your test class.
+/// Base class for test classes that should run with multiple MaxRecursionDepth values.
+/// Inherit from this class to run the derived test class with both low and high recursion-depth settings.
 /// </summary>
+[Arguments(Low)]
+[Arguments(High)]
 public abstract class BaseTestFixture
 {
     public const int Low = 1;
@@ -16,17 +18,16 @@ public abstract class BaseTestFixture
         MaxRecursionDepth = maxRecursionDepth;
     }
 
-    [OneTimeSetUp]
-    public void BaseOneTimeSetUp()
+    [Before(Test)]
+    public void BaseSetUp()
     {
         FastCloner.MaxRecursionDepth = MaxRecursionDepth;
     }
 
-    [OneTimeTearDown]
-    public void BaseOneTimeTearDown()
+    [After(Test)]
+    public void BaseTearDown()
     {
         // Reset to default
         FastCloner.MaxRecursionDepth = 1000;
     }
 }
-

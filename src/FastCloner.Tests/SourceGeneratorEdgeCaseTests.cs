@@ -1,13 +1,8 @@
 using System.Collections.ObjectModel;
 using FastCloner.SourceGenerator.Shared;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
-
-/// <summary>
-/// Tests for edge cases and issues fixed in the source generator.
-/// Each test group covers a specific issue that was identified and fixed.
-/// </summary>
-[TestFixture]
 [SourceGeneratorCompatible]
 public class SourceGeneratorEdgeCaseTests
 {
@@ -28,7 +23,7 @@ public class SourceGeneratorEdgeCaseTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void MultiDimensionalArray_2D_Should_Be_Cloned()
+    public async Task MultiDimensionalArray_2D_Should_Be_Cloned()
     {
         // Arrange
         ClassWith2dArray original = new ClassWith2dArray
@@ -45,21 +40,21 @@ public class SourceGeneratorEdgeCaseTests
         ClassWith2dArray clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.EqualTo("Test"));
-        Assert.That(clone.Matrix, Is.Not.Null);
-        Assert.That(clone.Matrix, Is.Not.SameAs(original.Matrix));
-        Assert.That(clone.Matrix![0, 0], Is.EqualTo(1));
-        Assert.That(clone.Matrix[1, 2], Is.EqualTo(6));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsEqualTo("Test");
+        await Assert.That(clone.Matrix).IsNotNull();
+        await Assert.That(clone.Matrix).IsNotSameReferenceAs(original.Matrix);
+        await Assert.That(clone.Matrix![0, 0]).IsEqualTo(1);
+        await Assert.That(clone.Matrix[1, 2]).IsEqualTo(6);
 
         // Verify independence
         original.Matrix![0, 0] = 999;
-        Assert.That(clone.Matrix[0, 0], Is.EqualTo(1));
+        await Assert.That(clone.Matrix[0, 0]).IsEqualTo(1);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void MultiDimensionalArray_3D_Should_Be_Cloned()
+    public async Task MultiDimensionalArray_3D_Should_Be_Cloned()
     {
         // Arrange
         ClassWith3dArray original = new ClassWith3dArray
@@ -73,11 +68,11 @@ public class SourceGeneratorEdgeCaseTests
         ClassWith3dArray clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Cube, Is.Not.Null);
-        Assert.That(clone.Cube, Is.Not.SameAs(original.Cube));
-        Assert.That(clone.Cube![0, 0, 0], Is.EqualTo(1.1));
-        Assert.That(clone.Cube[1, 1, 1], Is.EqualTo(2.2));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Cube).IsNotNull();
+        await Assert.That(clone.Cube).IsNotSameReferenceAs(original.Cube);
+        await Assert.That(clone.Cube![0, 0, 0]).IsEqualTo(1.1);
+        await Assert.That(clone.Cube[1, 1, 1]).IsEqualTo(2.2);
     }
 
     #endregion
@@ -103,37 +98,37 @@ public class SourceGeneratorEdgeCaseTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Fields_Should_Be_Cloned_In_Object_Initializers()
+    public async Task Fields_Should_Be_Cloned_In_Object_Initializers()
     {
         // Arrange
         ClassWithFields original = new ClassWithFields
         {
             IntField = 42,
             StringField = "Test",
-            ListField = new List<int> { 1, 2, 3 }
+            ListField = [1, 2, 3]
         };
 
         // Act
         ClassWithFields clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.IntField, Is.EqualTo(42));
-        Assert.That(clone.StringField, Is.EqualTo("Test"));
-        Assert.That(clone.ListField, Is.Not.Null);
-        Assert.That(clone.ListField, Is.Not.SameAs(original.ListField));
-        Assert.That(clone.ListField, Is.EquivalentTo(new[] { 1, 2, 3 }));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.IntField).IsEqualTo(42);
+        await Assert.That(clone.StringField).IsEqualTo("Test");
+        await Assert.That(clone.ListField).IsNotNull();
+        await Assert.That(clone.ListField).IsNotSameReferenceAs(original.ListField);
+        await Assert.That(clone.ListField).IsEquivalentTo([1, 2, 3]);
 
         // Verify independence
         original.IntField = 999;
         original.ListField!.Add(99);
-        Assert.That(clone.IntField, Is.EqualTo(42));
-        Assert.That(clone.ListField!.Count, Is.EqualTo(3));
+        await Assert.That(clone.IntField).IsEqualTo(42);
+        await Assert.That(clone.ListField!.Count).IsEqualTo(3);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Mixed_Properties_And_Fields_Should_Be_Cloned()
+    public async Task Mixed_Properties_And_Fields_Should_Be_Cloned()
     {
         // Arrange
         ClassWithMixedMembers original = new ClassWithMixedMembers
@@ -148,11 +143,11 @@ public class SourceGeneratorEdgeCaseTests
         ClassWithMixedMembers clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.PropertyValue, Is.EqualTo(10));
-        Assert.That(clone.FieldValue, Is.EqualTo(20));
-        Assert.That(clone.PropertyString, Is.EqualTo("PropStr"));
-        Assert.That(clone.FieldString, Is.EqualTo("FieldStr"));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.PropertyValue).IsEqualTo(10);
+        await Assert.That(clone.FieldValue).IsEqualTo(20);
+        await Assert.That(clone.PropertyString).IsEqualTo("PropStr");
+        await Assert.That(clone.FieldString).IsEqualTo("FieldStr");
     }
 
     #endregion
@@ -177,7 +172,7 @@ public class SourceGeneratorEdgeCaseTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void InitOnly_Properties_Should_Be_Cloned()
+    public async Task InitOnly_Properties_Should_Be_Cloned()
     {
         // Arrange
         ClassWithInitOnlyProps original = new ClassWithInitOnlyProps
@@ -191,34 +186,34 @@ public class SourceGeneratorEdgeCaseTests
         ClassWithInitOnlyProps clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Id, Is.EqualTo(123));
-        Assert.That(clone.Name, Is.EqualTo("Test"));
-        Assert.That(clone.MutableValue, Is.EqualTo("Mutable"));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Id).IsEqualTo(123);
+        await Assert.That(clone.Name).IsEqualTo("Test");
+        await Assert.That(clone.MutableValue).IsEqualTo("Mutable");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Record_With_Init_Properties_Should_Be_Cloned()
+    public async Task Record_With_Init_Properties_Should_Be_Cloned()
     {
         // Arrange
         RecordWithInitProps original = new RecordWithInitProps
         {
             Id = 456,
             Name = "RecordTest",
-            Tags = new List<string> { "tag1", "tag2" }
+            Tags = ["tag1", "tag2"]
         };
 
         // Act
         RecordWithInitProps clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Id, Is.EqualTo(456));
-        Assert.That(clone.Name, Is.EqualTo("RecordTest"));
-        Assert.That(clone.Tags, Is.Not.Null);
-        Assert.That(clone.Tags, Is.Not.SameAs(original.Tags));
-        Assert.That(clone.Tags, Is.EquivalentTo(new[] { "tag1", "tag2" }));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Id).IsEqualTo(456);
+        await Assert.That(clone.Name).IsEqualTo("RecordTest");
+        await Assert.That(clone.Tags).IsNotNull();
+        await Assert.That(clone.Tags).IsNotSameReferenceAs(original.Tags);
+        await Assert.That(clone.Tags).IsEquivalentTo(["tag1", "tag2"]);
     }
 
     #endregion
@@ -241,7 +236,7 @@ public class SourceGeneratorEdgeCaseTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void PrivateSetter_Properties_Should_Be_Skipped()
+    public async Task PrivateSetter_Properties_Should_Be_Skipped()
     {
         // Arrange
         ClassWithPrivateSetter original = new ClassWithPrivateSetter
@@ -254,11 +249,11 @@ public class SourceGeneratorEdgeCaseTests
         ClassWithPrivateSetter clone = original.FastDeepClone();
 
         // Assert - public property should be cloned, private setter property will be default
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.PublicProperty, Is.EqualTo(100));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.PublicProperty).IsEqualTo(100);
         // Private setter property is not cloned (can't access from extension class)
         // It will have default value
-        Assert.That(clone.PrivateSetterProperty, Is.EqualTo(0));
+        await Assert.That(clone.PrivateSetterProperty).IsEqualTo(0);
     }
 
     #endregion
@@ -289,7 +284,7 @@ public class SourceGeneratorEdgeCaseTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Delegates_Should_Be_Shallow_Copied()
+    public async Task Delegates_Should_Be_Shallow_Copied()
     {
         // Arrange
         int counter = 0;
@@ -304,20 +299,20 @@ public class SourceGeneratorEdgeCaseTests
         ClassWithDelegates clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.EqualTo("Test"));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsEqualTo("Test");
         // Delegates should be the same reference (shallow copied)
-        Assert.That(clone.IntFunc, Is.SameAs(original.IntFunc));
-        Assert.That(clone.SimpleAction, Is.SameAs(original.SimpleAction));
-        
+        await Assert.That(ReferenceEquals(clone.IntFunc, original.IntFunc)).IsTrue();
+        await Assert.That(ReferenceEquals(clone.SimpleAction, original.SimpleAction)).IsTrue();
+
         // Both should reference the same counter
         clone.IntFunc!();
-        Assert.That(counter, Is.EqualTo(1));
+        await Assert.That(counter).IsEqualTo(1);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Lazy_Should_Be_Shallow_Copied()
+    public async Task Lazy_Should_Be_Shallow_Copied()
     {
         // Arrange
         int initCount = 0;
@@ -335,20 +330,20 @@ public class SourceGeneratorEdgeCaseTests
         ClassWithLazy clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.RegularValue, Is.EqualTo(42));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.RegularValue).IsEqualTo(42);
         // Lazy should be same reference (shallow copied)
-        Assert.That(clone.LazyValue, Is.SameAs(original.LazyValue));
-        
+        await Assert.That(clone.LazyValue).IsSameReferenceAs(original.LazyValue);
+
         // Accessing value should only initialize once
         string _ = clone.LazyValue!.Value;
         string __ = original.LazyValue!.Value;
-        Assert.That(initCount, Is.EqualTo(1)); // Should be 1 because same Lazy instance
+        await Assert.That(initCount).IsEqualTo(1); // Should be 1 because same Lazy instance
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void WeakReference_Should_Be_Shallow_Copied()
+    public async Task WeakReference_Should_Be_Shallow_Copied()
     {
         // Arrange
         object target = new object();
@@ -362,15 +357,15 @@ public class SourceGeneratorEdgeCaseTests
         ClassWithWeakReference clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.EqualTo("Test"));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsEqualTo("Test");
         // WeakReference should be same instance (shallow copied)
-        Assert.That(clone.WeakRef, Is.SameAs(original.WeakRef));
-        
+        await Assert.That(clone.WeakRef).IsSameReferenceAs(original.WeakRef);
+
         // Both should reference the same target
         original.WeakRef!.TryGetTarget(out object? origTarget);
         clone.WeakRef!.TryGetTarget(out object? cloneTarget);
-        Assert.That(cloneTarget, Is.SameAs(origTarget));
+        await Assert.That(cloneTarget).IsSameReferenceAs(origTarget);
     }
 
     #endregion
@@ -389,13 +384,13 @@ public class SourceGeneratorEdgeCaseTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Complex_EdgeCase_Combining_Multiple_Issues()
+    public async Task Complex_EdgeCase_Combining_Multiple_Issues()
     {
         // Arrange
         ComplexEdgeCase original = new ComplexEdgeCase
         {
             Matrix = new int[2, 2] { { 1, 2 }, { 3, 4 } },
-            ListField = new List<int> { 10, 20, 30 },
+            ListField = [10, 20, 30],
             Name = "Complex",
             Predicate = () => true,
             RegularProp = 999
@@ -405,31 +400,31 @@ public class SourceGeneratorEdgeCaseTests
         ComplexEdgeCase clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        
+        await Assert.That(clone).IsNotNull();
+
         // Multi-dim array should be cloned
-        Assert.That(clone!.Matrix, Is.Not.Null);
-        Assert.That(clone.Matrix, Is.Not.SameAs(original.Matrix));
-        
+        await Assert.That(clone!.Matrix).IsNotNull();
+        await Assert.That(clone.Matrix).IsNotSameReferenceAs(original.Matrix);
+
         // Field should be cloned
-        Assert.That(clone.ListField, Is.Not.Null);
-        Assert.That(clone.ListField, Is.Not.SameAs(original.ListField));
-        Assert.That(clone.ListField!.Count, Is.EqualTo(3));
-        
+        await Assert.That(clone.ListField).IsNotNull();
+        await Assert.That(clone.ListField).IsNotSameReferenceAs(original.ListField);
+        await Assert.That(clone.ListField!.Count).IsEqualTo(3);
+
         // Init property should be cloned
-        Assert.That(clone.Name, Is.EqualTo("Complex"));
-        
+        await Assert.That(clone.Name).IsEqualTo("Complex");
+
         // Delegate should be shallow copied
-        Assert.That(clone.Predicate, Is.SameAs(original.Predicate));
-        
+        await Assert.That(ReferenceEquals(clone.Predicate, original.Predicate)).IsTrue();
+
         // Regular property should be cloned
-        Assert.That(clone.RegularProp, Is.EqualTo(999));
+        await Assert.That(clone.RegularProp).IsEqualTo(999);
 
         // Verify independence
         original.ListField!.Add(100);
         original.Matrix![0, 0] = 999;
-        Assert.That(clone.ListField.Count, Is.EqualTo(3));
-        Assert.That(clone.Matrix![0, 0], Is.EqualTo(1));
+        await Assert.That(clone.ListField.Count).IsEqualTo(3);
+        await Assert.That(clone.Matrix![0, 0]).IsEqualTo(1);
     }
 
     #region Issue 6b: Multi-dimensional Arrays with Special Types
@@ -449,7 +444,7 @@ public class SourceGeneratorEdgeCaseTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void MultiDimArray_HttpClient_Should_Be_DeepCloned()
+    public async Task MultiDimArray_HttpClient_Should_Be_DeepCloned()
     {
         // Arrange
         HttpClient client1 = new HttpClient();
@@ -471,23 +466,23 @@ public class SourceGeneratorEdgeCaseTests
         ClassWithHttpClientMatrix clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.EqualTo("HttpClientTest"));
-        Assert.That(clone.ClientMatrix, Is.Not.Null);
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsEqualTo("HttpClientTest");
+        await Assert.That(clone.ClientMatrix).IsNotNull();
+
         // The matrix itself should be a different reference (new array)
-        Assert.That(clone.ClientMatrix, Is.Not.SameAs(original.ClientMatrix));
-        
+        await Assert.That(clone.ClientMatrix).IsNotSameReferenceAs(original.ClientMatrix);
+
         // HttpClient instances should be deep cloned (different references)
-        Assert.That(clone.ClientMatrix![0, 0], Is.Not.SameAs(client1));
-        Assert.That(clone.ClientMatrix[0, 1], Is.Not.SameAs(client2));
-        Assert.That(clone.ClientMatrix[1, 0], Is.Not.SameAs(client3));
-        Assert.That(clone.ClientMatrix[1, 1], Is.Not.SameAs(client4));
+        await Assert.That(clone.ClientMatrix![0, 0]).IsNotSameReferenceAs(client1);
+        await Assert.That(clone.ClientMatrix[0, 1]).IsNotSameReferenceAs(client2);
+        await Assert.That(clone.ClientMatrix[1, 0]).IsNotSameReferenceAs(client3);
+        await Assert.That(clone.ClientMatrix[1, 1]).IsNotSameReferenceAs(client4);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void MultiDimArray_3D_HttpClient_Should_Be_DeepCloned()
+    public async Task MultiDimArray_3D_HttpClient_Should_Be_DeepCloned()
     {
         // Arrange
         HttpClient[,,] clients = new HttpClient[2, 2, 2];
@@ -505,15 +500,15 @@ public class SourceGeneratorEdgeCaseTests
         ClassWithHttpClient3dArray clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.ClientCube, Is.Not.Null);
-        Assert.That(clone.ClientCube, Is.Not.SameAs(original.ClientCube));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.ClientCube).IsNotNull();
+        await Assert.That(clone.ClientCube).IsNotSameReferenceAs(original.ClientCube);
+
         // All HttpClient instances should be deep cloned (different references)
         for (int i = 0; i < 2; i++)
             for (int j = 0; j < 2; j++)
                 for (int k = 0; k < 2; k++)
-                    Assert.That(clone.ClientCube![i, j, k], Is.Not.SameAs(original.ClientCube![i, j, k]));
+                    await Assert.That(clone.ClientCube![i, j, k]).IsNotSameReferenceAs(original.ClientCube![i, j, k]);
     }
 
     #endregion
@@ -547,7 +542,7 @@ public class SourceGeneratorEdgeCaseTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void JaggedArray_2D_Should_Be_Cloned()
+    public async Task JaggedArray_2D_Should_Be_Cloned()
     {
         // Arrange
         ClassWithJaggedArray original = new ClassWithJaggedArray
@@ -555,9 +550,9 @@ public class SourceGeneratorEdgeCaseTests
             Name = "Test",
             JaggedInts = new int[][]
             {
-                new int[] { 1, 2, 3 },
-                new int[] { 4, 5 },
-                new int[] { 6, 7, 8, 9 }
+                [1, 2, 3],
+                [4, 5],
+                [6, 7, 8, 9]
             }
         };
 
@@ -565,30 +560,30 @@ public class SourceGeneratorEdgeCaseTests
         ClassWithJaggedArray clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.EqualTo("Test"));
-        Assert.That(clone.JaggedInts, Is.Not.Null);
-        Assert.That(clone.JaggedInts, Is.Not.SameAs(original.JaggedInts));
-        Assert.That(clone.JaggedInts!.Length, Is.EqualTo(3));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsEqualTo("Test");
+        await Assert.That(clone.JaggedInts).IsNotNull();
+        await Assert.That(clone.JaggedInts).IsNotSameReferenceAs(original.JaggedInts);
+        await Assert.That(clone.JaggedInts!.Length).IsEqualTo(3);
+
         // Each inner array should be a different reference
-        Assert.That(clone.JaggedInts[0], Is.Not.SameAs(original.JaggedInts![0]));
-        Assert.That(clone.JaggedInts[1], Is.Not.SameAs(original.JaggedInts[1]));
-        Assert.That(clone.JaggedInts[2], Is.Not.SameAs(original.JaggedInts[2]));
-        
+        await Assert.That(clone.JaggedInts[0]).IsNotSameReferenceAs(original.JaggedInts![0]);
+        await Assert.That(clone.JaggedInts[1]).IsNotSameReferenceAs(original.JaggedInts[1]);
+        await Assert.That(clone.JaggedInts[2]).IsNotSameReferenceAs(original.JaggedInts[2]);
+
         // Values should be the same
-        Assert.That(clone.JaggedInts[0], Is.EquivalentTo(new[] { 1, 2, 3 }));
-        Assert.That(clone.JaggedInts[1], Is.EquivalentTo(new[] { 4, 5 }));
-        Assert.That(clone.JaggedInts[2], Is.EquivalentTo(new[] { 6, 7, 8, 9 }));
+        await Assert.That(clone.JaggedInts[0]).IsEquivalentTo([1, 2, 3]);
+        await Assert.That(clone.JaggedInts[1]).IsEquivalentTo([4, 5]);
+        await Assert.That(clone.JaggedInts[2]).IsEquivalentTo([6, 7, 8, 9]);
 
         // Verify independence
         original.JaggedInts[0][0] = 999;
-        Assert.That(clone.JaggedInts[0][0], Is.EqualTo(1));
+        await Assert.That(clone.JaggedInts[0][0]).IsEqualTo(1);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void JaggedArray_3D_Should_Be_Cloned()
+    public async Task JaggedArray_3D_Should_Be_Cloned()
     {
         // Arrange
         ClassWith3LevelJaggedArray original = new ClassWith3LevelJaggedArray
@@ -597,12 +592,12 @@ public class SourceGeneratorEdgeCaseTests
             {
                 new int[][]
                 {
-                    new int[] { 1, 2 },
-                    new int[] { 3, 4, 5 }
+                    [1, 2],
+                    [3, 4, 5]
                 },
                 new int[][]
                 {
-                    new int[] { 6 }
+                    [6]
                 }
             }
         };
@@ -611,44 +606,42 @@ public class SourceGeneratorEdgeCaseTests
         ClassWith3LevelJaggedArray clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.DeepJagged, Is.Not.Null);
-        Assert.That(clone.DeepJagged, Is.Not.SameAs(original.DeepJagged));
-        Assert.That(clone.DeepJagged!.Length, Is.EqualTo(2));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.DeepJagged).IsNotNull();
+        await Assert.That(clone.DeepJagged).IsNotSameReferenceAs(original.DeepJagged);
+        await Assert.That(clone.DeepJagged!.Length).IsEqualTo(2);
+
         // All levels should be different references
-        Assert.That(clone.DeepJagged[0], Is.Not.SameAs(original.DeepJagged![0]));
-        Assert.That(clone.DeepJagged[0][0], Is.Not.SameAs(original.DeepJagged[0][0]));
-        Assert.That(clone.DeepJagged[1][0], Is.Not.SameAs(original.DeepJagged[1][0]));
-        
+        await Assert.That(clone.DeepJagged[0]).IsNotSameReferenceAs(original.DeepJagged![0]);
+        await Assert.That(clone.DeepJagged[0][0]).IsNotSameReferenceAs(original.DeepJagged[0][0]);
+        await Assert.That(clone.DeepJagged[1][0]).IsNotSameReferenceAs(original.DeepJagged[1][0]);
+
         // Values should be preserved
-        Assert.That(clone.DeepJagged[0][0], Is.EquivalentTo(new[] { 1, 2 }));
-        Assert.That(clone.DeepJagged[0][1], Is.EquivalentTo(new[] { 3, 4, 5 }));
-        Assert.That(clone.DeepJagged[1][0], Is.EquivalentTo(new[] { 6 }));
+        await Assert.That(clone.DeepJagged[0][0]).IsEquivalentTo([1, 2]);
+        await Assert.That(clone.DeepJagged[0][1]).IsEquivalentTo([3, 4, 5]);
+        await Assert.That(clone.DeepJagged[1][0]).IsEquivalentTo([6]);
 
         // Verify independence
         original.DeepJagged[0][0][0] = 999;
-        Assert.That(clone.DeepJagged[0][0][0], Is.EqualTo(1));
+        await Assert.That(clone.DeepJagged[0][0][0]).IsEqualTo(1);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void JaggedArray_WithObjects_Should_Be_Cloned()
+    public async Task JaggedArray_WithObjects_Should_Be_Cloned()
     {
         // Arrange
         ClassWithJaggedArrayOfObjects original = new ClassWithJaggedArrayOfObjects
         {
             Items = new SimpleItem[][]
             {
-                new SimpleItem[]
-                {
+                [
                     new SimpleItem { Name = "A1", Value = 1 },
                     new SimpleItem { Name = "A2", Value = 2 }
-                },
-                new SimpleItem[]
-                {
+                ],
+                [
                     new SimpleItem { Name = "B1", Value = 10 }
-                }
+                ]
             }
         };
 
@@ -656,32 +649,32 @@ public class SourceGeneratorEdgeCaseTests
         ClassWithJaggedArrayOfObjects clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Items, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
-        Assert.That(clone.Items!.Length, Is.EqualTo(2));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Items).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
+        await Assert.That(clone.Items!.Length).IsEqualTo(2);
+
         // Inner arrays should be different references
-        Assert.That(clone.Items[0], Is.Not.SameAs(original.Items![0]));
-        Assert.That(clone.Items[1], Is.Not.SameAs(original.Items[1]));
-        
+        await Assert.That(clone.Items[0]).IsNotSameReferenceAs(original.Items![0]);
+        await Assert.That(clone.Items[1]).IsNotSameReferenceAs(original.Items[1]);
+
         // Objects should be different references but same values
-        Assert.That(clone.Items[0][0], Is.Not.SameAs(original.Items[0][0]));
-        Assert.That(clone.Items[0][0].Name, Is.EqualTo("A1"));
-        Assert.That(clone.Items[0][0].Value, Is.EqualTo(1));
-        
-        Assert.That(clone.Items[1][0], Is.Not.SameAs(original.Items[1][0]));
-        Assert.That(clone.Items[1][0].Name, Is.EqualTo("B1"));
-        Assert.That(clone.Items[1][0].Value, Is.EqualTo(10));
+        await Assert.That(clone.Items[0][0]).IsNotSameReferenceAs(original.Items[0][0]);
+        await Assert.That(clone.Items[0][0].Name).IsEqualTo("A1");
+        await Assert.That(clone.Items[0][0].Value).IsEqualTo(1);
+
+        await Assert.That(clone.Items[1][0]).IsNotSameReferenceAs(original.Items[1][0]);
+        await Assert.That(clone.Items[1][0].Name).IsEqualTo("B1");
+        await Assert.That(clone.Items[1][0].Value).IsEqualTo(10);
 
         // Verify independence
         original.Items[0][0].Name = "Changed";
-        Assert.That(clone.Items[0][0].Name, Is.EqualTo("A1"));
+        await Assert.That(clone.Items[0][0].Name).IsEqualTo("A1");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void JaggedArray_WithNullElements_Should_Be_Handled()
+    public async Task JaggedArray_WithNullElements_Should_Be_Handled()
     {
         // Arrange
         ClassWithJaggedArray original = new ClassWithJaggedArray
@@ -689,9 +682,9 @@ public class SourceGeneratorEdgeCaseTests
             Name = "WithNulls",
             JaggedInts = new int[][]
             {
-                new int[] { 1, 2 },
+                [1, 2],
                 null!,  // null element in the outer array
-                new int[] { 3 }
+                [3]
             }
         };
 
@@ -699,12 +692,12 @@ public class SourceGeneratorEdgeCaseTests
         ClassWithJaggedArray clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.JaggedInts, Is.Not.Null);
-        Assert.That(clone.JaggedInts!.Length, Is.EqualTo(3));
-        Assert.That(clone.JaggedInts[0], Is.EquivalentTo(new[] { 1, 2 }));
-        Assert.That(clone.JaggedInts[1], Is.Null);
-        Assert.That(clone.JaggedInts[2], Is.EquivalentTo(new[] { 3 }));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.JaggedInts).IsNotNull();
+        await Assert.That(clone.JaggedInts!.Length).IsEqualTo(3);
+        await Assert.That(clone.JaggedInts[0]).IsEquivalentTo([1, 2]);
+        await Assert.That(clone.JaggedInts[1]).IsNull();
+        await Assert.That(clone.JaggedInts[2]).IsEquivalentTo([3]);
     }
 
     #endregion
@@ -721,25 +714,25 @@ public class SourceGeneratorEdgeCaseTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Struct_With_Fields_Should_Be_Cloned()
+    public async Task Struct_With_Fields_Should_Be_Cloned()
     {
         // Arrange
         StructWithFields original = new StructWithFields
         {
             IntField = 42,
             StringProp = "Test",
-            ListField = new List<int> { 1, 2, 3 }
+            ListField = [1, 2, 3]
         };
 
         // Act
         StructWithFields clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone.IntField, Is.EqualTo(42));
-        Assert.That(clone.StringProp, Is.EqualTo("Test"));
-        Assert.That(clone.ListField, Is.Not.Null);
+        await Assert.That(clone.IntField).IsEqualTo(42);
+        await Assert.That(clone.StringProp).IsEqualTo("Test");
+        await Assert.That(clone.ListField).IsNotNull();
         // Note: For value types, the list is a new reference due to the struct copy
-        Assert.That(clone.ListField, Is.EquivalentTo(new[] { 1, 2, 3 }));
+        await Assert.That(clone.ListField).IsEquivalentTo([1, 2, 3]);
     }
 
     #endregion
@@ -756,7 +749,7 @@ public class SourceGeneratorEdgeCaseTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Class_With_Required_Members_Should_Be_Cloned()
+    public async Task Class_With_Required_Members_Should_Be_Cloned()
     {
         // Arrange
         ClassWithRequiredMembers original = new ClassWithRequiredMembers 
@@ -770,11 +763,11 @@ public class SourceGeneratorEdgeCaseTests
         ClassWithRequiredMembers clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.Not.SameAs(original));
-        Assert.That(clone!.RequiredName, Is.EqualTo("Required"));
-        Assert.That(clone.RequiredId, Is.EqualTo(123));
-        Assert.That(clone.OptionalDescription, Is.EqualTo("Optional"));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone!.RequiredName).IsEqualTo("Required");
+        await Assert.That(clone.RequiredId).IsEqualTo(123);
+        await Assert.That(clone.OptionalDescription).IsEqualTo("Optional");
     }
 
     #endregion
@@ -790,7 +783,7 @@ public class SourceGeneratorEdgeCaseTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Class_With_Init_Properties_And_Cycles_Should_Be_Deep_Cloned()
+    public async Task Class_With_Init_Properties_And_Cycles_Should_Be_Deep_Cloned()
     {
         // Arrange
         ClassWithInitAndCycle original = new ClassWithInitAndCycle
@@ -803,10 +796,10 @@ public class SourceGeneratorEdgeCaseTests
         ClassWithInitAndCycle clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.Not.SameAs(original));
-        Assert.That(clone!.Name, Is.EqualTo("CyclicInit")); // This would be null without the fix
-        Assert.That(clone.Self, Is.SameAs(clone));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone!.Name).IsEqualTo("CyclicInit"); // This would be null without the fix
+        await Assert.That(clone.Self).IsSameReferenceAs(clone);
     }
 
     #endregion
@@ -828,24 +821,24 @@ public class SourceGeneratorEdgeCaseTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Struct_With_Readonly_Reference_Fields_Should_Be_Deep_Cloned()
+    public async Task Struct_With_Readonly_Reference_Fields_Should_Be_Deep_Cloned()
     {
         // Arrange
-        List<int> list = new List<int> { 1, 2, 3 };
+        List<int> list = [1, 2, 3];
         StructWithReadonlyRefs original = new StructWithReadonlyRefs(list, 42);
 
         // Act
         StructWithReadonlyRefs clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone.NormalField, Is.EqualTo(42));
-        Assert.That(clone.ReadonlyList, Is.Not.Null);
-        Assert.That(clone.ReadonlyList, Is.Not.SameAs(original.ReadonlyList)); // This would fail (be SameAs) without the fix
-        Assert.That(clone.ReadonlyList, Is.EquivalentTo(new[] { 1, 2, 3 }));
-        
+        await Assert.That(clone.NormalField).IsEqualTo(42);
+        await Assert.That(clone.ReadonlyList).IsNotNull();
+        await Assert.That(clone.ReadonlyList).IsNotSameReferenceAs(original.ReadonlyList); // This would fail (be SameAs) without the fix
+        await Assert.That(clone.ReadonlyList).IsEquivalentTo([1, 2, 3]);
+
         // Verify independence
         list.Add(4);
-        Assert.That(clone.ReadonlyList.Count, Is.EqualTo(3));
+        await Assert.That(clone.ReadonlyList.Count).IsEqualTo(3);
     }
 
     #endregion
@@ -857,7 +850,7 @@ public class SourceGeneratorEdgeCaseTests
     [FastClonerClonable]
     public class ClassWithObservableCollectionGetterOnly
     {
-        public ObservableCollection<string> Items { get; } = new();
+        public ObservableCollection<string> Items { get; } = [];
         public string? Name { get; set; }
     }
 
@@ -873,7 +866,7 @@ public class SourceGeneratorEdgeCaseTests
     [FastClonerClonable]
     public class ClassWithObservableCollectionInit
     {
-        public ObservableCollection<string> Items { get; init; } = new();
+        public ObservableCollection<string> Items { get; init; } = [];
         public string? Name { get; set; }
     }
 
@@ -887,13 +880,13 @@ public class SourceGeneratorEdgeCaseTests
     [FastClonerClonable]
     public class ClassWithObservableCollectionOfObjects
     {
-        public ObservableCollection<ObservableItem> Items { get; } = new();
+        public ObservableCollection<ObservableItem> Items { get; } = [];
         public string? Description { get; set; }
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ObservableCollection_WithGetterOnly_Should_Be_Cloned()
+    public async Task ObservableCollection_WithGetterOnly_Should_Be_Cloned()
     {
         // Arrange - This test documents the expected behavior for Issue #19
         // Currently this scenario is NOT supported by the source generator
@@ -909,87 +902,87 @@ public class SourceGeneratorEdgeCaseTests
         ClassWithObservableCollectionGetterOnly clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.EqualTo("Test"));
-        Assert.That(clone.Items, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
-        Assert.That(clone.Items.Count, Is.EqualTo(3));
-        Assert.That(clone.Items[0], Is.EqualTo("Item1"));
-        Assert.That(clone.Items[1], Is.EqualTo("Item2"));
-        Assert.That(clone.Items[2], Is.EqualTo("Item3"));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsEqualTo("Test");
+        await Assert.That(clone.Items).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
+        await Assert.That(clone.Items.Count).IsEqualTo(3);
+        await Assert.That(clone.Items[0]).IsEqualTo("Item1");
+        await Assert.That(clone.Items[1]).IsEqualTo("Item2");
+        await Assert.That(clone.Items[2]).IsEqualTo("Item3");
 
         // Verify independence
         original.Items.Add("NewItem");
         original.Items[0] = "Modified";
-        Assert.That(clone.Items.Count, Is.EqualTo(3));
-        Assert.That(clone.Items[0], Is.EqualTo("Item1"));
+        await Assert.That(clone.Items.Count).IsEqualTo(3);
+        await Assert.That(clone.Items[0]).IsEqualTo("Item1");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ObservableCollection_WithGetterSetter_Should_Be_Cloned()
+    public async Task ObservableCollection_WithGetterSetter_Should_Be_Cloned()
     {
         // Arrange - This scenario is already supported
         ClassWithObservableCollectionGetterSetter original = new ClassWithObservableCollectionGetterSetter
         {
             Name = "Test",
-            Items = new ObservableCollection<string> { "Item1", "Item2", "Item3" }
+            Items = ["Item1", "Item2", "Item3"]
         };
 
         // Act
         ClassWithObservableCollectionGetterSetter clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.EqualTo("Test"));
-        Assert.That(clone.Items, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
-        Assert.That(clone.Items!.Count, Is.EqualTo(3));
-        Assert.That(clone.Items[0], Is.EqualTo("Item1"));
-        Assert.That(clone.Items[1], Is.EqualTo("Item2"));
-        Assert.That(clone.Items[2], Is.EqualTo("Item3"));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsEqualTo("Test");
+        await Assert.That(clone.Items).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
+        await Assert.That(clone.Items!.Count).IsEqualTo(3);
+        await Assert.That(clone.Items[0]).IsEqualTo("Item1");
+        await Assert.That(clone.Items[1]).IsEqualTo("Item2");
+        await Assert.That(clone.Items[2]).IsEqualTo("Item3");
 
         // Verify independence
         original.Items!.Add("NewItem");
         original.Items[0] = "Modified";
-        Assert.That(clone.Items.Count, Is.EqualTo(3));
-        Assert.That(clone.Items[0], Is.EqualTo("Item1"));
+        await Assert.That(clone.Items.Count).IsEqualTo(3);
+        await Assert.That(clone.Items[0]).IsEqualTo("Item1");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ObservableCollection_WithInit_Should_Be_Cloned()
+    public async Task ObservableCollection_WithInit_Should_Be_Cloned()
     {
         // Arrange - This is the workaround mentioned in Issue #19
         ClassWithObservableCollectionInit original = new ClassWithObservableCollectionInit
         {
             Name = "Test",
-            Items = new ObservableCollection<string> { "Item1", "Item2", "Item3" }
+            Items = ["Item1", "Item2", "Item3"]
         };
 
         // Act
         ClassWithObservableCollectionInit clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.EqualTo("Test"));
-        Assert.That(clone.Items, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
-        Assert.That(clone.Items.Count, Is.EqualTo(3));
-        Assert.That(clone.Items[0], Is.EqualTo("Item1"));
-        Assert.That(clone.Items[1], Is.EqualTo("Item2"));
-        Assert.That(clone.Items[2], Is.EqualTo("Item3"));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsEqualTo("Test");
+        await Assert.That(clone.Items).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
+        await Assert.That(clone.Items.Count).IsEqualTo(3);
+        await Assert.That(clone.Items[0]).IsEqualTo("Item1");
+        await Assert.That(clone.Items[1]).IsEqualTo("Item2");
+        await Assert.That(clone.Items[2]).IsEqualTo("Item3");
 
         // Verify independence
         original.Items.Add("NewItem");
         original.Items[0] = "Modified";
-        Assert.That(clone.Items.Count, Is.EqualTo(3));
-        Assert.That(clone.Items[0], Is.EqualTo("Item1"));
+        await Assert.That(clone.Items.Count).IsEqualTo(3);
+        await Assert.That(clone.Items[0]).IsEqualTo("Item1");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ObservableCollection_WithObjects_GetterOnly_Should_Be_Deep_Cloned()
+    public async Task ObservableCollection_WithObjects_GetterOnly_Should_Be_Deep_Cloned()
     {
         // Arrange - Test with nested objects to verify deep cloning
         ClassWithObservableCollectionOfObjects original = new ClassWithObservableCollectionOfObjects
@@ -1003,25 +996,25 @@ public class SourceGeneratorEdgeCaseTests
         ClassWithObservableCollectionOfObjects clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Description, Is.EqualTo("Container"));
-        Assert.That(clone.Items, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
-        Assert.That(clone.Items.Count, Is.EqualTo(2));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Description).IsEqualTo("Container");
+        await Assert.That(clone.Items).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
+        await Assert.That(clone.Items.Count).IsEqualTo(2);
+
         // Verify objects are also deep cloned (different references)
-        Assert.That(clone.Items[0], Is.Not.SameAs(original.Items[0]));
-        Assert.That(clone.Items[1], Is.Not.SameAs(original.Items[1]));
-        Assert.That(clone.Items[0].Value, Is.EqualTo("First"));
-        Assert.That(clone.Items[0].Id, Is.EqualTo(1));
-        Assert.That(clone.Items[1].Value, Is.EqualTo("Second"));
-        Assert.That(clone.Items[1].Id, Is.EqualTo(2));
+        await Assert.That(clone.Items[0]).IsNotSameReferenceAs(original.Items[0]);
+        await Assert.That(clone.Items[1]).IsNotSameReferenceAs(original.Items[1]);
+        await Assert.That(clone.Items[0].Value).IsEqualTo("First");
+        await Assert.That(clone.Items[0].Id).IsEqualTo(1);
+        await Assert.That(clone.Items[1].Value).IsEqualTo("Second");
+        await Assert.That(clone.Items[1].Id).IsEqualTo(2);
 
         // Verify independence
         original.Items[0].Value = "Modified";
         original.Items.Add(new ObservableItem { Value = "Third", Id = 3 });
-        Assert.That(clone.Items[0].Value, Is.EqualTo("First"));
-        Assert.That(clone.Items.Count, Is.EqualTo(2));
+        await Assert.That(clone.Items[0].Value).IsEqualTo("First");
+        await Assert.That(clone.Items.Count).IsEqualTo(2);
     }
 
     #endregion
@@ -1043,7 +1036,7 @@ public class SourceGeneratorEdgeCaseTests
     [FastClonerClonable]
     public class ContainerWithNonClonableList
     {
-        public List<ExternalNonClonableItem> Items { get; set; } = new();
+        public List<ExternalNonClonableItem> Items { get; set; } = [];
     }
 
     [FastClonerClonable]
@@ -1060,7 +1053,7 @@ public class SourceGeneratorEdgeCaseTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void List_WithNonClonableElements_ShouldDeepCloneViaFastCloner()
+    public async Task List_WithNonClonableElements_ShouldDeepCloneViaFastCloner()
     {
         ContainerWithNonClonableList original = new()
         {
@@ -1074,26 +1067,26 @@ public class SourceGeneratorEdgeCaseTests
 
         ContainerWithNonClonableList clone = original.FastDeepClone();
 
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
-        Assert.That(clone.Items.Count, Is.EqualTo(3));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
+        await Assert.That(clone.Items.Count).IsEqualTo(3);
 
         for (int i = 0; i < original.Items.Count; i++)
         {
-            Assert.That(clone.Items[i], Is.Not.SameAs(original.Items[i]));
-            Assert.That(clone.Items[i].Id, Is.EqualTo(original.Items[i].Id));
-            Assert.That(clone.Items[i].Label, Is.EqualTo(original.Items[i].Label));
+            await Assert.That(clone.Items[i]).IsNotSameReferenceAs(original.Items[i]);
+            await Assert.That(clone.Items[i].Id).IsEqualTo(original.Items[i].Id);
+            await Assert.That(clone.Items[i].Label).IsEqualTo(original.Items[i].Label);
         }
 
         original.Items[0].Label = "Modified";
         original.Items.Add(new ExternalNonClonableItem(4) { Label = "Fourth" });
-        Assert.That(clone.Items[0].Label, Is.EqualTo("First"));
-        Assert.That(clone.Items.Count, Is.EqualTo(3));
+        await Assert.That(clone.Items[0].Label).IsEqualTo("First");
+        await Assert.That(clone.Items.Count).IsEqualTo(3);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Array_WithNonClonableElements_ShouldDeepCloneViaFastCloner()
+    public async Task Array_WithNonClonableElements_ShouldDeepCloneViaFastCloner()
     {
         ContainerWithNonClonableArray original = new()
         {
@@ -1106,21 +1099,21 @@ public class SourceGeneratorEdgeCaseTests
 
         ContainerWithNonClonableArray clone = original.FastDeepClone();
 
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
-        Assert.That(clone.Items.Length, Is.EqualTo(2));
-        Assert.That(clone.Items[0], Is.Not.SameAs(original.Items[0]));
-        Assert.That(clone.Items[0].Id, Is.EqualTo(1));
-        Assert.That(clone.Items[0].Label, Is.EqualTo("A"));
-        Assert.That(clone.Items[1].Id, Is.EqualTo(2));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
+        await Assert.That(clone.Items.Length).IsEqualTo(2);
+        await Assert.That(clone.Items[0]).IsNotSameReferenceAs(original.Items[0]);
+        await Assert.That(clone.Items[0].Id).IsEqualTo(1);
+        await Assert.That(clone.Items[0].Label).IsEqualTo("A");
+        await Assert.That(clone.Items[1].Id).IsEqualTo(2);
 
         original.Items[0].Label = "Modified";
-        Assert.That(clone.Items[0].Label, Is.EqualTo("A"));
+        await Assert.That(clone.Items[0].Label).IsEqualTo("A");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Dictionary_WithNonClonableValues_ShouldDeepCloneViaFastCloner()
+    public async Task Dictionary_WithNonClonableValues_ShouldDeepCloneViaFastCloner()
     {
         ContainerWithNonClonableDictionary original = new()
         {
@@ -1133,58 +1126,58 @@ public class SourceGeneratorEdgeCaseTests
 
         ContainerWithNonClonableDictionary clone = original.FastDeepClone();
 
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
-        Assert.That(clone.Items.Count, Is.EqualTo(2));
-        Assert.That(clone.Items["x"], Is.Not.SameAs(original.Items["x"]));
-        Assert.That(clone.Items["x"].Id, Is.EqualTo(1));
-        Assert.That(clone.Items["x"].Label, Is.EqualTo("X"));
-        Assert.That(clone.Items["y"].Id, Is.EqualTo(2));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
+        await Assert.That(clone.Items.Count).IsEqualTo(2);
+        await Assert.That(clone.Items["x"]).IsNotSameReferenceAs(original.Items["x"]);
+        await Assert.That(clone.Items["x"].Id).IsEqualTo(1);
+        await Assert.That(clone.Items["x"].Label).IsEqualTo("X");
+        await Assert.That(clone.Items["y"].Id).IsEqualTo(2);
 
         original.Items["x"].Label = "Modified";
-        Assert.That(clone.Items["x"].Label, Is.EqualTo("X"));
+        await Assert.That(clone.Items["x"].Label).IsEqualTo("X");
     }
 
     [FastClonerClonable]
     public class ContainerWithObservableNonClonable
     {
-        public ObservableCollection<ExternalNonClonableItem> Items { get; set; } = new();
+        public ObservableCollection<ExternalNonClonableItem> Items { get; set; } = [];
         public string? Name { get; set; }
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void ObservableCollection_WithNonClonableElements_ShouldDeepCloneViaFastCloner()
+    public async Task ObservableCollection_WithNonClonableElements_ShouldDeepCloneViaFastCloner()
     {
         ContainerWithObservableNonClonable original = new()
         {
             Name = "Issue30",
-            Items = new ObservableCollection<ExternalNonClonableItem>
-            {
+            Items =
+            [
                 new ExternalNonClonableItem(1) { Label = "Alpha" },
                 new ExternalNonClonableItem(2) { Label = "Beta" },
                 new ExternalNonClonableItem(3) { Label = "Gamma" }
-            }
+            ]
         };
 
         ContainerWithObservableNonClonable clone = original.FastDeepClone();
 
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone.Name, Is.EqualTo("Issue30"));
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
-        Assert.That(clone.Items.Count, Is.EqualTo(3));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone.Name).IsEqualTo("Issue30");
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
+        await Assert.That(clone.Items.Count).IsEqualTo(3);
 
         for (int i = 0; i < original.Items.Count; i++)
         {
-            Assert.That(clone.Items[i], Is.Not.SameAs(original.Items[i]));
-            Assert.That(clone.Items[i].Id, Is.EqualTo(original.Items[i].Id));
-            Assert.That(clone.Items[i].Label, Is.EqualTo(original.Items[i].Label));
+            await Assert.That(clone.Items[i]).IsNotSameReferenceAs(original.Items[i]);
+            await Assert.That(clone.Items[i].Id).IsEqualTo(original.Items[i].Id);
+            await Assert.That(clone.Items[i].Label).IsEqualTo(original.Items[i].Label);
         }
 
         original.Items[0].Label = "Modified";
         original.Items.Add(new ExternalNonClonableItem(4) { Label = "Delta" });
-        Assert.That(clone.Items[0].Label, Is.EqualTo("Alpha"));
-        Assert.That(clone.Items.Count, Is.EqualTo(3));
+        await Assert.That(clone.Items[0].Label).IsEqualTo("Alpha");
+        await Assert.That(clone.Items.Count).IsEqualTo(3);
     }
 
     #endregion

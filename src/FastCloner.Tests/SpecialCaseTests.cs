@@ -21,15 +21,13 @@ using System.Text.Json.Nodes;
 using FastCloner.Code;
 using FastCloner.Contrib;
 using Microsoft.EntityFrameworkCore;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
-
-[TestFixture(Low)]
-[TestFixture(High)]
 public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
-    [OneTimeSetUp]
-    public void Setup()
+    [Before(Class)]
+    public static void Setup()
     {
         ContribTypeHandlers.Register();
     }
@@ -54,7 +52,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void Test_DeepClone_Marshal()
+    public async Task Test_DeepClone_Marshal()
     {
         // Arrange
         MyClass original = new MyClass
@@ -73,26 +71,26 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         MyClass cloned = original.DeepClone();
 
         // Assert
-        Assert.That(cloned, Is.Not.SameAs(original));
+        await Assert.That(cloned).IsNotSameReferenceAs(original);
 
-        Assert.That(cloned.shortsArray, Is.Not.SameAs(original.shortsArray));
-        Assert.That(cloned.shortsArray, Is.EqualTo(original.shortsArray));
+        await Assert.That(cloned.shortsArray).IsNotSameReferenceAs(original.shortsArray);
+        await Assert.That(cloned.shortsArray).IsEquivalentTo(original.shortsArray);
 
-        Assert.That(cloned.internals, Is.Not.SameAs(original.internals));
-        Assert.That(cloned.internals.Length, Is.EqualTo(original.internals.Length));
+        await Assert.That(cloned.internals).IsNotSameReferenceAs(original.internals);
+        await Assert.That(cloned.internals.Length).IsEqualTo(original.internals.Length);
 
         for (int i = 0; i < original.internals.Length; i++)
         {
-            Assert.That(cloned.internals[i], Is.Not.SameAs(original.internals[i]));
-            Assert.That(cloned.internals[i].myByte, Is.EqualTo(original.internals[i].myByte));
-            Assert.That(cloned.internals[i].myUint1, Is.EqualTo(original.internals[i].myUint1));
-            Assert.That(cloned.internals[i].myUint2, Is.EqualTo(original.internals[i].myUint2));
-            Assert.That(cloned.internals[i].myUint3, Is.EqualTo(original.internals[i].myUint3));
+            await Assert.That(cloned.internals[i]).IsNotSameReferenceAs(original.internals[i]);
+            await Assert.That(cloned.internals[i].myByte).IsEqualTo(original.internals[i].myByte);
+            await Assert.That(cloned.internals[i].myUint1).IsEqualTo(original.internals[i].myUint1);
+            await Assert.That(cloned.internals[i].myUint2).IsEqualTo(original.internals[i].myUint2);
+            await Assert.That(cloned.internals[i].myUint3).IsEqualTo(original.internals[i].myUint3);
         }
     }
 
     [Test]
-    public void Test_InitOnlyProperties_ObjectInitialization()
+    public async Task Test_InitOnlyProperties_ObjectInitialization()
     {
         // Arrange & Act
         PersonWithInitProperties person = new PersonWithInitProperties
@@ -109,17 +107,19 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(person.Name, Is.EqualTo("John Doe"));
-            Assert.That(person.Age, Is.EqualTo(30));
-            Assert.That(person.BirthDate, Is.EqualTo(new DateTime(1993, 1, 1)));
-            Assert.That(person.HomeAddress.Street, Is.EqualTo("123 Main St"));
-        });
+            await Assert.That(person.Name).IsEqualTo("John Doe");
+            await Assert.That(person.Age).IsEqualTo(30);
+            await Assert.That(person.BirthDate).IsEqualTo(new DateTime(1993, 1, 1));
+            await Assert.That(person.HomeAddress.Street).IsEqualTo("123 Main St");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Test_InitOnlyProperties_WithCloning()
+    public async Task Test_InitOnlyProperties_WithCloning()
     {
         // Arrange
         PersonWithInitProperties original = new PersonWithInitProperties
@@ -138,17 +138,19 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         PersonWithInitProperties modified = original with { Age = 31 };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(modified.Name, Is.EqualTo(original.Name));
-            Assert.That(modified.Age, Is.EqualTo(31));
-            Assert.That(modified.HomeAddress, Is.EqualTo(original.HomeAddress));
-            Assert.That(modified, Is.Not.SameAs(original));
-        });
+            await Assert.That(modified.Name).IsEqualTo(original.Name);
+            await Assert.That(modified.Age).IsEqualTo(31);
+            await Assert.That(modified.HomeAddress).IsEqualTo(original.HomeAddress);
+            await Assert.That(modified).IsNotSameReferenceAs(original);
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Test_InitOnlyProperties_RecordEquality()
+    public async Task Test_InitOnlyProperties_RecordEquality()
     {
         // Arrange
         PersonWithInitProperties person1 = new PersonWithInitProperties
@@ -176,12 +178,14 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         };
 
         // Act & Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(person1, Is.EqualTo(person2));
-            Assert.That(person1.GetHashCode(), Is.EqualTo(person2.GetHashCode()));
-            Assert.That(person1, Is.EqualTo(person2));
-        });
+            await Assert.That(person1).IsEqualTo(person2);
+            await Assert.That(person1.GetHashCode()).IsEqualTo(person2.GetHashCode());
+            await Assert.That(person1).IsEqualTo(person2);
+
+            // Act & Assert
+        }
     }
 
     public record PersonWithInitProperties
@@ -200,7 +204,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void Test_InitOnlyProperties_WithNullValues()
+    public async Task Test_InitOnlyProperties_WithNullValues()
     {
         // Arrange & Act
         PersonWithInitProperties person = new PersonWithInitProperties
@@ -211,12 +215,14 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         };
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(person.Name, Is.Null);
-            Assert.That(person.Age, Is.EqualTo(30));
-            Assert.That(person.HomeAddress, Is.Null);
-        });
+            await Assert.That(person.Name).IsNull();
+            await Assert.That(person.Age).IsEqualTo(30);
+            await Assert.That(person.HomeAddress).IsNull();
+
+            // Assert
+        }
     }
 
     public class CBase<TKey>
@@ -241,7 +247,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void Uri_DeepClone_Test()
+    public async Task Uri_DeepClone_Test()
     {
         // Arrange
         Uri original = new Uri("https://example.com/path?query=value#fragment");
@@ -250,18 +256,20 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Uri clone = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone.AbsoluteUri, Is.EqualTo(original.AbsoluteUri));
-            Assert.That(clone.Host, Is.EqualTo(original.Host));
-            Assert.That(clone.PathAndQuery, Is.EqualTo(original.PathAndQuery));
-            Assert.That(clone.Fragment, Is.EqualTo(original.Fragment));
-            Assert.That(clone, Is.Not.SameAs(original));
-        });
+            await Assert.That(clone.AbsoluteUri).IsEqualTo(original.AbsoluteUri);
+            await Assert.That(clone.Host).IsEqualTo(original.Host);
+            await Assert.That(clone.PathAndQuery).IsEqualTo(original.PathAndQuery);
+            await Assert.That(clone.Fragment).IsEqualTo(original.Fragment);
+            await Assert.That(clone).IsNotSameReferenceAs(original);
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Complex_DeepClone_Test()
+    public async Task Complex_DeepClone_Test()
     {
         // Arrange
         Complex original = new Complex(3.14, 2.718);
@@ -270,17 +278,19 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Complex clone = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone.Real, Is.EqualTo(original.Real));
-            Assert.That(clone.Imaginary, Is.EqualTo(original.Imaginary));
-            Assert.That(clone.Magnitude, Is.EqualTo(original.Magnitude));
-            Assert.That(clone.Phase, Is.EqualTo(original.Phase));
-        });
+            await Assert.That(clone.Real).IsEqualTo(original.Real);
+            await Assert.That(clone.Imaginary).IsEqualTo(original.Imaginary);
+            await Assert.That(clone.Magnitude).IsEqualTo(original.Magnitude);
+            await Assert.That(clone.Phase).IsEqualTo(original.Phase);
+
+            // Assert
+        }
     }
 
     [Test]
-    public void BigInteger_DeepClone_Test()
+    public async Task BigInteger_DeepClone_Test()
     {
         // Arrange
         BigInteger? original = BigInteger.Parse("123456789012345678901234567890");
@@ -289,37 +299,39 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         BigInteger? clone = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone, Is.EqualTo(original));
-            Assert.That(clone.ToString(), Is.EqualTo("123456789012345678901234567890"));
-            Assert.That((-clone).ToString(), Is.EqualTo("-123456789012345678901234567890"));
-        });
+            await Assert.That(clone).IsEqualTo(original);
+            await Assert.That(clone.ToString()).IsEqualTo("123456789012345678901234567890");
+            await Assert.That((-clone).ToString()).IsEqualTo("-123456789012345678901234567890");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void BigInteger_DeepClone_EdgeCases_Test()
+    public async Task BigInteger_DeepClone_EdgeCases_Test()
     {
         // Arrange
         BigInteger[] originals =
-        {
+        [
             BigInteger.Zero,
             BigInteger.One,
             BigInteger.MinusOne,
             BigInteger.Parse("-340282366920938463463374607431768211456"),
             BigInteger.Parse("340282366920938463463374607431768211455")
-        };
+        ];
 
         // Act & Assert
         foreach (BigInteger original in originals)
         {
             BigInteger clone = original.DeepClone();
-            Assert.That(clone, Is.EqualTo(original), $"Failed for value: {original}");
+            await Assert.That(clone).IsEqualTo(original).Because($"Failed for value: {original}");
         }
     }
 
     [Test]
-    public void Version_DeepClone_Test()
+    public async Task Version_DeepClone_Test()
     {
         // Arrange
         Version original = new Version(1, 2, 3, 4);
@@ -328,14 +340,16 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Version clone = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone.Major, Is.EqualTo(original.Major));
-            Assert.That(clone.Minor, Is.EqualTo(original.Minor));
-            Assert.That(clone.Build, Is.EqualTo(original.Build));
-            Assert.That(clone.Revision, Is.EqualTo(original.Revision));
-            Assert.That(clone, Is.Not.SameAs(original));
-        });
+            await Assert.That(clone.Major).IsEqualTo(original.Major);
+            await Assert.That(clone.Minor).IsEqualTo(original.Minor);
+            await Assert.That(clone.Build).IsEqualTo(original.Build);
+            await Assert.That(clone.Revision).IsEqualTo(original.Revision);
+            await Assert.That(clone).IsNotSameReferenceAs(original);
+
+            // Assert
+        }
     }
 
     class ValTupleTest
@@ -344,7 +358,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void ValueTuple_Simple_DeepClone_Test()
+    public async Task ValueTuple_Simple_DeepClone_Test()
     {
         // Arrange
         (int X, string Y) original = (X: 42, Y: "test");
@@ -353,15 +367,17 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         (int X, string Y) clone = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone.X, Is.EqualTo(original.X));
-            Assert.That(clone.Y, Is.EqualTo(original.Y));
-        });
+            await Assert.That(clone.X).IsEqualTo(original.X);
+            await Assert.That(clone.Y).IsEqualTo(original.Y);
+
+            // Assert
+        }
     }
 
     [Test]
-    public void ValueTuple_Simple_DeepClone_Test2()
+    public async Task ValueTuple_Simple_DeepClone_Test2()
     {
         ValTupleTest valX = new ValTupleTest { Val = 42 };
 
@@ -373,44 +389,49 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         (ValTupleTest X, ValTupleTest Y) shallow = original.ShallowClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone.X.Val, Is.EqualTo(original.X.Val));
-            Assert.That(clone.Y.Val, Is.EqualTo(original.Y.Val));
-        });
+            await Assert.That(clone.X.Val).IsEqualTo(original.X.Val);
+            await Assert.That(clone.Y.Val).IsEqualTo(original.Y.Val);
+
+            // Assert
+        }
 
         valX.Val = 80;
 
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(ReferenceEquals(original.X, clone.X), Is.False);
-            Assert.That(original.X.Val, Is.EqualTo(80));
-            Assert.That(clone.X.Val, Is.EqualTo(42));
-            Assert.That(shallow.X.Val, Is.EqualTo(80));
-        });
+            await Assert.That(ReferenceEquals(original.X, clone.X)).IsFalse();
+            await Assert.That(original.X.Val).IsEqualTo(80);
+            await Assert.That(clone.X.Val).IsEqualTo(42);
+            await Assert.That(shallow.X.Val).IsEqualTo(80);
+
+        }
     }
 
     [Test]
-    public void ValueTuple_WithReferenceType_DeepClone_Test()
+    public async Task ValueTuple_WithReferenceType_DeepClone_Test()
     {
         // Arrange
-        List<int> list = new List<int> { 1, 2, 3 };
+        List<int> list = [1, 2, 3];
         (int X, List<int> List) original = (X: 42, List: list);
 
         // Act
         (int X, List<int> List) clone = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone.X, Is.EqualTo(original.X));
-            Assert.That(clone.List, Is.EqualTo(original.List));
-            Assert.That(clone.List, Is.Not.SameAs(original.List));
-        });
+            await Assert.That(clone.X).IsEqualTo(original.X);
+            await Assert.That(clone.List).IsEquivalentTo(original.List);
+            await Assert.That(clone.List).IsNotSameReferenceAs(original.List);
+
+            // Assert
+        }
     }
 
     [Test]
-    public void ValueTuple_Nested_DeepClone_Test()
+    public async Task ValueTuple_Nested_DeepClone_Test()
     {
         // Arrange
         (int A, string B) nested = (A: 1, B: "inner");
@@ -420,16 +441,18 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         ((int A, string B) X, string Y) clone = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone.X.A, Is.EqualTo(original.X.A));
-            Assert.That(clone.X.B, Is.EqualTo(original.X.B));
-            Assert.That(clone.Y, Is.EqualTo(original.Y));
-        });
+            await Assert.That(clone.X.A).IsEqualTo(original.X.A);
+            await Assert.That(clone.X.B).IsEqualTo(original.X.B);
+            await Assert.That(clone.Y).IsEqualTo(original.Y);
+
+            // Assert
+        }
     }
 
     [Test]
-    public void ValueTuple_WithComplexType_DeepClone_Test()
+    public async Task ValueTuple_WithComplexType_DeepClone_Test()
     {
         // Arrange
         Uri uri = new Uri("https://example.com");
@@ -439,16 +462,18 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         (int Id, Uri Uri) clone = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone.Id, Is.EqualTo(original.Id));
-            Assert.That(clone.Uri.AbsoluteUri, Is.EqualTo(original.Uri.AbsoluteUri));
-            Assert.That(clone.Uri, Is.Not.SameAs(original.Uri));
-        });
+            await Assert.That(clone.Id).IsEqualTo(original.Id);
+            await Assert.That(clone.Uri.AbsoluteUri).IsEqualTo(original.Uri.AbsoluteUri);
+            await Assert.That(clone.Uri).IsNotSameReferenceAs(original.Uri);
+
+            // Assert
+        }
     }
 
     [Test]
-    public void ValueTuple_Mutability_Test()
+    public async Task ValueTuple_Mutability_Test()
     {
         // Arrange
         List<int> list = [1, 2, 3];
@@ -460,18 +485,20 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         clone.List.Add(4);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(original.X, Is.EqualTo(42));
-            Assert.That(original.List, Has.Count.EqualTo(3));
+            await Assert.That(original.X).IsEqualTo(42);
+            await Assert.That(original.List).Count().IsEqualTo(3);
 
-            Assert.That(clone.X, Is.EqualTo(100));
-            Assert.That(clone.List, Has.Count.EqualTo(4));
-        });
+            await Assert.That(clone.X).IsEqualTo(100);
+            await Assert.That(clone.List).Count().IsEqualTo(4);
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Range_DeepClone_Test()
+    public async Task Range_DeepClone_Test()
     {
         // Arrange
         Range original = new Range(Index.FromStart(1), Index.FromEnd(5));
@@ -480,18 +507,20 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Range clone = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone.Start.Value, Is.EqualTo(original.Start.Value));
-            Assert.That(clone.Start.IsFromEnd, Is.EqualTo(original.Start.IsFromEnd));
-            Assert.That(clone.End.Value, Is.EqualTo(original.End.Value));
-            Assert.That(clone.End.IsFromEnd, Is.EqualTo(original.End.IsFromEnd));
-            Assert.That(clone, Is.EqualTo(original));
-        });
+            await Assert.That(clone.Start.Value).IsEqualTo(original.Start.Value);
+            await Assert.That(clone.Start.IsFromEnd).IsEqualTo(original.Start.IsFromEnd);
+            await Assert.That(clone.End.Value).IsEqualTo(original.End.Value);
+            await Assert.That(clone.End.IsFromEnd).IsEqualTo(original.End.IsFromEnd);
+            await Assert.That(clone).IsEqualTo(original);
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Index_DeepClone_Test()
+    public async Task Index_DeepClone_Test()
     {
         // Arrange
         Index original = new Index(42, fromEnd: true);
@@ -500,16 +529,18 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Index clone = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone.Value, Is.EqualTo(original.Value));
-            Assert.That(clone.IsFromEnd, Is.EqualTo(original.IsFromEnd));
-            Assert.That(clone, Is.EqualTo(original));
-        });
+            await Assert.That(clone.Value).IsEqualTo(original.Value);
+            await Assert.That(clone.IsFromEnd).IsEqualTo(original.IsFromEnd);
+            await Assert.That(clone).IsEqualTo(original);
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Index_DeepClone_FromStart_Test()
+    public async Task Index_DeepClone_FromStart_Test()
     {
         // Arrange
         Index original = Index.FromStart(10);
@@ -518,16 +549,18 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Index clone = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone.Value, Is.EqualTo(original.Value));
-            Assert.That(clone.IsFromEnd, Is.False);
-            Assert.That(clone, Is.EqualTo(original));
-        });
+            await Assert.That(clone.Value).IsEqualTo(original.Value);
+            await Assert.That(clone.IsFromEnd).IsFalse();
+            await Assert.That(clone).IsEqualTo(original);
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Index_DeepClone_FromEnd_Test()
+    public async Task Index_DeepClone_FromEnd_Test()
     {
         // Arrange
         Index original = Index.FromEnd(10);
@@ -536,16 +569,18 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Index clone = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone.Value, Is.EqualTo(original.Value));
-            Assert.That(clone.IsFromEnd, Is.True);
-            Assert.That(clone, Is.EqualTo(original));
-        });
+            await Assert.That(clone.Value).IsEqualTo(original.Value);
+            await Assert.That(clone.IsFromEnd).IsTrue();
+            await Assert.That(clone).IsEqualTo(original);
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Test_DeepClone_ClassHierarchy()
+    public async Task Test_DeepClone_ClassHierarchy()
     {
         // Arrange
         C1 original = new C1
@@ -565,15 +600,17 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         C1 cloned1 = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned1, Is.Not.SameAs(original), "Cloned object should be a new instance");
-            Assert.That(cloned1.Id, Is.EqualTo(original.Id));
-            Assert.That(cloned1.C2, Is.Not.SameAs(original.C2));
-            Assert.That(cloned1.C2.Id, Is.EqualTo(original.C2.Id));
-            Assert.That(cloned1.C2.C3, Is.Not.SameAs(original.C2.C3));
-            Assert.That(cloned1.C2.C3.Id, Is.EqualTo(original.C2.C3.Id));
-        });
+            await Assert.That(cloned1).IsNotSameReferenceAs(original).Because("Cloned object should be a new instance");
+            await Assert.That(cloned1.Id).IsEqualTo(original.Id);
+            await Assert.That(cloned1.C2).IsNotSameReferenceAs(original.C2);
+            await Assert.That(cloned1.C2.Id).IsEqualTo(original.C2.Id);
+            await Assert.That(cloned1.C2.C3).IsNotSameReferenceAs(original.C2.C3);
+            await Assert.That(cloned1.C2.C3.Id).IsEqualTo(original.C2.C3.Id);
+
+            // Assert
+        }
     }
 
     private class TestProps
@@ -599,45 +636,48 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void Test_Clone_Props()
+    public async Task Test_Clone_Props()
     {
         TestProps original = new TestProps { A = 42, B = "Test value" };
         TestProps clone = original.DeepClone();
 
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone.A, Is.EqualTo(42));
-            Assert.That(clone.B, Is.EqualTo("Test value"));
-            Assert.That(clone, Is.Not.SameAs(original));
-        });
+            await Assert.That(clone.A).IsEqualTo(42);
+            await Assert.That(clone.B).IsEqualTo("Test value");
+            await Assert.That(clone).IsNotSameReferenceAs(original);
+
+        }
     }
 
     [Test]
-    public void Test_Clone_Props_With_Ignored()
+    public async Task Test_Clone_Props_With_Ignored()
     {
         TestPropsWithIgnored original = new TestPropsWithIgnored { A = 42, B = "Test value" };
         TestPropsWithIgnored clone = original.DeepClone();
 
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone.A, Is.EqualTo(42));
-            Assert.That(clone.B, Is.EqualTo(null)); // default value
-            Assert.That(clone, Is.Not.SameAs(original));
-        });
+            await Assert.That(clone.A).IsEqualTo(42);
+            await Assert.That(clone.B).IsEqualTo(null); // default value
+            await Assert.That(clone).IsNotSameReferenceAs(original);
+
+        }
     }
     
     [Test]
-    public void Test_Clone_Props_With_NonSerialized()
+    public async Task Test_Clone_Props_With_NonSerialized()
     {
         TestPropsWithNonSerialized original = new TestPropsWithNonSerialized { A = 42, B = "Test value" };
         TestPropsWithNonSerialized clone = original.DeepClone();
 
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone.A, Is.EqualTo(42));
-            Assert.That(clone.B, Is.EqualTo(null)); // default value
-            Assert.That(clone, Is.Not.SameAs(original));
-        });
+            await Assert.That(clone.A).IsEqualTo(42);
+            await Assert.That(clone.B).IsEqualTo(null); // default value
+            await Assert.That(clone).IsNotSameReferenceAs(original);
+
+        }
     }
 
     private class TestAutoProps
@@ -656,7 +696,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void Test_Clone_Auto_Properties()
+    public async Task Test_Clone_Auto_Properties()
     {
         // Arrange
         TestAutoProps original = new TestAutoProps
@@ -673,18 +713,20 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         TestAutoProps clone = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone.A, Is.EqualTo(42));
-            Assert.That(clone.B, Is.EqualTo("Test value"));
-            Assert.That(clone.C, Is.EqualTo(84));
-            Assert.That(clone.D, Is.EqualTo(100));
-            Assert.That(clone, Is.Not.SameAs(original));
-        });
+            await Assert.That(clone.A).IsEqualTo(42);
+            await Assert.That(clone.B).IsEqualTo("Test value");
+            await Assert.That(clone.C).IsEqualTo(84);
+            await Assert.That(clone.D).IsEqualTo(100);
+            await Assert.That(clone).IsNotSameReferenceAs(original);
+
+            // Assert
+        }
     }
 
     [Test]
-    public void ParallelCloning_WithReadOnlyFields_ShouldBeThreadSafe()
+    public async Task ParallelCloning_WithReadOnlyFields_ShouldBeThreadSafe()
     {
         // Arrange
         ClassWithReadOnlyField testObject = new ClassWithReadOnlyField();
@@ -697,7 +739,10 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
             try
             {
                 ClassWithReadOnlyField clone = testObject.DeepClone();
-                Assert.That(clone, Is.Not.SameAs(testObject));
+                if (ReferenceEquals(clone, testObject))
+                {
+                    throw new InvalidOperationException("Clone should not share the original reference.");
+                }
             }
             catch (Exception ex)
             {
@@ -706,7 +751,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         });
 
         // Assert
-        Assert.That(exceptions, Is.Empty, "Parallel cloning should not throw any exceptions");
+        await Assert.That(exceptions).IsEmpty().Because("Parallel cloning should not throw any exceptions");
     }
 
     private class ClassWithReadOnlyField
@@ -736,7 +781,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void Test_Clone_Auto_Properties_With_Ignored()
+    public async Task Test_Clone_Auto_Properties_With_Ignored()
     {
         // Arrange
         TestAutoPropsWithIgnored original = new TestAutoPropsWithIgnored
@@ -751,27 +796,29 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         TestAutoPropsWithIgnored clone = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone.A, Is.EqualTo(42));
-            Assert.That(clone.B, Is.EqualTo(null));
-            Assert.That(clone.C, Is.EqualTo(84));
-            Assert.That(clone.D, Is.EqualTo(0));
-            Assert.That(clone, Is.Not.SameAs(original));
-        });
+            await Assert.That(clone.A).IsEqualTo(42);
+            await Assert.That(clone.B).IsEqualTo(null);
+            await Assert.That(clone.C).IsEqualTo(84);
+            await Assert.That(clone.D).IsEqualTo(0);
+            await Assert.That(clone).IsNotSameReferenceAs(original);
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Test_ExpressionTree_OrderBy1()
+    public async Task Test_ExpressionTree_OrderBy1()
     {
         IOrderedQueryable<int> q = Enumerable.Range(1, 5).Reverse().AsQueryable().OrderBy(x => x);
         IOrderedQueryable<int> q2 = q.DeepClone();
-        Assert.That(q2.ToArray()[0], Is.EqualTo(1));
-        Assert.That(q.ToArray(), Has.Length.EqualTo(5));
+        await Assert.That(q2.ToArray()[0]).IsEqualTo(1);
+        await Assert.That(q.ToArray().Length).IsEqualTo(5);
     }
 
     [Test]
-    public void Test_Action_Delegate_Clone()
+    public async Task Test_Action_Delegate_Clone()
     {
         // Arrange
         TestClass testObject = new TestClass();
@@ -781,23 +828,24 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Action<string> clonedAction = originalAction.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clonedAction.Target, Is.SameAs(originalAction.Target), "Delegate Target should remain the same reference");
-            Assert.That(clonedAction.Method, Is.EqualTo(originalAction.Method), "Delegate Method should be the same");
-        });
+            await Assert.That(clonedAction.Target).IsSameReferenceAs(originalAction.Target).Because("Delegate Target should remain the same reference");
+            await Assert.That(clonedAction.Method).IsEqualTo(originalAction.Method).Because("Delegate Method should be the same");
+
+            // Assert
+        }
 
         List<string> originalResult = [];
         List<string> clonedResult = [];
 
         originalAction("test");
         clonedAction("test");
-
-        Assert.That(clonedResult, Is.EquivalentTo(originalResult), "Both delegates should produce the same result");
+        await Assert.That(clonedResult).IsEquivalentTo(originalResult).Because("Both delegates should produce the same result");
     }
 
     [Test]
-    public void ConditionalWeakTable_DeepClone_VerifyBehavior()
+    public async Task ConditionalWeakTable_DeepClone_VerifyBehavior()
     {
         ConditionalWeakTable<string, string> cwt = new ConditionalWeakTable<string, string>();
         string key = "key";
@@ -806,8 +854,8 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         
         ConditionalWeakTable<string, string> clone = cwt.DeepClone();
         
-        Assert.That(clone, Is.Not.SameAs(cwt));
-        
+        await Assert.That(clone).IsNotSameReferenceAs(cwt);
+
         if (clone.TryGetValue(key, out string? clonedVal))
         {
             Console.WriteLine("Clone found key: " + clonedVal);
@@ -819,15 +867,15 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void WeakReferenceGeneric_DeepClone_VerifyBehavior()
+    public async Task WeakReferenceGeneric_DeepClone_VerifyBehavior()
     {
         string target = "target";
         WeakReference<string> weak = new WeakReference<string>(target);
         
         WeakReference<string> clone = weak.DeepClone();
         
-        Assert.That(clone, Is.SameAs(weak));
-        
+        await Assert.That(clone).IsSameReferenceAs(weak);
+
         bool hasTarget = clone.TryGetTarget(out string? clonedTarget);
         
         Console.WriteLine($"Original target alive: {weak.TryGetTarget(out _)}");
@@ -835,15 +883,15 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void CancellationTokenSource_DeepClone_VerifyBehavior()
+    public async Task CancellationTokenSource_DeepClone_VerifyBehavior()
     {
         CancellationTokenSource cts = new CancellationTokenSource();
         CancellationTokenSource clone = cts.DeepClone();
-        Assert.That(clone, Is.SameAs(cts));
+        await Assert.That(clone).IsSameReferenceAs(cts);
     }
 
     [Test]
-    public void CancellationTokenSource_DeepClone_VerifySafety()
+    public async Task CancellationTokenSource_DeepClone_VerifySafety()
     {
         // CancellationTokenSource manages native handles and cannot be safely deep cloned by value.
         // It is now treated as a "Safe" type, meaning DeepClone returns the SAME instance.
@@ -852,28 +900,28 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         CancellationTokenSource clone = cts.DeepClone();
         
         // Assert it is the SAME object (Reference Copy)
-        Assert.That(clone, Is.SameAs(cts));
+        await Assert.That(clone).IsSameReferenceAs(cts);
     }
     [Test]
-    public void Test_Static_Action_Delegate_Clone()
+    public async Task Test_Static_Action_Delegate_Clone()
     {
         // Arrange
         Action<string> originalAction = StaticTestMethod;
 
         // Act
         Action<string> clonedAction = originalAction.DeepClone();
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
 
             // Assert
-            Assert.That(clonedAction.Target, Is.Null, "Static delegate Target should be null");
-            Assert.That(originalAction.Target, Is.Null, "Static delegate Target should be null");
-            Assert.That(clonedAction.Method, Is.EqualTo(originalAction.Method), "Delegate Method should be the same");
-        });
+            await Assert.That(clonedAction.Target).IsNull().Because("Static delegate Target should be null");
+            await Assert.That(originalAction.Target).IsNull().Because("Static delegate Target should be null");
+            await Assert.That(clonedAction.Method).IsEqualTo(originalAction.Method).Because("Delegate Method should be the same");
+        }
     }
 
     [Test]
-    public void Nested_Closure_Clone()
+    public async Task Nested_Closure_Clone()
     {
         // Arrange
         int x = 1;
@@ -883,12 +931,13 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         // Act
         Func<int> outerCopy = outer.DeepClone();
 
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
             // Assert
-            Assert.That(outer.Invoke(), Is.EqualTo(6)); // 1 + 3 + 2
-            Assert.That(outerCopy.Invoke(), Is.EqualTo(6));
-        });
+            await Assert.That(outer.Invoke()).IsEqualTo(6); // 1 + 3 + 2
+            await Assert.That(outerCopy.Invoke()).IsEqualTo(6);
+
+        }
         return;
 
         // Helper method to create closure
@@ -901,7 +950,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void Event_Handler_Clone_With_Method()
+    public async Task Event_Handler_Clone_With_Method()
     {
         // Arrange
         EventSource source = new EventSource();
@@ -913,18 +962,20 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         EventHandler handlerCopy = handler.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(handlerCopy.Target, Is.SameAs(handler.Target), "Handler Target should be the same");
-            Assert.That(handlerCopy.Method, Is.EqualTo(handler.Method), "Handler Method should be the same");
+            await Assert.That(handlerCopy.Target).IsSameReferenceAs(handler.Target).Because("Handler Target should be the same");
+            await Assert.That(handlerCopy.Method).IsEqualTo(handler.Method).Because("Handler Method should be the same");
 
             source.RaiseEvent();
-            Assert.That(listener.Counter, Is.EqualTo(1), "Original handler should increment counter");
+            await Assert.That(listener.Counter).IsEqualTo(1).Because("Original handler should increment counter");
 
             source.TestEvent += handlerCopy;
             source.RaiseEvent();
-            Assert.That(listener.Counter, Is.EqualTo(3), "Both handlers should increment counter");
-        });
+            await Assert.That(listener.Counter).IsEqualTo(3).Because("Both handlers should increment counter");
+
+            // Assert
+        }
     }
 
     private class EventListener
@@ -962,7 +1013,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void Circular_Reference_Clone()
+    public async Task Circular_Reference_Clone()
     {
         // Arrange
         CircularClass original = new CircularClass
@@ -976,13 +1027,15 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         CircularClass cloned = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Cloned object should be a new instance");
-            Assert.That(cloned.Name, Is.EqualTo(original.Name), "Properties should be copied");
-            Assert.That(cloned.Reference, Is.SameAs(cloned), "Circular reference should point to the cloned instance");
-            Assert.That(cloned.Reference.Reference, Is.SameAs(cloned), "Nested circular reference should point to the cloned instance");
-        });
+            await Assert.That(cloned).IsNotSameReferenceAs(original).Because("Cloned object should be a new instance");
+            await Assert.That(cloned.Name).IsEqualTo(original.Name).Because("Properties should be copied");
+            await Assert.That(cloned.Reference).IsSameReferenceAs(cloned).Because("Circular reference should point to the cloned instance");
+            await Assert.That(cloned.Reference.Reference).IsSameReferenceAs(cloned).Because("Nested circular reference should point to the cloned instance");
+
+            // Assert
+        }
     }
 
     private class CircularClass
@@ -992,7 +1045,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void Complex_Circular_Reference_Clone()
+    public async Task Complex_Circular_Reference_Clone()
     {
         // Arrange
         Node nodeA = new Node { Name = "A" };
@@ -1010,24 +1063,26 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Node clonedC = clonedB.Next;
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clonedA, Is.Not.SameAs(nodeA), "Node A should be cloned");
-            Assert.That(clonedB, Is.Not.SameAs(nodeB), "Node B should be cloned");
-            Assert.That(clonedC, Is.Not.SameAs(nodeC), "Node C should be cloned");
+            await Assert.That(clonedA).IsNotSameReferenceAs(nodeA).Because("Node A should be cloned");
+            await Assert.That(clonedB).IsNotSameReferenceAs(nodeB).Because("Node B should be cloned");
+            await Assert.That(clonedC).IsNotSameReferenceAs(nodeC).Because("Node C should be cloned");
 
-            Assert.That(clonedA.Name, Is.EqualTo("A"), "Node A name should be copied");
-            Assert.That(clonedB.Name, Is.EqualTo("B"), "Node B name should be copied");
-            Assert.That(clonedC.Name, Is.EqualTo("C"), "Node C name should be copied");
+            await Assert.That(clonedA.Name).IsEqualTo("A").Because("Node A name should be copied");
+            await Assert.That(clonedB.Name).IsEqualTo("B").Because("Node B name should be copied");
+            await Assert.That(clonedC.Name).IsEqualTo("C").Because("Node C name should be copied");
 
-            Assert.That(clonedC.Next, Is.SameAs(clonedA), "Cycle should be preserved");
-            Assert.That(clonedA.Next, Is.SameAs(clonedB), "References should point to new instances");
-            Assert.That(clonedB.Next, Is.SameAs(clonedC), "References should point to new instances");
-        });
+            await Assert.That(clonedC.Next).IsSameReferenceAs(clonedA).Because("Cycle should be preserved");
+            await Assert.That(clonedA.Next).IsSameReferenceAs(clonedB).Because("References should point to new instances");
+            await Assert.That(clonedB.Next).IsSameReferenceAs(clonedC).Because("References should point to new instances");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Dynamic_Object_Clone()
+    public async Task Dynamic_Object_Clone()
     {
         // Arrange
         dynamic original = new ExpandoObject();
@@ -1040,18 +1095,20 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         dynamic cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Cloned object should be a new instance");
-            Assert.That(cloned.Name, Is.EqualTo("Test"), "String property should be copied");
-            Assert.That(cloned.Number, Is.EqualTo(42), "Number property should be copied");
-            Assert.That(cloned.Nested, Is.Not.SameAs(original.Nested), "Nested object should be cloned");
-            Assert.That(cloned.Nested.Value, Is.EqualTo("Nested Value"), "Nested value should be copied");
-        });
+            await Assert.That((object?)cloned).IsNotSameReferenceAs((object?)original).Because("Cloned object should be a new instance");
+            await Assert.That((string)cloned.Name).IsEqualTo("Test").Because("String property should be copied");
+            await Assert.That((int)cloned.Number).IsEqualTo(42).Because("Number property should be copied");
+            await Assert.That((object?)cloned.Nested).IsNotSameReferenceAs((object?)original.Nested).Because("Nested object should be cloned");
+            await Assert.That((string)cloned.Nested.Value).IsEqualTo("Nested Value").Because("Nested value should be copied");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Dynamic_With_Nested_ExpandoObject_Clone()
+    public async Task Dynamic_With_Nested_ExpandoObject_Clone()
     {
         // Arrange
         dynamic original = new ExpandoObject();
@@ -1064,18 +1121,20 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         dynamic cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned.Name, Is.EqualTo("Parent"), "Parent name should be copied");
-            Assert.That(cloned.Child.Name, Is.EqualTo("Child"), "Child name should be copied");
+            await Assert.That((string)cloned.Name).IsEqualTo("Parent").Because("Parent name should be copied");
+            await Assert.That((string)cloned.Child.Name).IsEqualTo("Child").Because("Child name should be copied");
 
-            Assert.That(cloned.Child.Parent, Is.SameAs(cloned), "Circular reference should point to cloned parent");
-            Assert.That(original.Child.Parent, Is.SameAs(original), "Original circular reference should remain unchanged");
-        });
+            await Assert.That((object?)cloned.Child.Parent).IsSameReferenceAs((object?)cloned).Because("Circular reference should point to cloned parent");
+            await Assert.That((object?)original.Child.Parent).IsSameReferenceAs((object?)original).Because("Original circular reference should remain unchanged");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Dynamic_With_Collection_Clone()
+    public async Task Dynamic_With_Collection_Clone()
     {
         // Arrange
         dynamic original = new ExpandoObject();
@@ -1096,21 +1155,23 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         dynamic cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned.Items, Is.Not.SameAs(original.Items), "Collection should be cloned");
-            Assert.That(cloned.Items.Count, Is.EqualTo(2), "Collection should have same number of items");
+            await Assert.That((object?)cloned.Items).IsNotSameReferenceAs((object?)original.Items).Because("Collection should be cloned");
+            await Assert.That((int)cloned.Items.Count).IsEqualTo(2).Because("Collection should have same number of items");
 
-            Assert.That(cloned.Items[0].Name, Is.EqualTo("Item1"), "First item name should be copied");
-            Assert.That(cloned.Items[0].Owner, Is.SameAs(cloned), "First item should reference cloned parent");
+            await Assert.That((string)cloned.Items[0].Name).IsEqualTo("Item1").Because("First item name should be copied");
+            await Assert.That((object?)cloned.Items[0].Owner).IsSameReferenceAs((object?)cloned).Because("First item should reference cloned parent");
 
-            Assert.That(cloned.Items[1].Name, Is.EqualTo("Item2"), "Second item name should be copied");
-            Assert.That(cloned.Items[1].Owner, Is.SameAs(cloned), "Second item should reference cloned parent");
-        });
+            await Assert.That((string)cloned.Items[1].Name).IsEqualTo("Item2").Because("Second item name should be copied");
+            await Assert.That((object?)cloned.Items[1].Owner).IsSameReferenceAs((object?)cloned).Because("Second item should reference cloned parent");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void HttpRequest_Clone()
+    public async Task HttpRequest_Clone()
     {
         // Arrange
         HttpRequestMessage original = new HttpRequestMessage
@@ -1132,29 +1193,31 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         HttpRequestMessage? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned.Method, Is.EqualTo(HttpMethod.Post), "Method should be copied");
-            Assert.That(cloned.RequestUri?.ToString(), Is.EqualTo("https://api.example.com/data"), "URI should be copied");
-            Assert.That(cloned.Version, Is.EqualTo(new Version(2, 0)), "Version should be copied");
+            await Assert.That(cloned.Method).IsEqualTo(HttpMethod.Post).Because("Method should be copied");
+            await Assert.That(cloned.RequestUri?.ToString()).IsEqualTo("https://api.example.com/data").Because("URI should be copied");
+            await Assert.That(cloned.Version).IsEqualTo(new Version(2, 0)).Because("Version should be copied");
 
-            Assert.That(cloned.Headers.Accept.First().MediaType, Is.EqualTo("application/json"), "Accept header should be copied");
-            Assert.That(cloned.Headers.GetValues("Custom-Header").First(), Is.EqualTo("test-value"), "Custom header should be copied");
-            Assert.That(cloned.Headers.Authorization?.Scheme, Is.EqualTo("Bearer"), "Authorization scheme should be copied");
-            Assert.That(cloned.Headers.Authorization?.Parameter, Is.EqualTo("test-token"), "Authorization parameter should be copied");
+            await Assert.That(cloned.Headers.Accept.First().MediaType).IsEqualTo("application/json").Because("Accept header should be copied");
+            await Assert.That(cloned.Headers.GetValues("Custom-Header").First()).IsEqualTo("test-value").Because("Custom header should be copied");
+            await Assert.That(cloned.Headers.Authorization?.Scheme).IsEqualTo("Bearer").Because("Authorization scheme should be copied");
+            await Assert.That(cloned.Headers.Authorization?.Parameter).IsEqualTo("test-token").Because("Authorization parameter should be copied");
 
-            Assert.That(cloned.Content, Is.Not.Null, "Content should be cloned");
-            Assert.That(cloned.Content, Is.TypeOf<StringContent>(), "Content type should be preserved");
+            await Assert.That(cloned.Content).IsNotNull().Because("Content should be cloned");
+            await Assert.That(cloned.Content).IsTypeOf<StringContent>().Because("Content type should be preserved");
 
             string originalContent = original.Content.ReadAsStringAsync().Result;
             string clonedContent = cloned.Content.ReadAsStringAsync().Result;
-            Assert.That(clonedContent, Is.EqualTo(originalContent), "Content value should be copied");
-            Assert.That(cloned.Content.Headers.ContentType?.MediaType, Is.EqualTo("application/json"), "Content-Type should be copied");
-        });
+            await Assert.That(clonedContent).IsEqualTo(originalContent).Because("Content value should be copied");
+            await Assert.That(cloned.Content.Headers.ContentType?.MediaType).IsEqualTo("application/json").Because("Content-Type should be copied");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void HttpRequest_With_MultipartContent_Clone()
+    public async Task HttpRequest_With_MultipartContent_Clone()
     {
         // Arrange
         HttpRequestMessage original = new HttpRequestMessage
@@ -1179,9 +1242,9 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         HttpRequestMessage? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned.Content, Is.TypeOf<MultipartFormDataContent>(), "Content type should be preserved");
+            await Assert.That(cloned.Content).IsTypeOf<MultipartFormDataContent>().Because("Content type should be preserved");
 
             MultipartFormDataContent? originalMultipart = (MultipartFormDataContent)original.Content;
             MultipartFormDataContent? clonedMultipart = (MultipartFormDataContent)cloned.Content;
@@ -1189,13 +1252,15 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
             string originalParts = originalMultipart.ReadAsStringAsync().Result;
             string clonedParts = clonedMultipart.ReadAsStringAsync().Result;
 
-            Assert.That(clonedParts, Is.EqualTo(originalParts), "Multipart content should be identical");
-            Assert.That(clonedMultipart.Headers.ContentType?.Parameters.First(p => p.Name == "boundary").Value, Is.Not.Null, "Boundary should be present");
-        });
+            await Assert.That(clonedParts).IsEqualTo(originalParts).Because("Multipart content should be identical");
+            await Assert.That(clonedMultipart.Headers.ContentType?.Parameters.First(p => p.Name == "boundary").Value).IsNotNull().Because("Boundary should be present");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void HttpRequest_With_Handlers_Clone()
+    public async Task HttpRequest_With_Handlers_Clone()
     {
         // Arrange
         HttpRequestMessage original = new HttpRequestMessage(HttpMethod.Get, "https://api.example.com");
@@ -1212,17 +1277,18 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
 
         HttpRequestMessage? cloned = FastCloner.DeepClone(original);
 
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned.Properties, Is.Not.Empty, "Properties should be copied");
-            Assert.That(cloned.Properties["AllowAutoRedirect"], Is.EqualTo(false), "Handler property should be copied");
-            Assert.That(cloned.Properties["AutomaticDecompression"], Is.EqualTo(DecompressionMethods.GZip | DecompressionMethods.Deflate), "Handler compression settings should be copied");
-            Assert.That(cloned.Properties["UseCookies"], Is.EqualTo(false), "Handler cookie settings should be copied");
-        });
+            await Assert.That(cloned.Properties).IsNotEmpty().Because("Properties should be copied");
+            await Assert.That(cloned.Properties["AllowAutoRedirect"]).IsEqualTo(false).Because("Handler property should be copied");
+            await Assert.That(cloned.Properties["AutomaticDecompression"]).IsEqualTo(DecompressionMethods.GZip | DecompressionMethods.Deflate).Because("Handler compression settings should be copied");
+            await Assert.That(cloned.Properties["UseCookies"]).IsEqualTo(false).Because("Handler cookie settings should be copied");
+
+        }
     }
 
     [Test]
-    public void HttpResponse_Clone()
+    public async Task HttpResponse_Clone()
     {
         // Arrange
         HttpResponseMessage original = new HttpResponseMessage
@@ -1243,25 +1309,29 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         HttpResponseMessage? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned.StatusCode, Is.EqualTo(HttpStatusCode.OK), "Status code should be copied");
-            Assert.That(cloned.Version, Is.EqualTo(new Version(2, 0)), "Version should be copied");
-            Assert.That(cloned.ReasonPhrase, Is.EqualTo("Custom OK Message"), "Reason phrase should be copied");
+            await Assert.That(cloned.StatusCode).IsEqualTo(HttpStatusCode.OK).Because("Status code should be copied");
+            await Assert.That(cloned.Version).IsEqualTo(new Version(2, 0)).Because("Version should be copied");
+            await Assert.That(cloned.ReasonPhrase).IsEqualTo("Custom OK Message").Because("Reason phrase should be copied");
 
-            Assert.That(cloned.Headers.CacheControl?.MaxAge, Is.EqualTo(TimeSpan.FromHours(1)), "Cache control should be copied");
-            Assert.That(cloned.Headers.GetValues("X-Custom-Response").First(), Is.EqualTo("test-response"), "Custom header should be copied");
+            await Assert.That(cloned.Headers.CacheControl?.MaxAge).IsEqualTo(TimeSpan.FromHours(1)).Because("Cache control should be copied");
+            await Assert.That(cloned.Headers.GetValues("X-Custom-Response").First()).IsEqualTo("test-response").Because("Custom header should be copied");
 
             string originalContent = original.Content.ReadAsStringAsync().Result;
             string clonedContent = cloned.Content.ReadAsStringAsync().Result;
-            Assert.That(clonedContent, Is.EqualTo(originalContent), "Content should be copied");
-        });
+            await Assert.That(clonedContent).IsEqualTo(originalContent).Because("Content should be copied");
+
+            // Assert
+        }
     }
 
     [Test]
-    [Platform("win")]
-    public void Font_Clone()
+    public async Task Font_Clone()
     {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return;
+
         // Arrange
         Font original = new Font("Arial", 12, FontStyle.Bold | FontStyle.Italic);
 
@@ -1269,21 +1339,23 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Font? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Should be different instance");
-            Assert.That(cloned.Name, Is.EqualTo("Arial"), "Font name should be copied");
-            Assert.That(cloned.Size, Is.EqualTo(12), "Font size should be copied");
-            Assert.That(cloned.Style, Is.EqualTo(FontStyle.Bold | FontStyle.Italic), "Font style should be copied");
-            Assert.That(cloned.Unit, Is.EqualTo(original.Unit), "Font unit should be copied");
-            Assert.That(cloned.GdiCharSet, Is.EqualTo(original.GdiCharSet), "GDI charset should be copied");
-            Assert.That(cloned.GdiVerticalFont, Is.EqualTo(original.GdiVerticalFont), "GDI vertical font should be copied");
-        });
+            await Assert.That(cloned).IsNotSameReferenceAs(original).Because("Should be different instance");
+            await Assert.That(cloned.Name).IsEqualTo("Arial").Because("Font name should be copied");
+            await Assert.That(cloned.Size).IsEqualTo(12).Because("Font size should be copied");
+            await Assert.That(cloned.Style).IsEqualTo(FontStyle.Bold | FontStyle.Italic).Because("Font style should be copied");
+            await Assert.That(cloned.Unit).IsEqualTo(original.Unit).Because("Font unit should be copied");
+            await Assert.That(cloned.GdiCharSet).IsEqualTo(original.GdiCharSet).Because("GDI charset should be copied");
+            await Assert.That(cloned.GdiVerticalFont).IsEqualTo(original.GdiVerticalFont).Because("GDI vertical font should be copied");
+
+            // Assert
+        }
     }
 
 
     [Test]
-    public void HttpRequest_With_StreamContent_Clone()
+    public async Task HttpRequest_With_StreamContent_Clone()
     {
         // Arrange
         HttpRequestMessage original = new HttpRequestMessage(HttpMethod.Post, "https://api.example.com/stream");
@@ -1296,19 +1368,21 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         HttpRequestMessage? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned.Content, Is.TypeOf<StreamContent>(), "Content type should be preserved");
+            await Assert.That(cloned.Content).IsTypeOf<StreamContent>().Because("Content type should be preserved");
 
             string originalContent = original.Content.ReadAsStringAsync().Result;
             string clonedContent = cloned.Content.ReadAsStringAsync().Result;
-            Assert.That(clonedContent, Is.EqualTo(originalContent), "Stream content should be copied");
-            Assert.That(cloned.Content.Headers.ContentType?.MediaType, Is.EqualTo("text/plain"), "Content type should be copied");
-        });
+            await Assert.That(clonedContent).IsEqualTo(originalContent).Because("Stream content should be copied");
+            await Assert.That(cloned.Content.Headers.ContentType?.MediaType).IsEqualTo("text/plain").Because("Content type should be copied");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void HttpRequest_With_ComplexHeaders_Clone()
+    public async Task HttpRequest_With_ComplexHeaders_Clone()
     {
         // Arrange
         HttpRequestMessage original = new HttpRequestMessage(HttpMethod.Get, "https://api.example.com");
@@ -1326,34 +1400,36 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         HttpRequestMessage? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
             List<MediaTypeWithQualityHeaderValue> acceptHeaders = cloned.Headers.Accept.OrderBy(x => x.MediaType).ToList();
-            Assert.That(acceptHeaders[0].MediaType, Is.EqualTo("application/json"), "First accept header should be copied");
-            Assert.That(acceptHeaders[0].Quality, Is.EqualTo(1.0), "First accept header quality should be copied");
-            Assert.That(acceptHeaders[1].MediaType, Is.EqualTo("text/xml"), "Second accept header should be copied");
-            Assert.That(acceptHeaders[1].Quality, Is.EqualTo(0.8), "Second accept header quality should be copied");
+            await Assert.That(acceptHeaders[0].MediaType).IsEqualTo("application/json").Because("First accept header should be copied");
+            await Assert.That(acceptHeaders[0].Quality).IsEqualTo(1.0).Because("First accept header quality should be copied");
+            await Assert.That(acceptHeaders[1].MediaType).IsEqualTo("text/xml").Because("Second accept header should be copied");
+            await Assert.That(acceptHeaders[1].Quality).IsEqualTo(0.8).Because("Second accept header quality should be copied");
 
             List<StringWithQualityHeaderValue> languageHeaders = cloned.Headers.AcceptLanguage.OrderBy(x => x.Value).ToList();
-            Assert.That(languageHeaders[0].Value, Is.EqualTo("cs-CZ"), "First language header should be copied");
-            Assert.That(languageHeaders[0].Quality, Is.EqualTo(0.8), "First language header quality should be copied");
-            Assert.That(languageHeaders[1].Value, Is.EqualTo("en-US"), "Second language header should be copied");
-            Assert.That(languageHeaders[1].Quality, Is.EqualTo(1.0), "Second language header quality should be copied");
+            await Assert.That(languageHeaders[0].Value).IsEqualTo("cs-CZ").Because("First language header should be copied");
+            await Assert.That(languageHeaders[0].Quality).IsEqualTo(0.8).Because("First language header quality should be copied");
+            await Assert.That(languageHeaders[1].Value).IsEqualTo("en-US").Because("Second language header should be copied");
+            await Assert.That(languageHeaders[1].Quality).IsEqualTo(1.0).Because("Second language header quality should be copied");
 
             List<string> ifMatchValues = cloned.Headers.GetValues("If-Match").ToList();
-            Assert.That(ifMatchValues, Has.Count.EqualTo(2), "If-Match headers count should match");
-            Assert.That(ifMatchValues, Contains.Item("\"123\""), "First If-Match value should be copied");
-            Assert.That(ifMatchValues, Contains.Item("\"456\""), "Second If-Match value should be copied");
+            await Assert.That(ifMatchValues).Count().IsEqualTo(2).Because("If-Match headers count should match");
+            await Assert.That(ifMatchValues).Contains("\"123\"").Because("First If-Match value should be copied");
+            await Assert.That(ifMatchValues).Contains("\"456\"").Because("Second If-Match value should be copied");
 
             List<string> customMultiValues = cloned.Headers.GetValues("X-Custom-Multi").ToList();
-            Assert.That(customMultiValues, Has.Count.EqualTo(2), "Custom multi-value header count should match");
-            Assert.That(customMultiValues, Contains.Item("value1"), "First custom multi-value should be copied");
-            Assert.That(customMultiValues, Contains.Item("value2"), "Second custom multi-value should be copied");
-        });
+            await Assert.That(customMultiValues).Count().IsEqualTo(2).Because("Custom multi-value header count should match");
+            await Assert.That(customMultiValues).Contains("value1").Because("First custom multi-value should be copied");
+            await Assert.That(customMultiValues).Contains("value2").Because("Second custom multi-value should be copied");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Dynamic_With_Dictionary_Clone()
+    public async Task Dynamic_With_Dictionary_Clone()
     {
         // Arrange
         dynamic original = new ExpandoObject();
@@ -1370,18 +1446,20 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         dynamic cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned.Dict, Is.Not.SameAs(original.Dict), "Dictionary should be cloned");
-            Assert.That(cloned.Dict.Count, Is.EqualTo(1), "Dictionary should have same number of items");
-            Assert.That(cloned.Dict["key1"].Name, Is.EqualTo("Value1"), "Dictionary value should be copied");
-            Assert.That(cloned.Dict["key1"].Container, Is.SameAs(cloned), "Dictionary value should reference cloned container");
-            Assert.That(cloned.Self, Is.SameAs(cloned), "Self reference should point to clone");
-        });
+            await Assert.That((object?)cloned.Dict).IsNotSameReferenceAs((object?)original.Dict).Because("Dictionary should be cloned");
+            await Assert.That((int)cloned.Dict.Count).IsEqualTo(1).Because("Dictionary should have same number of items");
+            await Assert.That((string)cloned.Dict["key1"].Name).IsEqualTo("Value1").Because("Dictionary value should be copied");
+            await Assert.That((object?)cloned.Dict["key1"].Container).IsSameReferenceAs((object?)cloned).Because("Dictionary value should reference cloned container");
+            await Assert.That((object?)cloned.Self).IsSameReferenceAs((object?)cloned).Because("Self reference should point to clone");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void NotifyPropertyChanged_Clone()
+    public async Task NotifyPropertyChanged_Clone()
     {
         // Arrange
         NotifyingPerson original = new NotifyingPerson { Name = "John", Age = 30 };
@@ -1392,25 +1470,27 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         NotifyingPerson? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned.Name, Is.EqualTo("John"), "Property should be copied");
-            Assert.That(cloned.Age, Is.EqualTo(30), "Property should be copied");
+            await Assert.That(cloned.Name).IsEqualTo("John").Because("Property should be copied");
+            await Assert.That(cloned.Age).IsEqualTo(30).Because("Property should be copied");
 
             cloned.Name = "Jane";
-            Assert.That(propertyChanges, Has.Count.EqualTo(1), "Cloned object should trigger original events due to shallow copy of delegates");
-            Assert.That(propertyChanges[0], Is.EqualTo("Name"));
+            await Assert.That(propertyChanges).Count().IsEqualTo(1).Because("Cloned object should trigger original events due to shallow copy of delegates");
+            await Assert.That(propertyChanges[0]).IsEqualTo("Name");
 
             List<string> clonedChanges = [];
             cloned.PropertyChanged += (object sender, PropertyChangedEventArgs args) => clonedChanges.Add(args.PropertyName);
             cloned.Age = 31;
-            Assert.That(clonedChanges, Has.Count.EqualTo(1), "Cloned object should trigger its own events");
-            Assert.That(propertyChanges, Has.Count.EqualTo(2), "Original event handler also receives the second change");
-        });
+            await Assert.That(clonedChanges).Count().IsEqualTo(1).Because("Cloned object should trigger its own events");
+            await Assert.That(propertyChanges).Count().IsEqualTo(2).Because("Original event handler also receives the second change");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void NotifyPropertyChanged_With_Complex_Properties_Clone()
+    public async Task NotifyPropertyChanged_With_Complex_Properties_Clone()
     {
         // Arrange
         NotifyingPerson original = new NotifyingPerson
@@ -1426,26 +1506,28 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         NotifyingPerson? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned.Address, Is.Not.Null, "Complex property should be cloned");
-            Assert.That(cloned.Address.Street, Is.EqualTo("Main St"), "Nested property should be copied");
-            Assert.That(cloned.Address.City, Is.EqualTo("New York"), "Nested property should be copied");
+            await Assert.That(cloned.Address).IsNotNull().Because("Complex property should be cloned");
+            await Assert.That(cloned.Address.Street).IsEqualTo("Main St").Because("Nested property should be copied");
+            await Assert.That(cloned.Address.City).IsEqualTo("New York").Because("Nested property should be copied");
 
             cloned.Address.Street = "Broadway";
-            Assert.That(addressChanges, Has.Count.EqualTo(1), "Delegates are shallow-copied, so cloned nested object triggers original handler");
-            Assert.That(addressChanges[0], Is.EqualTo(nameof(NotifyingAddress.Street)));
+            await Assert.That(addressChanges).Count().IsEqualTo(1).Because("Delegates are shallow-copied, so cloned nested object triggers original handler");
+            await Assert.That(addressChanges[0]).IsEqualTo(nameof(NotifyingAddress.Street));
 
             List<string> clonedAddressChanges = [];
             cloned.Address.PropertyChanged += (object sender, PropertyChangedEventArgs args) => clonedAddressChanges.Add(args.PropertyName);
             cloned.Address.City = "Boston";
-            Assert.That(clonedAddressChanges, Has.Count.EqualTo(1), "Cloned nested object should trigger its own events");
-            Assert.That(addressChanges, Has.Count.EqualTo(2), "Original handler also receives the second change");
-        });
+            await Assert.That(clonedAddressChanges).Count().IsEqualTo(1).Because("Cloned nested object should trigger its own events");
+            await Assert.That(addressChanges).Count().IsEqualTo(2).Because("Original handler also receives the second change");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void NotifyPropertyChanged_With_Collection_Clone()
+    public async Task NotifyPropertyChanged_With_Collection_Clone()
     {
         // Arrange
         NotifyingPerson original = new NotifyingPerson
@@ -1465,20 +1547,22 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         NotifyingPerson? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned.Children, Is.Not.Null, "Collection should be cloned");
-            Assert.That(cloned.Children, Has.Count.EqualTo(2), "Collection should have same number of items");
-            Assert.That(cloned.Children[0].Name, Is.EqualTo("Child1"), "Collection items should be copied");
+            await Assert.That(cloned.Children).IsNotNull().Because("Collection should be cloned");
+            await Assert.That(cloned.Children).Count().IsEqualTo(2).Because("Collection should have same number of items");
+            await Assert.That(cloned.Children[0].Name).IsEqualTo("Child1").Because("Collection items should be copied");
 
             int clonedChanges = 0;
             cloned.Children.CollectionChanged += (object sender, NotifyCollectionChangedEventArgs args) => clonedChanges++;
             cloned.Children.Add(new NotifyingPerson { Name = "Child3" });
-            Assert.That(clonedChanges, Is.EqualTo(1), "Cloned collection should trigger its own events");
+            await Assert.That(clonedChanges).IsEqualTo(1).Because("Cloned collection should trigger its own events");
 
             cloned.Children.RemoveAt(0);
-            Assert.That(clonedChanges, Is.EqualTo(2), "Cloned collection should continue triggering its own events");
-        });
+            await Assert.That(clonedChanges).IsEqualTo(2).Because("Cloned collection should continue triggering its own events");
+
+            // Assert
+        }
     }
 
     public class NotifyTest : INotifyPropertyChanged
@@ -1523,17 +1607,23 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         UnnamedTypeContainer result = obj.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
-        {
-            Assert.That(result, Is.Not.EqualTo(obj));
-            Assert.That(result.Value, Is.EqualTo(obj.Value));
-            Assert.That(result.Object, Is.Not.EqualTo(obj.Object));
-            Assert.That(result.Builder == obj.Builder, Is.True);
-        });
+        bool builderMatches = result.Builder == obj.Builder;
+
+        if (ReferenceEquals(result, obj))
+            throw new InvalidOperationException("Unnamed type container should be cloned.");
+
+        if (result.Value != obj.Value)
+            throw new InvalidOperationException("Unnamed type value should be preserved.");
+
+        if (ReferenceEquals(result.Object, obj.Object))
+            throw new InvalidOperationException("Unnamed type object field should be cloned.");
+
+        if (!builderMatches)
+            throw new InvalidOperationException("Unnamed type builder pointer should be preserved.");
     }
 
     [Test]
-    public void Test_Rune()
+    public async Task Test_Rune()
     {
         // Arrange
         Rune obj = new Rune(0x1F44D);
@@ -1542,17 +1632,19 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Rune result = obj.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(result, Is.EqualTo(obj));
-            Assert.That(result, Is.EqualTo(obj));
-            Assert.That(result.Value, Is.EqualTo(obj.Value));
-            Assert.That(result.ToString(), Is.EqualTo("👍"));
-        });
+            await Assert.That(result).IsEqualTo(obj);
+            await Assert.That(result).IsEqualTo(obj);
+            await Assert.That(result.Value).IsEqualTo(obj.Value);
+            await Assert.That(result.ToString()).IsEqualTo("👍");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Test_RuneContainer()
+    public async Task Test_RuneContainer()
     {
         // Arrange
         RuneContainer container = new RuneContainer
@@ -1565,12 +1657,14 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         RuneContainer result = container.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(ReferenceEquals(result, container), Is.False);
-            Assert.That(result.RuneValue, Is.EqualTo(container.RuneValue));
-            Assert.That(result.RuneValue.ToString(), Is.EqualTo("🚀"));
-        });
+            await Assert.That(ReferenceEquals(result, container)).IsFalse();
+            await Assert.That(result.RuneValue).IsEqualTo(container.RuneValue);
+            await Assert.That(result.RuneValue.ToString()).IsEqualTo("🚀");
+
+            // Assert
+        }
     }
 
     public class RuneContainer
@@ -1579,7 +1673,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void Test_TimeSpan()
+    public async Task Test_TimeSpan()
     {
         // Arrange
         TimeSpan obj = TimeSpan.FromHours(42.5);
@@ -1588,11 +1682,11 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         TimeSpan result = obj.DeepClone();
 
         // Assert
-        Assert.That(result, Is.EqualTo(obj));
+        await Assert.That(result).IsEqualTo(obj);
     }
 
     [Test]
-    public void Test_TimeZoneInfo()
+    public async Task Test_TimeZoneInfo()
     {
         // Arrange
         TimeZoneInfo obj = TimeZoneInfo.Local;
@@ -1601,11 +1695,11 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         TimeZoneInfo result = obj.DeepClone();
 
         // Assert
-        Assert.That(result, Is.EqualTo(obj));
+        await Assert.That(result).IsEqualTo(obj);
     }
 
     [Test]
-    public void Test_Half()
+    public async Task Test_Half()
     {
         // Arrange
         Half obj = (Half)42.5f;
@@ -1614,11 +1708,11 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Half result = obj.DeepClone();
 
         // Assert
-        Assert.That(result, Is.EqualTo(obj));
+        await Assert.That(result).IsEqualTo(obj);
     }
 
     [Test]
-    public void Test_Int128()
+    public async Task Test_Int128()
     {
         // Arrange
         Int128 obj = Int128.Parse("123456789012345678901234567890");
@@ -1627,11 +1721,11 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Int128 result = obj.DeepClone();
 
         // Assert
-        Assert.That(result, Is.EqualTo(obj));
+        await Assert.That(result).IsEqualTo(obj);
     }
 
     [Test]
-    public void Test_UInt128()
+    public async Task Test_UInt128()
     {
         // Arrange
         UInt128 obj = UInt128.Parse("123456789012345678901234567890");
@@ -1640,11 +1734,11 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         UInt128 result = obj.DeepClone();
 
         // Assert
-        Assert.That(result, Is.EqualTo(obj));
+        await Assert.That(result).IsEqualTo(obj);
     }
 
     [Test]
-    public void Test_Char()
+    public async Task Test_Char()
     {
         // Arrange
         char obj = 'Ž';
@@ -1653,11 +1747,11 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         char result = obj.DeepClone();
 
         // Assert
-        Assert.That(result, Is.EqualTo(obj));
+        await Assert.That(result).IsEqualTo(obj);
     }
 
     [Test]
-    public void Test_Bool()
+    public async Task Test_Bool()
     {
         // Arrange
         bool obj = true;
@@ -1666,11 +1760,11 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         bool result = obj.DeepClone();
 
         // Assert
-        Assert.That(result, Is.EqualTo(obj));
+        await Assert.That(result).IsEqualTo(obj);
     }
 
     [Test]
-    public void Test_Notify_Triggered_Correctly()
+    public async Task Test_Notify_Triggered_Correctly()
     {
         // Arrange
         List<string> output = [];
@@ -1684,10 +1778,10 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         b.Prop = "B changed again";
 
         // Assert - delegates are shallow-copied, so the clone shares the original handler
-        Assert.That(output, Has.Count.EqualTo(3));
-        Assert.That(output[0], Is.EqualTo("A changed"));
-        Assert.That(output[1], Is.EqualTo("B changed"));
-        Assert.That(output[2], Is.EqualTo("B changed again"));
+        await Assert.That(output).Count().IsEqualTo(3);
+        await Assert.That(output[0]).IsEqualTo("A changed");
+        await Assert.That(output[1]).IsEqualTo("B changed");
+        await Assert.That(output[2]).IsEqualTo("B changed again");
     }
 
     /// <summary>
@@ -1728,7 +1822,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void Issue27_Clone_Entity_With_EventHandlers_Does_Not_Deep_Clone_Delegates()
+    public async Task Issue27_Clone_Entity_With_EventHandlers_Does_Not_Deep_Clone_Delegates()
     {
         // Arrange - simulate WPF-like scenario: entity with MVVM event handlers
         MvvmEntity original = new MvvmEntity { Name = "Test", Value = 42 };
@@ -1742,32 +1836,33 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         MvvmEntity clone = original.DeepClone();
 
         // Assert - clone should work without exceptions
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.Not.SameAs(original));
-        Assert.That(clone.Name, Is.EqualTo("Test"));
-        Assert.That(clone.Value, Is.EqualTo(42));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.Name).IsEqualTo("Test");
+        await Assert.That(clone.Value).IsEqualTo(42);
 
         // Delegates are shallow-copied: handlers are preserved as references
-        Assert.That(clone.HasPropertyChangedHandler, Is.True);
-        Assert.That(clone.HasPropertyChangingHandler, Is.True);
+        await Assert.That(clone.HasPropertyChangedHandler).IsTrue();
+        await Assert.That(clone.HasPropertyChangingHandler).IsTrue();
 
         // Mutating the clone triggers the original handlers (shared delegate reference)
         clone.Name = "Modified";
-        Assert.That(changedProps, Has.Count.EqualTo(1));
-        Assert.That(changingProps, Has.Count.EqualTo(1));
-        Assert.That(changedProps[0], Is.EqualTo("Name"));
-        Assert.That(changingProps[0], Is.EqualTo("Name"));
+        await Assert.That(changedProps).Count().IsEqualTo(1);
+        await Assert.That(changingProps).Count().IsEqualTo(1);
+        await Assert.That(changedProps[0]).IsEqualTo("Name");
+        await Assert.That(changingProps[0]).IsEqualTo("Name");
 
         for (int i = 0; i < 100; i++)
         {
             MvvmEntity rapidClone = original.DeepClone();
-            Assert.That(rapidClone.Name, Is.EqualTo("Test"));
-            Assert.That(rapidClone.HasPropertyChangedHandler, Is.True);
+            await Assert.That(rapidClone.Name).IsEqualTo("Test");
+            await Assert.That(rapidClone.HasPropertyChangedHandler).IsTrue();
         }
     }
 
     [Test]
-    public void Issue27_Clone_Entity_With_Ignored_EventHandlers_Nulls_Delegates()
+    [NotInParallel("FastClonerGlobalState")]
+    public async Task Issue27_Clone_Entity_With_Ignored_EventHandlers_Nulls_Delegates()
     {
         // Arrange - user opts to ignore event handler types (OP's preferred workaround)
         FastCloner.SetTypeBehavior<PropertyChangedEventHandler>(CloneBehavior.Ignore);
@@ -1783,15 +1878,15 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
             MvvmEntity clone = original.DeepClone();
 
             // Assert - handlers should be null on the clone
-            Assert.That(clone, Is.Not.Null);
-            Assert.That(clone.Name, Is.EqualTo("Test"));
-            Assert.That(clone.Value, Is.EqualTo(42));
-            Assert.That(clone.HasPropertyChangedHandler, Is.False, "Ignored delegate types should be null on clone");
-            Assert.That(clone.HasPropertyChangingHandler, Is.False, "Ignored delegate types should be null on clone");
+            await Assert.That(clone).IsNotNull();
+            await Assert.That(clone.Name).IsEqualTo("Test");
+            await Assert.That(clone.Value).IsEqualTo(42);
+            await Assert.That(clone.HasPropertyChangedHandler).IsFalse().Because("Ignored delegate types should be null on clone");
+            await Assert.That(clone.HasPropertyChangingHandler).IsFalse().Because("Ignored delegate types should be null on clone");
 
             // Original should still have its handlers
-            Assert.That(original.HasPropertyChangedHandler, Is.True);
-            Assert.That(original.HasPropertyChangingHandler, Is.True);
+            await Assert.That(original.HasPropertyChangedHandler).IsTrue();
+            await Assert.That(original.HasPropertyChangingHandler).IsTrue();
         }
         finally
         {
@@ -1801,7 +1896,8 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void Issue27_Clone_Entity_With_Ignored_EventHandlers_After_PreWarm_Nulls_Delegates()
+    [NotInParallel("FastClonerGlobalState")]
+    public async Task Issue27_Clone_Entity_With_Ignored_EventHandlers_After_PreWarm_Nulls_Delegates()
     {
         MvvmEntity original = new MvvmEntity { Name = "Test", Value = 42 };
         original.PropertyChanged += (sender, args) => { };
@@ -1809,8 +1905,8 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
 
         // Pre-warm clone delegates under default behavior before applying overrides.
         MvvmEntity baselineClone = original.DeepClone();
-        Assert.That(baselineClone.HasPropertyChangedHandler, Is.True);
-        Assert.That(baselineClone.HasPropertyChangingHandler, Is.True);
+        await Assert.That(baselineClone.HasPropertyChangedHandler).IsTrue();
+        await Assert.That(baselineClone.HasPropertyChangingHandler).IsTrue();
 
         FastCloner.SetTypeBehavior<PropertyChangedEventHandler>(CloneBehavior.Ignore);
         FastCloner.SetTypeBehavior<PropertyChangingEventHandler>(CloneBehavior.Ignore);
@@ -1818,9 +1914,9 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         try
         {
             MvvmEntity clone = original.DeepClone();
-            Assert.That(clone, Is.Not.Null);
-            Assert.That(clone.HasPropertyChangedHandler, Is.False, "Ignored delegate type should not remain from stale cache.");
-            Assert.That(clone.HasPropertyChangingHandler, Is.False, "Ignored delegate type should not remain from stale cache.");
+            await Assert.That(clone).IsNotNull();
+            await Assert.That(clone.HasPropertyChangedHandler).IsFalse().Because("Ignored delegate type should not remain from stale cache.");
+            await Assert.That(clone.HasPropertyChangingHandler).IsFalse().Because("Ignored delegate type should not remain from stale cache.");
         }
         finally
         {
@@ -1908,7 +2004,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void Dynamic_With_Delegate_Clone()
+    public async Task Dynamic_With_Delegate_Clone()
     {
         // Arrange
         dynamic original = new ExpandoObject();
@@ -1920,31 +2016,33 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         dynamic cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned.Name, Is.EqualTo("Test"), "String property should be copied");
+            await Assert.That((string)cloned.Name).IsEqualTo("Test").Because("String property should be copied");
 
             // Original delegate increments the shared counter
             int originalResult = original.Increment();
-            Assert.That(originalResult, Is.EqualTo(1), "Original delegate should increment counter");
-            Assert.That(counter, Is.EqualTo(1), "Counter should be 1");
+            await Assert.That(originalResult).IsEqualTo(1).Because("Original delegate should increment counter");
+            await Assert.That(counter).IsEqualTo(1).Because("Counter should be 1");
 
             // Delegates are shallow-copied, so cloned delegate shares the same closure
             int clonedResult = cloned.Increment();
-            Assert.That(clonedResult, Is.EqualTo(2), "Cloned delegate shares the same counter");
-            Assert.That(counter, Is.EqualTo(2), "Counter affected by both delegates");
+            await Assert.That(clonedResult).IsEqualTo(2).Because("Cloned delegate shares the same counter");
+            await Assert.That(counter).IsEqualTo(2).Because("Counter affected by both delegates");
 
             // Both continue on the same counter
             originalResult = original.Increment();
             clonedResult = cloned.Increment();
-            Assert.That(originalResult, Is.EqualTo(3), "Original delegate continues counting");
-            Assert.That(clonedResult, Is.EqualTo(4), "Cloned delegate continues on same counter");
-            Assert.That(counter, Is.EqualTo(4), "Counter affected by both delegates");
-        });
+            await Assert.That(originalResult).IsEqualTo(3).Because("Original delegate continues counting");
+            await Assert.That(clonedResult).IsEqualTo(4).Because("Cloned delegate continues on same counter");
+            await Assert.That(counter).IsEqualTo(4).Because("Counter affected by both delegates");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void ExpandoObject_With_Collection_Clone()
+    public async Task ExpandoObject_With_Collection_Clone()
     {
         // Arrange
         dynamic original = new ExpandoObject();
@@ -1955,18 +2053,20 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         dynamic cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned.List, Is.Not.SameAs(original.List), "List should be cloned");
-            Assert.That(cloned.List, Is.EquivalentTo(original.List), "List items should be copied");
-            Assert.That(cloned.Dictionary, Is.Not.SameAs(original.Dictionary), "Dictionary should be cloned");
-            Assert.That(cloned.Dictionary["Key1"], Is.EqualTo(1), "Dictionary values should be copied");
-            Assert.That(cloned.Dictionary["Key2"], Is.EqualTo(2), "Dictionary values should be copied");
-        });
+            await Assert.That((object?)cloned.List).IsNotSameReferenceAs((object?)original.List).Because("List should be cloned");
+            await Assert.That((IEnumerable<string>)cloned.List).IsEquivalentTo((IEnumerable<string>)original.List).Because("List items should be copied");
+            await Assert.That((object?)cloned.Dictionary).IsNotSameReferenceAs((object?)original.Dictionary).Because("Dictionary should be cloned");
+            await Assert.That((int)cloned.Dictionary["Key1"]).IsEqualTo(1).Because("Dictionary values should be copied");
+            await Assert.That((int)cloned.Dictionary["Key2"]).IsEqualTo(2).Because("Dictionary values should be copied");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void ReadOnlyDictionary_Clone_ShouldCreateNewInstance()
+    public async Task ReadOnlyDictionary_Clone_ShouldCreateNewInstance()
     {
         // Arrange
         Dictionary<string, int> originalDict = new Dictionary<string, int> { ["One"] = 1, ["Two"] = 2 };
@@ -1976,18 +2076,20 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         ReadOnlyDictionary<string, int>? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
-            Assert.That(cloned, Is.TypeOf<ReadOnlyDictionary<string, int>>(), "Should preserve type");
-            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
-            Assert.That(cloned["One"], Is.EqualTo(1), "Should preserve values");
-            Assert.That(cloned["Two"], Is.EqualTo(2), "Should preserve values");
-        });
+            await Assert.That(cloned).IsNotSameReferenceAs(original).Because("Should create new instance");
+            await Assert.That(cloned).IsTypeOf<ReadOnlyDictionary<string, int>>().Because("Should preserve type");
+            await Assert.That(cloned.Count).IsEqualTo(original.Count).Because("Should have same count");
+            await Assert.That(cloned["One"]).IsEqualTo(1).Because("Should preserve values");
+            await Assert.That(cloned["Two"]).IsEqualTo(2).Because("Should preserve values");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void IReadOnlyDictionary_Clone_ShouldCreateNewInstance()
+    public async Task IReadOnlyDictionary_Clone_ShouldCreateNewInstance()
     {
         // Arrange
         IReadOnlyDictionary<string, int> original =
@@ -1997,18 +2099,20 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         IReadOnlyDictionary<string, int>? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
-            Assert.That(cloned, Is.AssignableTo<IReadOnlyDictionary<string, int>>(), "Should preserve interface");
-            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
-            Assert.That(cloned["One"], Is.EqualTo(1), "Should preserve values");
-            Assert.That(cloned["Two"], Is.EqualTo(2), "Should preserve values");
-        });
+            await Assert.That(cloned).IsNotSameReferenceAs(original).Because("Should create new instance");
+            await Assert.That(cloned).IsAssignableTo<IReadOnlyDictionary<string, int>>().Because("Should preserve interface");
+            await Assert.That(cloned.Count).IsEqualTo(original.Count).Because("Should have same count");
+            await Assert.That(cloned["One"]).IsEqualTo(1).Because("Should preserve values");
+            await Assert.That(cloned["Two"]).IsEqualTo(2).Because("Should preserve values");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void IReadOnlySet_Clone_ShouldCreateNewInstance()
+    public async Task IReadOnlySet_Clone_ShouldCreateNewInstance()
     {
         // Arrange
         IReadOnlySet<string> original = new HashSet<string> { "One", "Two", "Three" }.AsReadOnly();
@@ -2017,19 +2121,21 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         IReadOnlySet<string>? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
-            Assert.That(cloned, Is.AssignableTo<IReadOnlySet<string>>(), "Should preserve interface");
-            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
-            Assert.That(cloned.Contains("One"), Is.True, "Should contain original elements");
-            Assert.That(cloned.Contains("Two"), Is.True, "Should contain original elements");
-            Assert.That(cloned.Contains("Three"), Is.True, "Should contain original elements");
-        });
+            await Assert.That(cloned).IsNotSameReferenceAs(original).Because("Should create new instance");
+            await Assert.That(cloned).IsAssignableTo<IReadOnlySet<string>>().Because("Should preserve interface");
+            await Assert.That(cloned.Count).IsEqualTo(original.Count).Because("Should have same count");
+            await Assert.That(cloned.Contains("One")).IsTrue().Because("Should contain original elements");
+            await Assert.That(cloned.Contains("Two")).IsTrue().Because("Should contain original elements");
+            await Assert.That(cloned.Contains("Three")).IsTrue().Because("Should contain original elements");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void IReadOnlySet_IsSubsetOf_ShouldWorkCorrectly()
+    public async Task IReadOnlySet_IsSubsetOf_ShouldWorkCorrectly()
     {
         // Arrange
         IReadOnlySet<int> original = new HashSet<int> { 1, 2 }.AsReadOnly();
@@ -2037,16 +2143,18 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         IReadOnlySet<int> nonSuperSet = new HashSet<int> { 1, 4 }.AsReadOnly();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(original.IsSubsetOf(superSet), Is.True, "Should be subset of superset");
-            Assert.That(original.IsSubsetOf(nonSuperSet), Is.False, "Should not be subset of non-superset");
-            Assert.That(original.IsSubsetOf(original), Is.True, "Should be subset of itself");
-        });
+            await Assert.That(original.IsSubsetOf(superSet)).IsTrue().Because("Should be subset of superset");
+            await Assert.That(original.IsSubsetOf(nonSuperSet)).IsFalse().Because("Should not be subset of non-superset");
+            await Assert.That(original.IsSubsetOf(original)).IsTrue().Because("Should be subset of itself");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void IReadOnlySet_Overlaps_ShouldWorkCorrectly()
+    public async Task IReadOnlySet_Overlaps_ShouldWorkCorrectly()
     {
         // Arrange
         IReadOnlySet<char> setA = new HashSet<char> { 'a', 'b', 'c' }.AsReadOnly();
@@ -2054,16 +2162,18 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         IReadOnlySet<char> setC = new HashSet<char> { 'x', 'y', 'z' }.AsReadOnly();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(setA.Overlaps(setB), Is.True, "Sets with common elements should overlap");
-            Assert.That(setA.Overlaps(setC), Is.False, "Sets without common elements should not overlap");
-            Assert.That(setA.Overlaps(setA), Is.True, "Set should overlap with itself");
-        });
+            await Assert.That(setA.Overlaps(setB)).IsTrue().Because("Sets with common elements should overlap");
+            await Assert.That(setA.Overlaps(setC)).IsFalse().Because("Sets without common elements should not overlap");
+            await Assert.That(setA.Overlaps(setA)).IsTrue().Because("Set should overlap with itself");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Stack_DeepClone_ShouldCreateNewInstance()
+    public async Task Stack_DeepClone_ShouldCreateNewInstance()
     {
         // Arrange
         Stack<string> original = new Stack<string>();
@@ -2075,22 +2185,24 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Stack<string>? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
-            Assert.That(cloned, Is.AssignableTo<Stack<string>>(), "Should preserve type");
-            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
+            await Assert.That(cloned).IsNotSameReferenceAs(original).Because("Should create new instance");
+            await Assert.That(cloned).IsAssignableTo<Stack<string>>().Because("Should preserve type");
+            await Assert.That(cloned.Count).IsEqualTo(original.Count).Because("Should have same count");
 
             // Verify stack order by popping elements
-            Assert.That(cloned.Pop(), Is.EqualTo("Three"), "Top element should be preserved");
-            Assert.That(cloned.Pop(), Is.EqualTo("Two"), "Second element should be preserved");
-            Assert.That(cloned.Pop(), Is.EqualTo("One"), "Bottom element should be preserved");
-            Assert.That(cloned.Count, Is.EqualTo(0), "Should be empty after popping all elements");
-        });
+            await Assert.That(cloned.Pop()).IsEqualTo("Three").Because("Top element should be preserved");
+            await Assert.That(cloned.Pop()).IsEqualTo("Two").Because("Second element should be preserved");
+            await Assert.That(cloned.Pop()).IsEqualTo("One").Because("Bottom element should be preserved");
+            await Assert.That(cloned.Count).IsEqualTo(0).Because("Should be empty after popping all elements");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Stack_DeepClone_WithComplexObjects_ShouldCreateDeepCopy()
+    public async Task Stack_DeepClone_WithComplexObjects_ShouldCreateDeepCopy()
     {
         // Arrange
         Person complexObj1 = new Person { Name = "Alice", Age = 30 };
@@ -2108,25 +2220,27 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         complexObj2.Age = 26;
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
+            await Assert.That(cloned).IsNotSameReferenceAs(original).Because("Should create new instance");
 
             Person topCloned = cloned.Pop();
             Person bottomCloned = cloned.Pop();
 
-            Assert.That(topCloned, Is.Not.SameAs(complexObj2), "Should create new object instances");
-            Assert.That(bottomCloned, Is.Not.SameAs(complexObj1), "Should create new object instances");
+            await Assert.That(topCloned).IsNotSameReferenceAs(complexObj2).Because("Should create new object instances");
+            await Assert.That(bottomCloned).IsNotSameReferenceAs(complexObj1).Because("Should create new object instances");
 
-            Assert.That(topCloned.Name, Is.EqualTo("Bob"), "Cloned objects should not reflect changes to original");
-            Assert.That(topCloned.Age, Is.EqualTo(25), "Cloned objects should not reflect changes to original");
-            Assert.That(bottomCloned.Name, Is.EqualTo("Alice"), "Cloned objects should not reflect changes to original");
-            Assert.That(bottomCloned.Age, Is.EqualTo(30), "Cloned objects should not reflect changes to original");
-        });
+            await Assert.That(topCloned.Name).IsEqualTo("Bob").Because("Cloned objects should not reflect changes to original");
+            await Assert.That(topCloned.Age).IsEqualTo(25).Because("Cloned objects should not reflect changes to original");
+            await Assert.That(bottomCloned.Name).IsEqualTo("Alice").Because("Cloned objects should not reflect changes to original");
+            await Assert.That(bottomCloned.Age).IsEqualTo(30).Because("Cloned objects should not reflect changes to original");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void ImmutableList_DeepClone_ShouldCreateNewInstance()
+    public async Task ImmutableList_DeepClone_ShouldCreateNewInstance()
     {
         // Arrange
         ImmutableList<string> original = ImmutableList.Create("One", "Two", "Three");
@@ -2135,27 +2249,29 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         ImmutableList<string>? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
-            Assert.That(cloned, Is.AssignableTo<ImmutableList<string>>(), "Should preserve type");
-            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
+            await Assert.That(cloned).IsNotSameReferenceAs(original).Because("Should create new instance");
+            await Assert.That(cloned).IsAssignableTo<ImmutableList<string>>().Because("Should preserve type");
+            await Assert.That(cloned.Count).IsEqualTo(original.Count).Because("Should have same count");
 
             // Verify elements and order
-            Assert.That(cloned[0], Is.EqualTo("One"), "First element should be preserved");
-            Assert.That(cloned[1], Is.EqualTo("Two"), "Second element should be preserved");
-            Assert.That(cloned[2], Is.EqualTo("Three"), "Third element should be preserved");
+            await Assert.That(cloned[0]).IsEqualTo("One").Because("First element should be preserved");
+            await Assert.That(cloned[1]).IsEqualTo("Two").Because("Second element should be preserved");
+            await Assert.That(cloned[2]).IsEqualTo("Three").Because("Third element should be preserved");
 
             // Verify immutability behavior
             ImmutableList<string> newList = cloned.Add("Four");
-            Assert.That(cloned.Count, Is.EqualTo(3), "Original cloned list should remain unchanged after add");
-            Assert.That(newList.Count, Is.EqualTo(4), "New list should contain added element");
-            Assert.That(newList[3], Is.EqualTo("Four"), "New list should have correct added element");
-        });
+            await Assert.That(cloned.Count).IsEqualTo(3).Because("Original cloned list should remain unchanged after add");
+            await Assert.That(newList.Count).IsEqualTo(4).Because("New list should contain added element");
+            await Assert.That(newList[3]).IsEqualTo("Four").Because("New list should have correct added element");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void ImmutableHashSet_DeepClone_ShouldPreserveSetOperations()
+    public async Task ImmutableHashSet_DeepClone_ShouldPreserveSetOperations()
     {
         // Arrange
         ImmutableHashSet<int> original = ImmutableHashSet.Create(1, 2, 3, 4, 5);
@@ -2164,45 +2280,47 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         ImmutableHashSet<int>? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
-            Assert.That(cloned, Is.AssignableTo<ImmutableHashSet<int>>(), "Should preserve type");
-            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
+            await Assert.That(cloned).IsNotSameReferenceAs(original).Because("Should create new instance");
+            await Assert.That(cloned).IsAssignableTo<ImmutableHashSet<int>>().Because("Should preserve type");
+            await Assert.That(cloned.Count).IsEqualTo(original.Count).Because("Should have same count");
 
             // Verify elements
             foreach (int item in original)
             {
-                Assert.That(cloned.Contains(item), Is.True, $"Cloned set should contain {item}");
+                await Assert.That(cloned.Contains(item)).IsTrue().Because($"Cloned set should contain {item}");
             }
 
             // Verify set operations work correctly
             ImmutableHashSet<int> otherSet = ImmutableHashSet.Create(4, 5, 6, 7);
 
             ImmutableHashSet<int> intersection = cloned.Intersect(otherSet);
-            Assert.That(intersection.Count, Is.EqualTo(2), "Intersection should have correct count");
-            Assert.That(intersection.Contains(4), Is.True, "Intersection should contain common elements");
-            Assert.That(intersection.Contains(5), Is.True, "Intersection should contain common elements");
+            await Assert.That(intersection.Count).IsEqualTo(2).Because("Intersection should have correct count");
+            await Assert.That(intersection.Contains(4)).IsTrue().Because("Intersection should contain common elements");
+            await Assert.That(intersection.Contains(5)).IsTrue().Because("Intersection should contain common elements");
 
             ImmutableHashSet<int> union = cloned.Union(otherSet);
-            Assert.That(union.Count, Is.EqualTo(7), "Union should have correct count");
+            await Assert.That(union.Count).IsEqualTo(7).Because("Union should have correct count");
             for (int i = 1; i <= 7; i++)
             {
-                Assert.That(union.Contains(i), Is.True, $"Union should contain {i}");
+                await Assert.That(union.Contains(i)).IsTrue().Because($"Union should contain {i}");
             }
 
             ImmutableHashSet<int> except = cloned.Except(otherSet);
-            Assert.That(except.Count, Is.EqualTo(3), "Except should have correct count");
-            Assert.That(except.Contains(1), Is.True, "Except should contain non-common elements");
-            Assert.That(except.Contains(2), Is.True, "Except should contain non-common elements");
-            Assert.That(except.Contains(3), Is.True, "Except should contain non-common elements");
+            await Assert.That(except.Count).IsEqualTo(3).Because("Except should have correct count");
+            await Assert.That(except.Contains(1)).IsTrue().Because("Except should contain non-common elements");
+            await Assert.That(except.Contains(2)).IsTrue().Because("Except should contain non-common elements");
+            await Assert.That(except.Contains(3)).IsTrue().Because("Except should contain non-common elements");
 
             // Verify immutability behavior
             ImmutableHashSet<int> newSet = cloned.Add(6);
-            Assert.That(cloned.Count, Is.EqualTo(5), "Original cloned set should remain unchanged after add");
-            Assert.That(newSet.Count, Is.EqualTo(6), "New set should contain added element");
-            Assert.That(newSet.Contains(6), Is.True, "New set should have correct added element");
-        });
+            await Assert.That(cloned.Count).IsEqualTo(5).Because("Original cloned set should remain unchanged after add");
+            await Assert.That(newSet.Count).IsEqualTo(6).Because("New set should contain added element");
+            await Assert.That(newSet.Contains(6)).IsTrue().Because("New set should have correct added element");
+
+            // Assert
+        }
     }
 
     class EventPropertyNotifyChangedCls
@@ -2237,7 +2355,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void CloneJsonNode()
+    public async Task CloneJsonNode()
     {
         // Arrange
         MyJsonNodeClass original = new MyJsonNodeClass
@@ -2254,13 +2372,15 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         ((JsonObject)clone.Config!)["a"] = 999;
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone, Is.Not.SameAs(original), "Clone should be a different instance");
-            Assert.That(clone.Name, Is.EqualTo(original.Name), "Name should be copied");
-            Assert.That(clone.Config, Is.Not.SameAs(original.Config), "Config should be a different instance");
-            Assert.That(((JsonObject)original.Config!)["a"]!.GetValue<int>(), Is.EqualTo(1), "Original config should remain unchanged");
-        });
+            await Assert.That(clone).IsNotSameReferenceAs(original).Because("Clone should be a different instance");
+            await Assert.That(clone.Name).IsEqualTo(original.Name).Because("Name should be copied");
+            await Assert.That(clone.Config).IsNotSameReferenceAs(original.Config).Because("Config should be a different instance");
+            await Assert.That(((JsonObject)original.Config!)["a"]!.GetValue<int>()).IsEqualTo(1).Because("Original config should remain unchanged");
+
+            // Assert
+        }
     }
     
     public class DictionaryWithNonOptionalCtor : Dictionary<string, string>
@@ -2274,7 +2394,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void DictionaryWithNonOptionalConstructor_ShouldFallbackToMemberwiseClone()
+    public async Task DictionaryWithNonOptionalConstructor_ShouldFallbackToMemberwiseClone()
     {
         // Arrange
         DictionaryWithNonOptionalCtor original = new DictionaryWithNonOptionalCtor(42)
@@ -2288,19 +2408,21 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         clone["key1"] = "value3";
         
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone, Is.Not.SameAs(original), "Should create new instance");
-            Assert.That(clone, Is.AssignableTo<DictionaryWithNonOptionalCtor>(), "Should preserve type");
-            Assert.That(clone.Count, Is.EqualTo(original.Count), "Should preserve count");
-            Assert.That(clone["key1"], Is.EqualTo("value3"), "Should preserve values");
-            Assert.That(clone["key2"], Is.EqualTo("value2"), "Should preserve values");
-            Assert.That(original["key1"], Is.EqualTo("value1"), "Should not affect original value");
-        });
+            await Assert.That(clone).IsNotSameReferenceAs(original).Because("Should create new instance");
+            await Assert.That(clone).IsAssignableTo<DictionaryWithNonOptionalCtor>().Because("Should preserve type");
+            await Assert.That(clone.Count).IsEqualTo(original.Count).Because("Should preserve count");
+            await Assert.That(clone["key1"]).IsEqualTo("value3").Because("Should preserve values");
+            await Assert.That(clone["key2"]).IsEqualTo("value2").Because("Should preserve values");
+            await Assert.That(original["key1"]).IsEqualTo("value1").Because("Should not affect original value");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void CloneAllJsonNodeTypes()
+    public async Task CloneAllJsonNodeTypes()
     {
         // Test JsonObject
         JsonObject originalObject = new JsonObject
@@ -2314,35 +2436,38 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         JsonNode clonedObject = originalObject.DeepClone();
         ((JsonObject)clonedObject)["string"] = "modified";
 
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clonedObject, Is.Not.SameAs(originalObject), "JsonObject should be deep cloned");
-            Assert.That(((JsonObject)originalObject)["string"]!.GetValue<string>(), Is.EqualTo("test"), "Original JsonObject should remain unchanged");
-            Assert.That(((JsonObject)clonedObject)["string"]!.GetValue<string>(), Is.EqualTo("modified"), "Cloned JsonObject should be modified");
-        });
+            await Assert.That(clonedObject).IsNotSameReferenceAs(originalObject).Because("JsonObject should be deep cloned");
+            await Assert.That(((JsonObject)originalObject)["string"]!.GetValue<string>()).IsEqualTo("test").Because("Original JsonObject should remain unchanged");
+            await Assert.That(((JsonObject)clonedObject)["string"]!.GetValue<string>()).IsEqualTo("modified").Because("Cloned JsonObject should be modified");
+
+        }
 
         // Test JsonArray
-        JsonArray originalArray = new JsonArray { "item1", "item2", "item3" };
+        JsonArray originalArray = ["item1", "item2", "item3"];
         JsonNode clonedArray = originalArray.DeepClone();
         clonedArray[0] = "modified";
 
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clonedArray, Is.Not.SameAs(originalArray), "JsonArray should be deep cloned");
-            Assert.That(originalArray[0]!.GetValue<string>(), Is.EqualTo("item1"), "Original JsonArray should remain unchanged");
-            Assert.That(clonedArray[0]!.GetValue<string>(), Is.EqualTo("modified"), "Cloned JsonArray should be modified");
-        });
+            await Assert.That(clonedArray).IsNotSameReferenceAs(originalArray).Because("JsonArray should be deep cloned");
+            await Assert.That(originalArray[0]!.GetValue<string>()).IsEqualTo("item1").Because("Original JsonArray should remain unchanged");
+            await Assert.That(clonedArray[0]!.GetValue<string>()).IsEqualTo("modified").Because("Cloned JsonArray should be modified");
+
+        }
 
         // Test JsonValue
         JsonValue originalValue = JsonValue.Create("test value");
         JsonNode clonedValue = originalValue.DeepClone();
 
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clonedValue, Is.Not.SameAs(originalValue), "JsonValue should be deep cloned");
-            Assert.That(originalValue!.GetValue<string>(), Is.EqualTo("test value"), "Original JsonValue should remain unchanged");
-            Assert.That(clonedValue!.GetValue<string>(), Is.EqualTo("test value"), "Cloned JsonValue should have same value");
-        });
+            await Assert.That(clonedValue).IsNotSameReferenceAs(originalValue).Because("JsonValue should be deep cloned");
+            await Assert.That(originalValue!.GetValue<string>()).IsEqualTo("test value").Because("Original JsonValue should remain unchanged");
+            await Assert.That(clonedValue!.GetValue<string>()).IsEqualTo("test value").Because("Cloned JsonValue should have same value");
+
+        }
 
         // Test nested structure
         JsonObject nestedOriginal = new JsonObject
@@ -2355,18 +2480,19 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         ((JsonArray)nestedClone["array"]!)[0] = 999;
         ((JsonObject)nestedClone["object"]!)["nested"] = "modified";
 
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(nestedClone, Is.Not.SameAs(nestedOriginal), "Nested JsonNode should be deep cloned");
-            Assert.That(((JsonArray)nestedOriginal["array"]!)[0]!.GetValue<int>(), Is.EqualTo(1), "Original nested array should remain unchanged");
-            Assert.That(((JsonArray)nestedClone["array"]!)[0]!.GetValue<int>(), Is.EqualTo(999), "Cloned nested array should be modified");
-            Assert.That(((JsonObject)nestedOriginal["object"]!)["nested"]!.GetValue<string>(), Is.EqualTo("value"), "Original nested object should remain unchanged");
-            Assert.That(((JsonObject)nestedClone["object"]!)["nested"]!.GetValue<string>(), Is.EqualTo("modified"), "Cloned nested object should be modified");
-        });
+            await Assert.That(nestedClone).IsNotSameReferenceAs(nestedOriginal).Because("Nested JsonNode should be deep cloned");
+            await Assert.That(((JsonArray)nestedOriginal["array"]!)[0]!.GetValue<int>()).IsEqualTo(1).Because("Original nested array should remain unchanged");
+            await Assert.That(((JsonArray)nestedClone["array"]!)[0]!.GetValue<int>()).IsEqualTo(999).Because("Cloned nested array should be modified");
+            await Assert.That(((JsonObject)nestedOriginal["object"]!)["nested"]!.GetValue<string>()).IsEqualTo("value").Because("Original nested object should remain unchanged");
+            await Assert.That(((JsonObject)nestedClone["object"]!)["nested"]!.GetValue<string>()).IsEqualTo("modified").Because("Cloned nested object should be modified");
+
+        }
     }
 
     [Test]
-    public void JsonNodeReflectionCaching_ShouldCacheProcessors()
+    public async Task JsonNodeReflectionCaching_ShouldCacheProcessors()
     {
         JsonObject original = new JsonObject { ["test"] = "value" };
 
@@ -2379,41 +2505,43 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         // Third clone - should also use the cached processor
         JsonNode clone3 = original.DeepClone();
 
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone1, Is.Not.SameAs(original), "First clone should be different instance");
-            Assert.That(clone2, Is.Not.SameAs(original), "Second clone should be different instance");
-            Assert.That(clone3, Is.Not.SameAs(original), "Third clone should be different instance");
-            Assert.That(clone1, Is.Not.SameAs(clone2), "Clones should be different from each other");
-            Assert.That(clone2, Is.Not.SameAs(clone3), "Clones should be different from each other");
-        });
+            await Assert.That(clone1).IsNotSameReferenceAs(original).Because("First clone should be different instance");
+            await Assert.That(clone2).IsNotSameReferenceAs(original).Because("Second clone should be different instance");
+            await Assert.That(clone3).IsNotSameReferenceAs(original).Because("Third clone should be different instance");
+            await Assert.That(clone1).IsNotSameReferenceAs(clone2).Because("Clones should be different from each other");
+            await Assert.That(clone2).IsNotSameReferenceAs(clone3).Because("Clones should be different from each other");
+
+        }
     }
 
     [Test]
-    public void JsonNodeFullNameIsNull()
+    public async Task JsonNodeFullNameIsNull()
     {
         JsonNode node = new JsonObject { ["test"] = "value" };
 
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(node.GetType().FullName, Is.EqualTo("System.Text.Json.Nodes.JsonObject"), "JsonObject has a FullName");
-            Assert.That(FastClonerSafeTypes.CanReturnSameObject(node.GetType()), Is.False, "JsonObject should not be considered a safe type");
+            await Assert.That(node.GetType().FullName).IsEqualTo("System.Text.Json.Nodes.JsonObject").Because("JsonObject has a FullName");
+            await Assert.That(FastClonerSafeTypes.CanReturnSameObject(node.GetType())).IsFalse().Because("JsonObject should not be considered a safe type");
 
             Type jsonNodeType = typeof(JsonNode);
-            Assert.That(jsonNodeType.FullName, Is.EqualTo("System.Text.Json.Nodes.JsonNode"), "JsonNode has a FullName");
-            Assert.That(FastClonerSafeTypes.CanReturnSameObject(jsonNodeType), Is.False, "JsonNode should not be considered a safe type");
-        });
+            await Assert.That(jsonNodeType.FullName).IsEqualTo("System.Text.Json.Nodes.JsonNode").Because("JsonNode has a FullName");
+            await Assert.That(FastClonerSafeTypes.CanReturnSameObject(jsonNodeType)).IsFalse().Because("JsonNode should not be considered a safe type");
+
+        }
     }
 
     [Test]
-    public void CloneSimpleInt()
+    public async Task CloneSimpleInt()
     {
         int i = 42.DeepClone();
-        Assert.That(i, Is.EqualTo(42));
+        await Assert.That(i).IsEqualTo(42);
     }
 
     [Test]
-    public void StructMembersIgnoreNullable()
+    public async Task StructMembersIgnoreNullable()
     {
         // Arrange
         ClonerIgnoreStructTestNullable inst = new ClonerIgnoreStructTestNullable
@@ -2425,11 +2553,11 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         ClonerIgnoreStructTestNullable cloned = inst.DeepClone();
 
         // Assert
-        Assert.That(cloned.MyInt, Is.EqualTo(null), "Should ignore the field");
+        await Assert.That(cloned.MyInt).IsNull().Because("Should ignore the field");
     }
 
     [Test]
-    public void StructMembersIgnore()
+    public async Task StructMembersIgnore()
     {
         // Arrange
         ClonerIgnoreStructTest inst = new ClonerIgnoreStructTest
@@ -2441,11 +2569,11 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         ClonerIgnoreStructTest cloned = inst.DeepClone();
 
         // Assert
-        Assert.That(cloned.MyInt, Is.EqualTo(0), "Should ignore the field");
+        await Assert.That(cloned.MyInt).IsEqualTo(0).Because("Should ignore the field");
     }
 
     [Test]
-    public void EventPropertyNotifyChangedIgnore()
+    public async Task EventPropertyNotifyChangedIgnore()
     {
         // Arrange
         EventPropertyNotifyChangedCls cls = new EventPropertyNotifyChangedCls();
@@ -2454,18 +2582,20 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         EventPropertyNotifyChangedCls cloned = cls.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(cls), "Should create new instance");
-            Assert.That(cls.HasPropertyChangedSubscribers(), Is.True, "Original should have event subscribers");
-            Assert.That(cloned.HasPropertyChangedSubscribers(), Is.False, "Ignored event should be null after cloning");
-            Assert.That(cloned.TestList, Is.Not.SameAs(cls.TestList), "TestList should be deep cloned");
-            Assert.That(cloned.TestList, Is.EqualTo(cls.TestList), "TestList content should be preserved");
-        });
+            await Assert.That(cloned).IsNotSameReferenceAs(cls).Because("Should create new instance");
+            await Assert.That(cls.HasPropertyChangedSubscribers()).IsTrue().Because("Original should have event subscribers");
+            await Assert.That(cloned.HasPropertyChangedSubscribers()).IsFalse().Because("Ignored event should be null after cloning");
+            await Assert.That(cloned.TestList).IsNotSameReferenceAs(cls.TestList).Because("TestList should be deep cloned");
+            await Assert.That(cloned.TestList).IsEquivalentTo(cls.TestList).Because("TestList content should be preserved");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void ImmutableDictionary_DeepClone_WithComplexObjects_ShouldCreateDeepCopy()
+    public async Task ImmutableDictionary_DeepClone_WithComplexObjects_ShouldCreateDeepCopy()
     {
         // Arrange
         Person complexObj1 = new Person { Name = "Alice", Age = 30 };
@@ -2485,35 +2615,37 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         complexObj2.Age = 26;
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
-            Assert.That(cloned, Is.AssignableTo<ImmutableDictionary<string, Person>>(), "Should preserve type");
-            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
+            await Assert.That(cloned).IsNotSameReferenceAs(original).Because("Should create new instance");
+            await Assert.That(cloned).IsAssignableTo<ImmutableDictionary<string, Person>>().Because("Should preserve type");
+            await Assert.That(cloned.Count).IsEqualTo(original.Count).Because("Should have same count");
 
             // Verify keys are preserved
-            Assert.That(cloned.ContainsKey("person1"), Is.True, "Should contain original keys");
-            Assert.That(cloned.ContainsKey("person2"), Is.True, "Should contain original keys");
+            await Assert.That(cloned.ContainsKey("person1")).IsTrue().Because("Should contain original keys");
+            await Assert.That(cloned.ContainsKey("person2")).IsTrue().Because("Should contain original keys");
 
             // Verify key lookup works correctly
             bool person1Found = cloned.TryGetValue("person1", out Person person1Value);
             bool person2Found = cloned.TryGetValue("person2", out Person person2Value);
 
-            Assert.That(person1Found, Is.True, "Should be able to retrieve value by key");
-            Assert.That(person2Found, Is.True, "Should be able to retrieve value by key");
-            Assert.That(person1Value.Name, Is.EqualTo("Alice"), "Retrieved value should have correct properties");
-            Assert.That(person2Value.Name, Is.EqualTo("Bob"), "Retrieved value should have correct properties");
+            await Assert.That(person1Found).IsTrue().Because("Should be able to retrieve value by key");
+            await Assert.That(person2Found).IsTrue().Because("Should be able to retrieve value by key");
+            await Assert.That(person1Value.Name).IsEqualTo("Alice").Because("Retrieved value should have correct properties");
+            await Assert.That(person2Value.Name).IsEqualTo("Bob").Because("Retrieved value should have correct properties");
 
             Person newPerson = new Person { Name = "Charlie", Age = 35 };
             ImmutableDictionary<string, Person> newDict = cloned.Add("person3", newPerson);
-            Assert.That(cloned.Count, Is.EqualTo(2), "Original cloned dictionary should remain unchanged after add");
-            Assert.That(newDict.Count, Is.EqualTo(3), "New dictionary should contain added element");
-            Assert.That(newDict["person3"].Name, Is.EqualTo("Charlie"), "New dictionary should have correct added element");
-        });
+            await Assert.That(cloned.Count).IsEqualTo(2).Because("Original cloned dictionary should remain unchanged after add");
+            await Assert.That(newDict.Count).IsEqualTo(3).Because("New dictionary should contain added element");
+            await Assert.That(newDict["person3"].Name).IsEqualTo("Charlie").Because("New dictionary should have correct added element");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void ConcurrentStack_DeepClone_ShouldCreateNewInstance()
+    public async Task ConcurrentStack_DeepClone_ShouldCreateNewInstance()
     {
         // Arrange
         ConcurrentStack<string> original = new ConcurrentStack<string>();
@@ -2525,29 +2657,31 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         ConcurrentStack<string>? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
-            Assert.That(cloned, Is.AssignableTo<ConcurrentStack<string>>(), "Should preserve type");
-            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
+            await Assert.That(cloned).IsNotSameReferenceAs(original).Because("Should create new instance");
+            await Assert.That(cloned).IsAssignableTo<ConcurrentStack<string>>().Because("Should preserve type");
+            await Assert.That(cloned.Count).IsEqualTo(original.Count).Because("Should have same count");
 
             // Verify stack order by popping elements
             string[] clonedItems = new string[3];
             bool success = cloned.TryPopRange(clonedItems, 0, 3) == 3;
-            Assert.That(success, Is.True, "Should be able to pop all elements");
+            await Assert.That(success).IsTrue().Because("Should be able to pop all elements");
 
-            Assert.That(clonedItems[0], Is.EqualTo("Three"), "Top element should be preserved");
-            Assert.That(clonedItems[1], Is.EqualTo("Two"), "Second element should be preserved");
-            Assert.That(clonedItems[2], Is.EqualTo("One"), "Bottom element should be preserved");
-            Assert.That(cloned.Count, Is.EqualTo(0), "Should be empty after popping all elements");
+            await Assert.That(clonedItems[0]).IsEqualTo("Three").Because("Top element should be preserved");
+            await Assert.That(clonedItems[1]).IsEqualTo("Two").Because("Second element should be preserved");
+            await Assert.That(clonedItems[2]).IsEqualTo("One").Because("Bottom element should be preserved");
+            await Assert.That(cloned.Count).IsEqualTo(0).Because("Should be empty after popping all elements");
 
             // Verify original stack is unchanged
-            Assert.That(original.Count, Is.EqualTo(3), "Original stack should remain unchanged");
-        });
+            await Assert.That(original.Count).IsEqualTo(3).Because("Original stack should remain unchanged");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void ConcurrentQueue_DeepClone_WithComplexObjects_ShouldCreateDeepCopy()
+    public async Task ConcurrentQueue_DeepClone_WithComplexObjects_ShouldCreateDeepCopy()
     {
         // Arrange
         Person complexObj1 = new Person { Name = "Eve", Age = 32 };
@@ -2565,35 +2699,37 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         complexObj2.Age = 28;
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
-            Assert.That(cloned, Is.AssignableTo<ConcurrentQueue<Person>>(), "Should preserve type");
-            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
+            await Assert.That(cloned).IsNotSameReferenceAs(original).Because("Should create new instance");
+            await Assert.That(cloned).IsAssignableTo<ConcurrentQueue<Person>>().Because("Should preserve type");
+            await Assert.That(cloned.Count).IsEqualTo(original.Count).Because("Should have same count");
 
             Person firstCloned, secondCloned;
             bool firstSuccess = cloned.TryDequeue(out firstCloned);
             bool secondSuccess = cloned.TryDequeue(out secondCloned);
 
-            Assert.That(firstSuccess, Is.True, "Should be able to dequeue first element");
-            Assert.That(secondSuccess, Is.True, "Should be able to dequeue second element");
+            await Assert.That(firstSuccess).IsTrue().Because("Should be able to dequeue first element");
+            await Assert.That(secondSuccess).IsTrue().Because("Should be able to dequeue second element");
 
-            Assert.That(firstCloned, Is.Not.SameAs(complexObj1), "Should create new object instances");
-            Assert.That(secondCloned, Is.Not.SameAs(complexObj2), "Should create new object instances");
+            await Assert.That(firstCloned).IsNotSameReferenceAs(complexObj1).Because("Should create new object instances");
+            await Assert.That(secondCloned).IsNotSameReferenceAs(complexObj2).Because("Should create new object instances");
 
-            Assert.That(firstCloned.Name, Is.EqualTo("Eve"), "Cloned objects should not reflect changes to original");
-            Assert.That(firstCloned.Age, Is.EqualTo(32), "Cloned objects should not reflect changes to original");
-            Assert.That(secondCloned.Name, Is.EqualTo("Frank"), "Cloned objects should not reflect changes to original");
-            Assert.That(secondCloned.Age, Is.EqualTo(27), "Cloned objects should not reflect changes to original");
+            await Assert.That(firstCloned.Name).IsEqualTo("Eve").Because("Cloned objects should not reflect changes to original");
+            await Assert.That(firstCloned.Age).IsEqualTo(32).Because("Cloned objects should not reflect changes to original");
+            await Assert.That(secondCloned.Name).IsEqualTo("Frank").Because("Cloned objects should not reflect changes to original");
+            await Assert.That(secondCloned.Age).IsEqualTo(27).Because("Cloned objects should not reflect changes to original");
 
             // Verify original queue is unchanged
-            Assert.That(original.Count, Is.EqualTo(2), "Original queue should remain unchanged");
-        });
+            await Assert.That(original.Count).IsEqualTo(2).Because("Original queue should remain unchanged");
+
+            // Assert
+        }
     }
 
 
     [Test]
-    public void Queue_DeepClone_ShouldCreateNewInstance()
+    public async Task Queue_DeepClone_ShouldCreateNewInstance()
     {
         // Arrange
         Queue<string> original = new Queue<string>();
@@ -2605,22 +2741,24 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Queue<string>? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
-            Assert.That(cloned, Is.AssignableTo<Queue<string>>(), "Should preserve type");
-            Assert.That(cloned.Count, Is.EqualTo(original.Count), "Should have same count");
+            await Assert.That(cloned).IsNotSameReferenceAs(original).Because("Should create new instance");
+            await Assert.That(cloned).IsAssignableTo<Queue<string>>().Because("Should preserve type");
+            await Assert.That(cloned.Count).IsEqualTo(original.Count).Because("Should have same count");
 
             // Verify queue order by dequeuing elements
-            Assert.That(cloned.Dequeue(), Is.EqualTo("One"), "First element should be preserved");
-            Assert.That(cloned.Dequeue(), Is.EqualTo("Two"), "Second element should be preserved");
-            Assert.That(cloned.Dequeue(), Is.EqualTo("Three"), "Last element should be preserved");
-            Assert.That(cloned.Count, Is.EqualTo(0), "Should be empty after dequeuing all elements");
-        });
+            await Assert.That(cloned.Dequeue()).IsEqualTo("One").Because("First element should be preserved");
+            await Assert.That(cloned.Dequeue()).IsEqualTo("Two").Because("Second element should be preserved");
+            await Assert.That(cloned.Dequeue()).IsEqualTo("Three").Because("Last element should be preserved");
+            await Assert.That(cloned.Count).IsEqualTo(0).Because("Should be empty after dequeuing all elements");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Queue_DeepClone_WithComplexObjects_ShouldCreateDeepCopy()
+    public async Task Queue_DeepClone_WithComplexObjects_ShouldCreateDeepCopy()
     {
         // Arrange
         Person complexObj1 = new Person { Name = "Charlie", Age = 35 };
@@ -2638,25 +2776,27 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         complexObj2.Age = 29;
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
+            await Assert.That(cloned).IsNotSameReferenceAs(original).Because("Should create new instance");
 
             Person firstCloned = cloned.Dequeue();
             Person secondCloned = cloned.Dequeue();
 
-            Assert.That(firstCloned, Is.Not.SameAs(complexObj1), "Should create new object instances");
-            Assert.That(secondCloned, Is.Not.SameAs(complexObj2), "Should create new object instances");
+            await Assert.That(firstCloned).IsNotSameReferenceAs(complexObj1).Because("Should create new object instances");
+            await Assert.That(secondCloned).IsNotSameReferenceAs(complexObj2).Because("Should create new object instances");
 
-            Assert.That(firstCloned.Name, Is.EqualTo("Charlie"), "Cloned objects should not reflect changes to original");
-            Assert.That(firstCloned.Age, Is.EqualTo(35), "Cloned objects should not reflect changes to original");
-            Assert.That(secondCloned.Name, Is.EqualTo("Diana"), "Cloned objects should not reflect changes to original");
-            Assert.That(secondCloned.Age, Is.EqualTo(28), "Cloned objects should not reflect changes to original");
-        });
+            await Assert.That(firstCloned.Name).IsEqualTo("Charlie").Because("Cloned objects should not reflect changes to original");
+            await Assert.That(firstCloned.Age).IsEqualTo(35).Because("Cloned objects should not reflect changes to original");
+            await Assert.That(secondCloned.Name).IsEqualTo("Diana").Because("Cloned objects should not reflect changes to original");
+            await Assert.That(secondCloned.Age).IsEqualTo(28).Because("Cloned objects should not reflect changes to original");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Stack_DeepClone_EmptyStack_ShouldCreateEmptyClone()
+    public async Task Stack_DeepClone_EmptyStack_ShouldCreateEmptyClone()
     {
         // Arrange
         Stack<int> original = new Stack<int>();
@@ -2665,15 +2805,17 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Stack<int>? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
-            Assert.That(cloned.Count, Is.EqualTo(0), "Cloned stack should be empty");
-        });
+            await Assert.That(cloned).IsNotSameReferenceAs(original).Because("Should create new instance");
+            await Assert.That(cloned.Count).IsEqualTo(0).Because("Cloned stack should be empty");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Queue_DeepClone_EmptyQueue_ShouldCreateEmptyClone()
+    public async Task Queue_DeepClone_EmptyQueue_ShouldCreateEmptyClone()
     {
         // Arrange
         Queue<int> original = new Queue<int>();
@@ -2682,11 +2824,13 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Queue<int>? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
-            Assert.That(cloned.Count, Is.EqualTo(0), "Cloned queue should be empty");
-        });
+            await Assert.That(cloned).IsNotSameReferenceAs(original).Because("Should create new instance");
+            await Assert.That(cloned.Count).IsEqualTo(0).Because("Cloned queue should be empty");
+
+            // Assert
+        }
     }
 
     // Helper class for complex object tests
@@ -2723,7 +2867,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
 
 
     [Test]
-    public void ReadOnlyDictionary_WithComplexValues_Clone_ShouldDeepClone()
+    public async Task ReadOnlyDictionary_WithComplexValues_Clone_ShouldDeepClone()
     {
         // Arrange
         Dictionary<string, List<string>> originalDict = new Dictionary<string, List<string>>
@@ -2737,18 +2881,20 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         ReadOnlyDictionary<string, List<string>>? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
-            Assert.That(cloned["List1"], Is.Not.SameAs(original["List1"]), "Should deep clone values");
-            Assert.That(cloned["List2"], Is.Not.SameAs(original["List2"]), "Should deep clone values");
-            Assert.That(cloned["List1"], Is.EquivalentTo(original["List1"]), "Should preserve value contents");
-            Assert.That(cloned["List2"], Is.EquivalentTo(original["List2"]), "Should preserve value contents");
-        });
+            await Assert.That(cloned).IsNotSameReferenceAs(original).Because("Should create new instance");
+            await Assert.That(cloned["List1"]).IsNotSameReferenceAs(original["List1"]).Because("Should deep clone values");
+            await Assert.That(cloned["List2"]).IsNotSameReferenceAs(original["List2"]).Because("Should deep clone values");
+            await Assert.That(cloned["List1"]).IsEquivalentTo(original["List1"]).Because("Should preserve value contents");
+            await Assert.That(cloned["List2"]).IsEquivalentTo(original["List2"]).Because("Should preserve value contents");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void ReadOnlyDictionary_WithNullValues_Clone_ShouldPreserveNulls()
+    public async Task ReadOnlyDictionary_WithNullValues_Clone_ShouldPreserveNulls()
     {
         // Arrange
         Dictionary<string, string> originalDict = new Dictionary<string, string>
@@ -2762,15 +2908,17 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         ReadOnlyDictionary<string, string>? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned["NotNull"], Is.EqualTo("Value"), "Should preserve non-null values");
-            Assert.That(cloned["Null"], Is.Null, "Should preserve null values");
-        });
+            await Assert.That(cloned["NotNull"]).IsEqualTo("Value").Because("Should preserve non-null values");
+            await Assert.That(cloned["Null"]).IsNull().Because("Should preserve null values");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void ReadOnlyDictionary_Empty_Clone_ShouldCreateEmptyInstance()
+    public async Task ReadOnlyDictionary_Empty_Clone_ShouldCreateEmptyInstance()
     {
         // Arrange
         ReadOnlyDictionary<string, int> original = new ReadOnlyDictionary<string, int>(new Dictionary<string, int>());
@@ -2779,15 +2927,17 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         ReadOnlyDictionary<string, int>? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Should create new instance");
-            Assert.That(cloned.Count, Is.EqualTo(0), "Should be empty");
-        });
+            await Assert.That(cloned).IsNotSameReferenceAs(original).Because("Should create new instance");
+            await Assert.That(cloned.Count).IsEqualTo(0).Because("Should be empty");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void ReadOnlyDictionary_WithKeyValuePairs_Clone_ShouldPreserveEnumeration()
+    public async Task ReadOnlyDictionary_WithKeyValuePairs_Clone_ShouldPreserveEnumeration()
     {
         // Arrange
         Dictionary<int, string> originalDict = new Dictionary<int, string> { [1] = "One", [2] = "Two" };
@@ -2797,16 +2947,18 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         ReadOnlyDictionary<int, string>? cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned.Keys, Is.EquivalentTo(original.Keys), "Should preserve keys");
-            Assert.That(cloned.Values, Is.EquivalentTo(original.Values), "Should preserve values");
-            Assert.That(cloned, Is.EquivalentTo(original), "Should preserve key-value pairs");
-        });
+            await Assert.That(cloned.Keys).IsEquivalentTo(original.Keys).Because("Should preserve keys");
+            await Assert.That(cloned.Values).IsEquivalentTo(original.Values).Because("Should preserve values");
+            await Assert.That(cloned).IsEquivalentTo(original).Because("Should preserve key-value pairs");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void ExpandoObject_With_Circular_Reference_Clone()
+    public async Task ExpandoObject_With_Circular_Reference_Clone()
     {
         // Arrange
         dynamic original = new ExpandoObject();
@@ -2819,17 +2971,19 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         dynamic cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned, Is.Not.SameAs(original), "Cloned object should be a new instance");
-            Assert.That(cloned.Nested, Is.Not.SameAs(original.Nested), "Nested object should be cloned");
-            Assert.That(cloned.Name, Is.EqualTo("Original"), "Properties should be copied");
-            Assert.That(cloned.Nested.Parent, Is.SameAs(cloned), "Circular reference should point to cloned instance");
-        });
+            await Assert.That((object?)cloned).IsNotSameReferenceAs((object?)original).Because("Cloned object should be a new instance");
+            await Assert.That((object?)cloned.Nested).IsNotSameReferenceAs((object?)original.Nested).Because("Nested object should be cloned");
+            await Assert.That((string)cloned.Name).IsEqualTo("Original").Because("Properties should be copied");
+            await Assert.That((object?)cloned.Nested.Parent).IsSameReferenceAs((object?)cloned).Because("Circular reference should point to cloned instance");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Mixed_Dynamic_And_Static_Types_Clone()
+    public async Task Mixed_Dynamic_And_Static_Types_Clone()
     {
         // Arrange
         StaticType staticObject = new StaticType { Value = "Static" };
@@ -2841,12 +2995,14 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         dynamic cloned = FastCloner.DeepClone(dynamic);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned.Static, Is.Not.SameAs(staticObject), "Static type should be cloned");
-            Assert.That(cloned.Static.Value, Is.EqualTo("Static"), "Static type properties should be copied");
-            Assert.That(cloned.Name, Is.EqualTo("Dynamic"), "Dynamic properties should be copied");
-        });
+            await Assert.That((object?)cloned.Static).IsNotSameReferenceAs((object?)staticObject).Because("Static type should be cloned");
+            await Assert.That((string)cloned.Static.Value).IsEqualTo("Static").Because("Static type properties should be copied");
+            await Assert.That((string)cloned.Name).IsEqualTo("Dynamic").Because("Dynamic properties should be copied");
+
+            // Assert
+        }
     }
 
     private class StaticType
@@ -2855,7 +3011,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void ExpandoObject_With_Null_Values_Clone()
+    public async Task ExpandoObject_With_Null_Values_Clone()
     {
         // Arrange
         dynamic original = new ExpandoObject();
@@ -2866,15 +3022,17 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         dynamic cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(((object)cloned.NullProperty), Is.Null, "Null properties should remain null");
-            Assert.That(cloned.ValidProperty, Is.EqualTo("NotNull"), "Non-null properties should be copied");
-        });
+            await Assert.That(((object)cloned.NullProperty)).IsNull().Because("Null properties should remain null");
+            await Assert.That((string)cloned.ValidProperty).IsEqualTo("NotNull").Because("Non-null properties should be copied");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Dynamic_Object_With_Complex_Types_Clone()
+    public async Task Dynamic_Object_With_Complex_Types_Clone()
     {
         // Arrange
         dynamic original = new ExpandoObject();
@@ -2886,12 +3044,14 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         dynamic cloned = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(cloned.DateTime, Is.EqualTo(original.DateTime), "DateTime should be copied");
-            Assert.That(cloned.Guid, Is.EqualTo(original.Guid), "Guid should be copied");
-            Assert.That(cloned.TimeSpan, Is.EqualTo(original.TimeSpan), "TimeSpan should be copied");
-        });
+            await Assert.That((DateTime)cloned.DateTime).IsEqualTo((DateTime)original.DateTime).Because("DateTime should be copied");
+            await Assert.That((Guid)cloned.Guid).IsEqualTo((Guid)original.Guid).Because("Guid should be copied");
+            await Assert.That((TimeSpan)cloned.TimeSpan).IsEqualTo((TimeSpan)original.TimeSpan).Because("TimeSpan should be copied");
+
+            // Assert
+        }
     }
 
 
@@ -2902,18 +3062,19 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void Test_ExpressionTree_OrderBy2()
+    public async Task Test_ExpressionTree_OrderBy2()
     {
         IEnumerable<Tuple<int, string>> l = new List<int> { 2, 1, 3, 4, 5 }.Select(y => new Tuple<int, string>(y, y.ToString(CultureInfo.InvariantCulture)));
         IOrderedQueryable<Tuple<int, string>> q = l.AsQueryable().OrderBy(x => x.Item1);
         IOrderedQueryable<Tuple<int, string>> q2 = q.DeepClone();
-        Assert.That(q2.ToArray()[0].Item1, Is.EqualTo(1));
-        Assert.That(q.ToArray().Length, Is.EqualTo(5));
+        await Assert.That(q2.ToArray()[0].Item1).IsEqualTo(1);
+        await Assert.That(q.ToArray().Length).IsEqualTo(5);
     }
 
-    [Test(Description = "Tests works on local SQL Server with AdventureWorks database")]
-    [Ignore("Test on MS Server")]
-    public void Clone_EfQuery1()
+    [Test]
+    [Property("Description", "Tests works on local SQL Server with AdventureWorks database")]
+    [Skip("Test on MS Server")]
+    public async Task Clone_EfQuery1()
     {
         AdventureContext at = new AdventureContext();
         // var at2 = at.DeepClone();
@@ -2925,60 +3086,64 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         // var q2 = q.DeepClone();
         // Console.WriteLine(q2.);
         // Assert.That(q.ToArray().Length, Is.EqualTo(1));
-        Assert.That(q2.ToArray().Length, Is.EqualTo(1));
+        await Assert.That(q2.ToArray().Length).IsEqualTo(1);
     }
 
-    [Test(Description = "Tests works on local SQL Server with AdventureWorks database")]
-    [Ignore("Test on MS Server")]
-    public void Clone_EfQuery2()
+    [Test]
+    [Property("Description", "Tests works on local SQL Server with AdventureWorks database")]
+    [Skip("Test on MS Server")]
+    public async Task Clone_EfQuery2()
     {
         IOrderedQueryable<Currency> q = new AdventureContext().Currencies.OrderBy(x => x.Name);
         IOrderedQueryable<Currency> q2 = q.DeepClone();
         int cnt = q.Count();
-        Assert.That(q2.Count(), Is.EqualTo(cnt));
+        await Assert.That(q2.Count()).IsEqualTo(cnt);
     }
 
 
 
     [Test]
-    [Platform(Include = "Win")]
-    public void FontCloningTest()
+    public async Task FontCloningTest()
     {
-        return;
-#if WINDOWS
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return;
+
         // Arrange
-        Font originalFont = new System.Drawing.Font("Arial", 12, System.Drawing.FontStyle.Bold);
+        Font originalFont = new Font("Arial", 12, FontStyle.Bold);
 
         // Act
         Font clonedFont = originalFont.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clonedFont, Is.Not.Null);
-            Assert.That(clonedFont.Name, Is.EqualTo(originalFont.Name));
-            Assert.That(clonedFont.Size, Is.EqualTo(originalFont.Size));
-            Assert.That(clonedFont.Style, Is.EqualTo(originalFont.Style));
-            Assert.That(clonedFont.Unit, Is.EqualTo(originalFont.Unit));
-            Assert.That(clonedFont.GdiCharSet, Is.EqualTo(originalFont.GdiCharSet));
-            Assert.That(clonedFont.GdiVerticalFont, Is.EqualTo(originalFont.GdiVerticalFont));
+            await Assert.That(clonedFont).IsNotNull();
+            await Assert.That(clonedFont.Name).IsEqualTo(originalFont.Name);
+            await Assert.That(clonedFont.Size).IsEqualTo(originalFont.Size);
+            await Assert.That(clonedFont.Style).IsEqualTo(originalFont.Style);
+            await Assert.That(clonedFont.Unit).IsEqualTo(originalFont.Unit);
+            await Assert.That(clonedFont.GdiCharSet).IsEqualTo(originalFont.GdiCharSet);
+            await Assert.That(clonedFont.GdiVerticalFont).IsEqualTo(originalFont.GdiVerticalFont);
 
             // Ensure the cloned font is a different instance
-            Assert.That(ReferenceEquals(originalFont, clonedFont), Is.False);
-        });
+            await Assert.That(ReferenceEquals(originalFont, clonedFont)).IsFalse();
 
-#endif
+            // Assert
+        }
+
     }
 
 
     [Test]
-    public void Lazy_Clone()
+    [NotInParallel("FastClonerGlobalState")]
+    public async Task Lazy_Clone()
     {
+        LazyClass.Counter = 0;
         LazyClass lazy = new LazyClass();
         LazyClass clone = lazy.DeepClone();
         int v = LazyClass.Counter;
-        Assert.That(clone.GetValue(), Is.EqualTo((v + 1).ToString(CultureInfo.InvariantCulture)));
-        Assert.That(lazy.GetValue(), Is.EqualTo((v + 2).ToString(CultureInfo.InvariantCulture)));
+        await Assert.That(clone.GetValue()).IsEqualTo((v + 1).ToString(CultureInfo.InvariantCulture));
+        await Assert.That(lazy.GetValue()).IsEqualTo((v + 2).ToString(CultureInfo.InvariantCulture));
     }
 
     public class LazyClass
@@ -3019,15 +3184,15 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void Closure_Clone()
+    public async Task Closure_Clone()
     {
         int a = 0;
         Func<int> f = () => ++a;
         Func<int> fCopy = f.DeepClone();
         // delegates are shallow-copied, so both share the same closure
-        Assert.That(f(), Is.EqualTo(1));
-        Assert.That(fCopy(), Is.EqualTo(2));
-        Assert.That(a, Is.EqualTo(2));
+        await Assert.That(f()).IsEqualTo(1);
+        await Assert.That(fCopy()).IsEqualTo(2);
+        await Assert.That(a).IsEqualTo(2);
     }
 
     private class TestComparer : Comparer<int>
@@ -3070,7 +3235,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void CanCopyInterfaceField()
+    public async Task CanCopyInterfaceField()
     {
         MyObject o = new MyObject();
 
@@ -3082,11 +3247,12 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
 
         MyIClass result = original.DeepClone();
 
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(original.Field1, Is.SameAs(original.Field2), "Original objects should be same");
-            Assert.That(result.Field1, Is.SameAs(result.Field2), "Cloned objects should be same");
-        });
+            await Assert.That(original.Field1).IsSameReferenceAs(original.Field2).Because("Original objects should be same");
+            await Assert.That(result.Field1).IsSameReferenceAs(result.Field2).Because("Cloned objects should be same");
+
+        }
     }
 
     public class MyIClass
@@ -3108,7 +3274,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void JsonObjectConstructorTest()
+    public async Task JsonObjectConstructorTest()
     {
         // This test verifies that our FindCallableConstructor fix works
         // JsonObject has constructor: JsonObject(JsonNodeOptions? options = null)
@@ -3119,12 +3285,13 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         // This should now work without the special JsonNode processors
         JsonNode clone = original.DeepClone();
 
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone, Is.Not.SameAs(original), "Should create new instance");
-            Assert.That(clone, Is.AssignableTo<JsonObject>(), "Should preserve type");
-            Assert.That(((JsonObject)clone)["test"]!.GetValue<string>(), Is.EqualTo("value"), "Should preserve content");
-        });
+            await Assert.That(clone).IsNotSameReferenceAs(original).Because("Should create new instance");
+            await Assert.That(clone).IsAssignableTo<JsonObject>().Because("Should preserve type");
+            await Assert.That(((JsonObject)clone)["test"]!.GetValue<string>()).IsEqualTo("value").Because("Should preserve content");
+
+        }
     }
 
     public class MyNonGenericDict : IDictionary<string, int>
@@ -3163,7 +3330,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    public void NonGenericDictionaryWithOptionalConstructor_ShouldDeepClone()
+    public async Task NonGenericDictionaryWithOptionalConstructor_ShouldDeepClone()
     {
         // Arrange
         MyNonGenericDict original = new MyNonGenericDict(defaultValue: 42)
@@ -3177,27 +3344,29 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         MyNonGenericDict clone = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone, Is.Not.SameAs(original), "Should create new instance");
-            Assert.That(clone, Is.TypeOf<MyNonGenericDict>(), "Should preserve type");
-            Assert.That(clone.Count, Is.EqualTo(original.Count), "Should have same count");
-            Assert.That(clone["key1"], Is.EqualTo(100), "Should preserve first value");
-            Assert.That(clone["key2"], Is.EqualTo(200), "Should preserve second value");
-            Assert.That(clone["key3"], Is.EqualTo(300), "Should preserve third value");
-            
+            await Assert.That(clone).IsNotSameReferenceAs(original).Because("Should create new instance");
+            await Assert.That(clone).IsTypeOf<MyNonGenericDict>().Because("Should preserve type");
+            await Assert.That(clone.Count).IsEqualTo(original.Count).Because("Should have same count");
+            await Assert.That(clone["key1"]).IsEqualTo(100).Because("Should preserve first value");
+            await Assert.That(clone["key2"]).IsEqualTo(200).Because("Should preserve second value");
+            await Assert.That(clone["key3"]).IsEqualTo(300).Because("Should preserve third value");
+
             clone["key1"] = 999;
-            Assert.That(original["key1"], Is.EqualTo(100), "Original should remain unchanged");
-            Assert.That(clone["key1"], Is.EqualTo(999), "Clone should reflect changes");
-        });
+            await Assert.That(original["key1"]).IsEqualTo(100).Because("Original should remain unchanged");
+            await Assert.That(clone["key1"]).IsEqualTo(999).Because("Clone should reflect changes");
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Drawing_Image_DeepClone_Test()
+    public async Task Drawing_Image_DeepClone_Test()
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            Assert.Pass("Windows exclusive");
+            ;
             return;
         }
         
@@ -3208,20 +3377,22 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Image clone = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone, Is.Not.SameAs(original));
-            Assert.That(clone.Width, Is.EqualTo(original.Width));
-            Assert.That(clone.Height, Is.EqualTo(original.Height));
-        });
+            await Assert.That(clone).IsNotSameReferenceAs(original);
+            await Assert.That(clone.Width).IsEqualTo(original.Width);
+            await Assert.That(clone.Height).IsEqualTo(original.Height);
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Drawing_Icon_DeepClone_Test()
+    public async Task Drawing_Icon_DeepClone_Test()
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            Assert.Pass("Windows exclusive");
+            ;
             return;
         }
         
@@ -3236,20 +3407,22 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         Icon clone = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone, Is.Not.SameAs(original));
-            Assert.That(clone.Width, Is.EqualTo(original.Width));
-            Assert.That(clone.Height, Is.EqualTo(original.Height));
-        });
+            await Assert.That(clone).IsNotSameReferenceAs(original);
+            await Assert.That(clone.Width).IsEqualTo(original.Width);
+            await Assert.That(clone.Height).IsEqualTo(original.Height);
+
+            // Assert
+        }
     }
 
     [Test]
-    public void Drawing_Brush_DeepClone_Test()
+    public async Task Drawing_Brush_DeepClone_Test()
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            Assert.Pass("Windows exclusive");
+            ;
             return;
         }
         
@@ -3260,21 +3433,23 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         SolidBrush clone = original.DeepClone();
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone, Is.Not.SameAs(original));
-            Assert.That((clone).Color.R, Is.EqualTo((original).Color.R));
-            Assert.That((clone).Color.G, Is.EqualTo((original).Color.G));
-            Assert.That((clone).Color.B, Is.EqualTo((original).Color.B));
-            Assert.That((clone).Color.A, Is.EqualTo((original).Color.A));
-        });
+            await Assert.That(clone).IsNotSameReferenceAs(original);
+            await Assert.That((clone).Color.R).IsEqualTo((original).Color.R);
+            await Assert.That((clone).Color.G).IsEqualTo((original).Color.G);
+            await Assert.That((clone).Color.B).IsEqualTo((original).Color.B);
+            await Assert.That((clone).Color.A).IsEqualTo((original).Color.A);
+
+            // Assert
+        }
 
         original.Color = Color.Blue;
-        Assert.That(clone.Color.B, Is.EqualTo(0));
+        await Assert.That(clone.Color.B).IsEqualTo((byte)0);
     }
 
     [Test]
-    public void AssemblyName_DeepClone_Test()
+    public async Task AssemblyName_DeepClone_Test()
     {
         // Arrange
         AssemblyName original = new AssemblyName
@@ -3289,14 +3464,16 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         original.Version = new Version(5, 6, 7, 8); // Modify the original
 
         // Assert
-        Assert.Multiple(() =>
+        using (Assert.Multiple())
         {
-            Assert.That(clone, Is.Not.Null);
-            Assert.That(clone, Is.Not.SameAs(original));
-            Assert.That(clone.Name, Is.EqualTo("MyTestAssembly"));
-            Assert.That(clone.Version, Is.EqualTo(originalVersion));
-            Assert.That(clone.Version, Is.Not.EqualTo(original.Version));
-        });
+            await Assert.That(clone).IsNotNull();
+            await Assert.That(clone).IsNotSameReferenceAs(original);
+            await Assert.That(clone.Name).IsEqualTo("MyTestAssembly");
+            await Assert.That(clone.Version).IsEqualTo(originalVersion);
+            await Assert.That(clone.Version).IsNotEqualTo(original.Version);
+
+            // Assert
+        }
     }
     
     public class LargeNode
@@ -3309,7 +3486,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
     
     [Test]
-    public void LargeCircular_Test()
+    public async Task LargeCircular_Test()
     {
         // Arrange
         LargeNode root = new LargeNode { Data = [0] };
@@ -3332,21 +3509,21 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         LargeNode clone = root.DeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.SameAs(root));
-        
+        await Assert.That(clone).IsNotSameReferenceAs(root);
+
         LargeNode forward = clone;
         for (int i = 0; i < nodeCount; i++)
         {
             forward = forward.Next;
         }
-        Assert.That(forward, Is.SameAs(clone));
+        await Assert.That(forward).IsSameReferenceAs(clone);
 
         LargeNode backward = clone;
         for (int i = 0; i < nodeCount; i++)
         {
             backward = backward.Previous;
         }
-        Assert.That(backward, Is.SameAs(clone));
+        await Assert.That(backward).IsSameReferenceAs(clone);
 
         // Traverse to a deeply nested node
         LargeNode originalNode = root;
@@ -3357,18 +3534,18 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
             clonedNode = clonedNode.Next;
         }
         
-        Assert.That(clonedNode, Is.Not.SameAs(originalNode));
-        Assert.That(clonedNode.Data, Is.Not.SameAs(originalNode.Data));
-        Assert.That(clonedNode.Data, Is.EqualTo(originalNode.Data));
-        
+        await Assert.That(clonedNode).IsNotSameReferenceAs(originalNode);
+        await Assert.That(clonedNode.Data).IsNotSameReferenceAs(originalNode.Data);
+        await Assert.That(clonedNode.Data).IsEquivalentTo(originalNode.Data);
+
         clonedNode.Data.Add(999);
-        Assert.That(originalNode.Data, Has.Count.EqualTo(1));
-        Assert.That(clonedNode.Data, Has.Count.EqualTo(2));
-        Assert.That(originalNode.Data[0], Is.Not.EqualTo(clonedNode.Data[1]));
+        await Assert.That(originalNode.Data).Count().IsEqualTo(1);
+        await Assert.That(clonedNode.Data).Count().IsEqualTo(2);
+        await Assert.That(originalNode.Data[0]).IsNotEqualTo(clonedNode.Data[1]);
     }
     
     [Test]
-    public void SelfReferenced_WithInitOnlyField_Test()
+    public async Task SelfReferenced_WithInitOnlyField_Test()
     {
     	SelfReferencedWithInitOnlyField original = new SelfReferencedWithInitOnlyField
     	{
@@ -3377,9 +3554,9 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     
     	SelfReferencedWithInitOnlyField clone = original.DeepClone();
     	
-    	Assert.That(clone, Is.Not.SameAs(original));
-    	Assert.That(clone.WithReadOnlyField, Is.Not.SameAs(original.WithReadOnlyField));
-    	Assert.That(clone.WithReadOnlyField.ReadOnlyValue, Is.EqualTo(original.WithReadOnlyField.ReadOnlyValue));
+    	await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.WithReadOnlyField).IsNotSameReferenceAs(original.WithReadOnlyField);
+        await Assert.That(clone.WithReadOnlyField.ReadOnlyValue).IsEqualTo(original.WithReadOnlyField.ReadOnlyValue);
     }
     
     private class SelfReferencedWithInitOnlyField
@@ -3390,7 +3567,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
     
     [Test]
-    public void SelfReferenced_WithInitOnlyValueTypeField_Test()
+    public async Task SelfReferenced_WithInitOnlyValueTypeField_Test()
     {
         SelfReferencedWithInitOnlyValueTypeField original = new SelfReferencedWithInitOnlyValueTypeField
         {
@@ -3399,9 +3576,9 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     
         SelfReferencedWithInitOnlyValueTypeField clone = original.DeepClone();
     	
-        Assert.That(clone, Is.Not.SameAs(original));
-        Assert.That(clone.WithReadOnlyValueTypeField, Is.Not.SameAs(original.WithReadOnlyValueTypeField));
-        Assert.That(clone.WithReadOnlyValueTypeField.ReadOnlyValue, Is.EqualTo(original.WithReadOnlyValueTypeField.ReadOnlyValue));
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.WithReadOnlyValueTypeField).IsNotSameReferenceAs(original.WithReadOnlyValueTypeField);
+        await Assert.That(clone.WithReadOnlyValueTypeField.ReadOnlyValue).IsEqualTo(original.WithReadOnlyValueTypeField.ReadOnlyValue);
     }
     
     private class SelfReferencedWithInitOnlyValueTypeField
@@ -3418,7 +3595,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
     
     [Test]
-    public void SelfReferenced_WithWritableValueTypeField_Test()
+    public async Task SelfReferenced_WithWritableValueTypeField_Test()
     {
         SelfReferencedWithWritableValueTypeField original = new SelfReferencedWithWritableValueTypeField
         {
@@ -3427,9 +3604,9 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     
         SelfReferencedWithWritableValueTypeField clone = original.DeepClone();
     	
-        Assert.That(clone, Is.Not.SameAs(original));
-        Assert.That(clone.WithWritableValueTypeField, Is.Not.SameAs(original.WithWritableValueTypeField));
-        Assert.That(clone.WithWritableValueTypeField.ReadOnlyValue, Is.EqualTo(original.WithWritableValueTypeField.ReadOnlyValue));
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.WithWritableValueTypeField).IsNotSameReferenceAs(original.WithWritableValueTypeField);
+        await Assert.That(clone.WithWritableValueTypeField.ReadOnlyValue).IsEqualTo(original.WithWritableValueTypeField.ReadOnlyValue);
     }
     
     private class SelfReferencedWithWritableValueTypeField
@@ -3446,7 +3623,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
     
     [Test]
-    public void SelfReferenced_WithMultipleReadOnlyProperties_Test()
+    public async Task SelfReferenced_WithMultipleReadOnlyProperties_Test()
     {
         SelfReferencedWithMultipleReadOnlyProperties original = new SelfReferencedWithMultipleReadOnlyProperties
         {
@@ -3455,10 +3632,10 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     
         SelfReferencedWithMultipleReadOnlyProperties clone = original.DeepClone();
     	
-        Assert.That(clone, Is.Not.SameAs(original));
-        Assert.That(clone.WithMultipleReadOnlyProperties, Is.Not.SameAs(original.WithMultipleReadOnlyProperties));
-        Assert.That(clone.WithMultipleReadOnlyProperties.Name, Is.EqualTo(original.WithMultipleReadOnlyProperties.Name));
-        Assert.That(clone.WithMultipleReadOnlyProperties.Id, Is.EqualTo(original.WithMultipleReadOnlyProperties.Id));
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.WithMultipleReadOnlyProperties).IsNotSameReferenceAs(original.WithMultipleReadOnlyProperties);
+        await Assert.That(clone.WithMultipleReadOnlyProperties.Name).IsEqualTo(original.WithMultipleReadOnlyProperties.Name);
+        await Assert.That(clone.WithMultipleReadOnlyProperties.Id).IsEqualTo(original.WithMultipleReadOnlyProperties.Id);
     }
     
     private class SelfReferencedWithMultipleReadOnlyProperties
@@ -3475,16 +3652,16 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
     
     [Test]
-    public void ValueTask_Should_Be_Safe()
+    public async Task ValueTask_Should_Be_Safe()
     {
         ValueTask<int> original = new ValueTask<int>(42);
         ValueTask<int> clone = original.DeepClone();
         
-        Assert.That(clone.Result, Is.EqualTo(42));
+        await Assert.That(clone.Result).IsEqualTo(42);
     }
 
     [Test]
-    public void ValueTask_From_Task_Should_Be_Safe()
+    public async Task ValueTask_From_Task_Should_Be_Safe()
     {
         TaskCompletionSource<int> tcs = new TaskCompletionSource<int>();
         tcs.SetResult(42);
@@ -3492,12 +3669,12 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         
         ValueTask<int> clone = original.DeepClone();
         
-        Assert.That(clone.Result, Is.EqualTo(42));
+        await Assert.That(clone.Result).IsEqualTo(42);
     }
 
 
     [Test]
-    public void WeakReferenceGeneric_DeepClone_VerifySafety()
+    public async Task WeakReferenceGeneric_DeepClone_VerifySafety()
     {
         string target = "target";
         WeakReference<string> weak = new WeakReference<string>(target);
@@ -3505,8 +3682,8 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
         WeakReference<string> clone = weak.DeepClone();
         
         // Assert it is the SAME object (Reference Copy)
-        Assert.That(clone, Is.SameAs(weak));
-        
+        await Assert.That(clone).IsSameReferenceAs(weak);
+
         bool hasTarget = clone.TryGetTarget(out string? clonedTarget);
         
         Console.WriteLine($"Original target alive: {weak.TryGetTarget(out _)}");

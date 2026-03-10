@@ -1,14 +1,8 @@
 using FastCloner.Code;
 using FastCloner.SourceGenerator.Shared;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
-
-/// <summary>
-/// Tests for the [FastClonerShallow] attribute which marks members for shallow cloning
-/// instead of deep cloning. This is useful for parent references and shared state.
-/// Tests cover both reflection-based and source-generated (AOT) cloning.
-/// </summary>
-[TestFixture]
 public class ShallowAttributeTests
 {
     #region Test Classes for Reflection-based Cloning
@@ -166,7 +160,7 @@ public class ShallowAttributeTests
     #region Reflection-based Cloning Tests
 
     [Test]
-    public void Reflection_ShallowAttribute_ParentReference_ShouldBeShallowCloned()
+    public async Task Reflection_ShallowAttribute_ParentReference_ShouldBeShallowCloned()
     {
         // Arrange
         ParentObject parent = new ParentObject
@@ -186,16 +180,16 @@ public class ShallowAttributeTests
         ChildWithShallowParent? clone = FastCloner.DeepClone(child);
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.ChildName, Is.EqualTo("Child1"));
-        Assert.That(clone.ChildId, Is.EqualTo(100));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.ChildName).IsEqualTo("Child1");
+        await Assert.That(clone.ChildId).IsEqualTo(100);
+
         // Parent should be the SAME reference (shallow cloned)
-        Assert.That(clone.Parent, Is.SameAs(parent));
+        await Assert.That(clone.Parent).IsSameReferenceAs(parent);
     }
 
     [Test]
-    public void Reflection_MixedClone_ShallowAndDeep_ShouldWorkCorrectly()
+    public async Task Reflection_MixedClone_ShallowAndDeep_ShouldWorkCorrectly()
     {
         // Arrange
         SharedState sharedState = new SharedState
@@ -221,21 +215,21 @@ public class ShallowAttributeTests
         MixedCloneClass? clone = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.EqualTo("Mixed"));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsEqualTo("Mixed");
+
         // SharedData should be the SAME reference (shallow cloned)
-        Assert.That(clone.SharedData, Is.SameAs(sharedState));
-        
+        await Assert.That(clone.SharedData).IsSameReferenceAs(sharedState);
+
         // OwnData should be a DIFFERENT reference (deep cloned)
-        Assert.That(clone.OwnData, Is.Not.SameAs(ownedData));
-        Assert.That(clone.OwnData, Is.Not.Null);
-        Assert.That(clone.OwnData!.Value, Is.EqualTo("Owned1"));
-        Assert.That(clone.OwnData.Count, Is.EqualTo(42));
+        await Assert.That(clone.OwnData).IsNotSameReferenceAs(ownedData);
+        await Assert.That(clone.OwnData).IsNotNull();
+        await Assert.That(clone.OwnData!.Value).IsEqualTo("Owned1");
+        await Assert.That(clone.OwnData.Count).IsEqualTo(42);
     }
 
     [Test]
-    public void Reflection_ShallowField_ShouldBeShallowCloned()
+    public async Task Reflection_ShallowField_ShouldBeShallowCloned()
     {
         // Arrange
         SharedState sharedState = new SharedState
@@ -254,19 +248,19 @@ public class ShallowAttributeTests
         ClassWithShallowField? clone = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.EqualTo("FieldTest"));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsEqualTo("FieldTest");
+
         // SharedField should be the SAME reference (shallow cloned)
-        Assert.That(clone.SharedField, Is.SameAs(sharedState));
+        await Assert.That(clone.SharedField).IsSameReferenceAs(sharedState);
     }
 
     [Test]
-    public void Reflection_ShallowCollection_ShouldPreserveReference()
+    public async Task Reflection_ShallowCollection_ShouldPreserveReference()
     {
         // Arrange
-        List<int> sharedList = new List<int> { 1, 2, 3, 4, 5 };
-        List<int> ownList = new List<int> { 10, 20, 30 };
+        List<int> sharedList = [1, 2, 3, 4, 5];
+        List<int> ownList = [10, 20, 30];
         
         ClassWithShallowCollection original = new ClassWithShallowCollection
         {
@@ -278,19 +272,19 @@ public class ShallowAttributeTests
         ClassWithShallowCollection? clone = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        
+        await Assert.That(clone).IsNotNull();
+
         // SharedList should be the SAME reference (shallow cloned)
-        Assert.That(clone!.SharedList, Is.SameAs(sharedList));
-        
+        await Assert.That(clone!.SharedList).IsSameReferenceAs(sharedList);
+
         // OwnList should be a DIFFERENT reference (deep cloned)
-        Assert.That(clone.OwnList, Is.Not.SameAs(ownList));
-        Assert.That(clone.OwnList, Is.Not.Null);
-        Assert.That(clone.OwnList, Is.EqualTo(ownList));
+        await Assert.That(clone.OwnList).IsNotSameReferenceAs(ownList);
+        await Assert.That(clone.OwnList).IsNotNull();
+        await Assert.That(clone.OwnList).IsEquivalentTo(ownList);
     }
 
     [Test]
-    public void Reflection_ShallowAttribute_NullValue_ShouldBeHandledCorrectly()
+    public async Task Reflection_ShallowAttribute_NullValue_ShouldBeHandledCorrectly()
     {
         // Arrange
         ChildWithShallowParent original = new ChildWithShallowParent
@@ -304,14 +298,14 @@ public class ShallowAttributeTests
         ChildWithShallowParent? clone = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Parent, Is.Null);
-        Assert.That(clone.ChildName, Is.EqualTo("OrphanChild"));
-        Assert.That(clone.ChildId, Is.EqualTo(999));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Parent).IsNull();
+        await Assert.That(clone.ChildName).IsEqualTo("OrphanChild");
+        await Assert.That(clone.ChildId).IsEqualTo(999);
     }
 
     [Test]
-    public void Reflection_ModifyingShallowClonedReference_AffectsOriginal()
+    public async Task Reflection_ModifyingShallowClonedReference_AffectsOriginal()
     {
         // Arrange
         ParentObject parent = new ParentObject
@@ -334,11 +328,11 @@ public class ShallowAttributeTests
         clone!.Parent!.Name = "ModifiedParent";
 
         // Assert - modifying through clone should affect original
-        Assert.That(parent.Name, Is.EqualTo("ModifiedParent"));
+        await Assert.That(parent.Name).IsEqualTo("ModifiedParent");
     }
 
     [Test]
-    public void Reflection_ShallowOnValueType_ShouldCopyValue()
+    public async Task Reflection_ShallowOnValueType_ShouldCopyValue()
     {
         // Arrange
         ClassWithShallowValueType original = new ClassWithShallowValueType
@@ -351,13 +345,13 @@ public class ShallowAttributeTests
         ClassWithShallowValueType? clone = FastCloner.DeepClone(original);
 
         // Assert - value types are always copied by value
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.ShallowInt, Is.EqualTo(42));
-        Assert.That(clone.NormalInt, Is.EqualTo(100));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.ShallowInt).IsEqualTo(42);
+        await Assert.That(clone.NormalInt).IsEqualTo(100);
     }
 
     [Test]
-    public void Reflection_ShallowOnReadonlyField_ShouldCopyReference()
+    public async Task Reflection_ShallowOnReadonlyField_ShouldCopyReference()
     {
         // Arrange
         SharedState sharedState = new SharedState { ConfigValue = "ReadonlyTest", Version = 10 };
@@ -367,14 +361,14 @@ public class ShallowAttributeTests
         ClassWithReadonlyShallowField? clone = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.EqualTo("TestName"));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsEqualTo("TestName");
         // Readonly shallow field should be the SAME reference
-        Assert.That(clone.SharedField, Is.SameAs(sharedState));
+        await Assert.That(clone.SharedField).IsSameReferenceAs(sharedState);
     }
 
     [Test]
-    public void Reflection_ShallowOnNestedObject_ShouldPreserveDeepNesting()
+    public async Task Reflection_ShallowOnNestedObject_ShouldPreserveDeepNesting()
     {
         // Arrange
         DeepNestedObject deepNested = new DeepNestedObject
@@ -399,15 +393,15 @@ public class ShallowAttributeTests
         ClassWithShallowNestedObject? clone = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
+        await Assert.That(clone).IsNotNull();
         // The entire nested structure should be the SAME reference
-        Assert.That(clone!.ShallowNested, Is.SameAs(deepNested));
-        Assert.That(clone.ShallowNested!.Level1, Is.SameAs(deepNested.Level1));
-        Assert.That(clone.ShallowNested.Level1!.Level2, Is.SameAs(deepNested.Level1.Level2));
+        await Assert.That(clone!.ShallowNested).IsSameReferenceAs(deepNested);
+        await Assert.That(clone.ShallowNested!.Level1).IsSameReferenceAs(deepNested.Level1);
+        await Assert.That(clone.ShallowNested.Level1!.Level2).IsSameReferenceAs(deepNested.Level1.Level2);
     }
 
     [Test]
-    public void Reflection_ShallowInInheritedClass_ShouldRespectAttribute()
+    public async Task Reflection_ShallowInInheritedClass_ShouldRespectAttribute()
     {
         // Arrange
         SharedState sharedState = new SharedState { ConfigValue = "Inherited", Version = 5 };
@@ -422,15 +416,15 @@ public class ShallowAttributeTests
         DerivedClassWithShallowMember? clone = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.DerivedValue, Is.EqualTo("Derived"));
-        Assert.That(clone.BaseValue, Is.EqualTo("Base"));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.DerivedValue).IsEqualTo("Derived");
+        await Assert.That(clone.BaseValue).IsEqualTo("Base");
         // Shallow member in base class should be the SAME reference
-        Assert.That(clone.SharedData, Is.SameAs(sharedState));
+        await Assert.That(clone.SharedData).IsSameReferenceAs(sharedState);
     }
 
     [Test]
-    public void Reflection_ShallowWithCircularReference_ShouldNotCauseInfiniteLoop()
+    public async Task Reflection_ShallowWithCircularReference_ShouldNotCauseInfiniteLoop()
     {
         // Arrange - create a circular reference scenario
         CircularNodeWithShallowParent node1 = new CircularNodeWithShallowParent { Name = "Node1" };
@@ -441,18 +435,18 @@ public class ShallowAttributeTests
         CircularNodeWithShallowParent? clone = FastCloner.DeepClone(node1);
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.EqualTo("Node1"));
-        Assert.That(clone.Children, Has.Count.EqualTo(1));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsEqualTo("Node1");
+        await Assert.That(clone.Children).Count().IsEqualTo(1);
+
         CircularNodeWithShallowParent clonedChild = clone.Children[0];
-        Assert.That(clonedChild.Name, Is.EqualTo("Node2"));
+        await Assert.That(clonedChild.Name).IsEqualTo("Node2");
         // Parent is shallow-cloned, so it references the ORIGINAL node1, not the clone
-        Assert.That(clonedChild.Parent, Is.SameAs(node1));
+        await Assert.That(clonedChild.Parent).IsSameReferenceAs(node1);
     }
 
     [Test]
-    public void Reflection_MultipleShallowMembers_ShouldAllBeShallowCloned()
+    public async Task Reflection_MultipleShallowMembers_ShouldAllBeShallowCloned()
     {
         // Arrange
         SharedState shared1 = new SharedState { ConfigValue = "Shared1", Version = 1 };
@@ -470,11 +464,11 @@ public class ShallowAttributeTests
         ClassWithMultipleShallowMembers? clone = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.SharedState1, Is.SameAs(shared1));
-        Assert.That(clone.SharedState2, Is.SameAs(shared2));
-        Assert.That(clone.OwnedData, Is.Not.SameAs(owned));
-        Assert.That(clone.OwnedData!.Value, Is.EqualTo("Owned"));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.SharedState1).IsSameReferenceAs(shared1);
+        await Assert.That(clone.SharedState2).IsSameReferenceAs(shared2);
+        await Assert.That(clone.OwnedData).IsNotSameReferenceAs(owned);
+        await Assert.That(clone.OwnedData!.Value).IsEqualTo("Owned");
     }
 
     #endregion
@@ -611,7 +605,7 @@ public class ShallowAttributeTests
     #region C# 14 Field Keyword Tests
 
     [Test]
-    public void Reflection_FieldKeyword_ShallowAttribute_ShouldBeRespected()
+    public async Task Reflection_FieldKeyword_ShallowAttribute_ShouldBeRespected()
     {
         // Arrange
         SharedState sharedState = new SharedState
@@ -637,21 +631,21 @@ public class ShallowAttributeTests
         ClassWithFieldKeywordShallow? clone = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        
+        await Assert.That(clone).IsNotNull();
+
         // Property with [FastClonerShallow] and field keyword should preserve reference
-        Assert.That(clone!.ShallowWithValidation, Is.SameAs(sharedState));
-        
+        await Assert.That(clone!.ShallowWithValidation).IsSameReferenceAs(sharedState);
+
         // Normal property should be copied
-        Assert.That(clone.NormalProperty, Is.EqualTo("trimmed"));
-        
+        await Assert.That(clone.NormalProperty).IsEqualTo("trimmed");
+
         // Deep cloned data should be a different reference
-        Assert.That(clone.DeepClonedData, Is.Not.SameAs(ownedData));
-        Assert.That(clone.DeepClonedData!.Value, Is.EqualTo("Owned"));
+        await Assert.That(clone.DeepClonedData).IsNotSameReferenceAs(ownedData);
+        await Assert.That(clone.DeepClonedData!.Value).IsEqualTo("Owned");
     }
 
     [Test]
-    public void Reflection_FieldKeyword_WithValidation_ShallowAttribute_ShouldWork()
+    public async Task Reflection_FieldKeyword_WithValidation_ShallowAttribute_ShouldWork()
     {
         // Arrange
         SharedState config = new SharedState
@@ -670,17 +664,17 @@ public class ShallowAttributeTests
         ClassWithFieldKeywordValidation? clone = FastCloner.DeepClone(original);
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        
+        await Assert.That(clone).IsNotNull();
+
         // Config with [FastClonerShallow] should preserve reference
-        Assert.That(clone!.Config, Is.SameAs(config));
-        
+        await Assert.That(clone!.Config).IsSameReferenceAs(config);
+
         // Counter should be cloned (value was already clamped to 0)
-        Assert.That(clone.Counter, Is.EqualTo(0));
+        await Assert.That(clone.Counter).IsEqualTo(0);
     }
 
     [Test]
-    public void Reflection_FieldKeyword_ModifyingShallowClonedReference_AffectsOriginal()
+    public async Task Reflection_FieldKeyword_ModifyingShallowClonedReference_AffectsOriginal()
     {
         // Arrange
         SharedState sharedState = new SharedState
@@ -699,7 +693,7 @@ public class ShallowAttributeTests
         clone!.ShallowWithValidation!.ConfigValue = "Modified";
 
         // Assert - modifying through clone should affect original
-        Assert.That(sharedState.ConfigValue, Is.EqualTo("Modified"));
+        await Assert.That(sharedState.ConfigValue).IsEqualTo("Modified");
     }
 
     #endregion
@@ -708,7 +702,7 @@ public class ShallowAttributeTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Aot_ShallowAttribute_ParentReference_ShouldBeShallowCloned()
+    public async Task Aot_ShallowAttribute_ParentReference_ShouldBeShallowCloned()
     {
         // Arrange
         AotParentObject parent = new AotParentObject
@@ -728,17 +722,17 @@ public class ShallowAttributeTests
         AotChildWithShallowParent clone = child.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.ChildName, Is.EqualTo("AotChild1"));
-        Assert.That(clone.ChildId, Is.EqualTo(100));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.ChildName).IsEqualTo("AotChild1");
+        await Assert.That(clone.ChildId).IsEqualTo(100);
+
         // Parent should be the SAME reference (shallow cloned)
-        Assert.That(clone.Parent, Is.SameAs(parent));
+        await Assert.That(clone.Parent).IsSameReferenceAs(parent);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Aot_MixedClone_ShallowAndDeep_ShouldWorkCorrectly()
+    public async Task Aot_MixedClone_ShallowAndDeep_ShouldWorkCorrectly()
     {
         // Arrange
         AotSharedState sharedState = new AotSharedState
@@ -764,22 +758,22 @@ public class ShallowAttributeTests
         AotMixedCloneClass clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.EqualTo("AotMixed"));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsEqualTo("AotMixed");
+
         // SharedData should be the SAME reference (shallow cloned)
-        Assert.That(clone.SharedData, Is.SameAs(sharedState));
-        
+        await Assert.That(clone.SharedData).IsSameReferenceAs(sharedState);
+
         // OwnData should be a DIFFERENT reference (deep cloned)
-        Assert.That(clone.OwnData, Is.Not.SameAs(ownedData));
-        Assert.That(clone.OwnData, Is.Not.Null);
-        Assert.That(clone.OwnData!.Value, Is.EqualTo("AotOwned1"));
-        Assert.That(clone.OwnData.Count, Is.EqualTo(42));
+        await Assert.That(clone.OwnData).IsNotSameReferenceAs(ownedData);
+        await Assert.That(clone.OwnData).IsNotNull();
+        await Assert.That(clone.OwnData!.Value).IsEqualTo("AotOwned1");
+        await Assert.That(clone.OwnData.Count).IsEqualTo(42);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Aot_ShallowField_ShouldBeShallowCloned()
+    public async Task Aot_ShallowField_ShouldBeShallowCloned()
     {
         // Arrange
         AotSharedState sharedState = new AotSharedState
@@ -798,20 +792,20 @@ public class ShallowAttributeTests
         AotClassWithShallowField clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.EqualTo("AotFieldTest"));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsEqualTo("AotFieldTest");
+
         // SharedField should be the SAME reference (shallow cloned)
-        Assert.That(clone.SharedField, Is.SameAs(sharedState));
+        await Assert.That(clone.SharedField).IsSameReferenceAs(sharedState);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Aot_ShallowCollection_ShouldPreserveReference()
+    public async Task Aot_ShallowCollection_ShouldPreserveReference()
     {
         // Arrange
-        List<int> sharedList = new List<int> { 1, 2, 3, 4, 5 };
-        List<int> ownList = new List<int> { 10, 20, 30 };
+        List<int> sharedList = [1, 2, 3, 4, 5];
+        List<int> ownList = [10, 20, 30];
         
         AotClassWithShallowCollection original = new AotClassWithShallowCollection
         {
@@ -823,20 +817,20 @@ public class ShallowAttributeTests
         AotClassWithShallowCollection clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        
+        await Assert.That(clone).IsNotNull();
+
         // SharedList should be the SAME reference (shallow cloned)
-        Assert.That(clone!.SharedList, Is.SameAs(sharedList));
-        
+        await Assert.That(clone!.SharedList).IsSameReferenceAs(sharedList);
+
         // OwnList should be a DIFFERENT reference (deep cloned)
-        Assert.That(clone.OwnList, Is.Not.SameAs(ownList));
-        Assert.That(clone.OwnList, Is.Not.Null);
-        Assert.That(clone.OwnList, Is.EqualTo(ownList));
+        await Assert.That(clone.OwnList).IsNotSameReferenceAs(ownList);
+        await Assert.That(clone.OwnList).IsNotNull();
+        await Assert.That(clone.OwnList).IsEquivalentTo(ownList);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Aot_ShallowAttribute_NullValue_ShouldBeHandledCorrectly()
+    public async Task Aot_ShallowAttribute_NullValue_ShouldBeHandledCorrectly()
     {
         // Arrange
         AotChildWithShallowParent original = new AotChildWithShallowParent
@@ -850,15 +844,15 @@ public class ShallowAttributeTests
         AotChildWithShallowParent clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Parent, Is.Null);
-        Assert.That(clone.ChildName, Is.EqualTo("AotOrphanChild"));
-        Assert.That(clone.ChildId, Is.EqualTo(999));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Parent).IsNull();
+        await Assert.That(clone.ChildName).IsEqualTo("AotOrphanChild");
+        await Assert.That(clone.ChildId).IsEqualTo(999);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Aot_ModifyingShallowClonedReference_AffectsOriginal()
+    public async Task Aot_ModifyingShallowClonedReference_AffectsOriginal()
     {
         // Arrange
         AotParentObject parent = new AotParentObject
@@ -881,12 +875,12 @@ public class ShallowAttributeTests
         clone!.Parent!.Name = "AotModifiedParent";
 
         // Assert - modifying through clone should affect original
-        Assert.That(parent.Name, Is.EqualTo("AotModifiedParent"));
+        await Assert.That(parent.Name).IsEqualTo("AotModifiedParent");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Aot_ShallowOnNestedObject_ShouldPreserveDeepNesting()
+    public async Task Aot_ShallowOnNestedObject_ShouldPreserveDeepNesting()
     {
         // Arrange
         AotDeepNestedObject deepNested = new AotDeepNestedObject
@@ -911,16 +905,16 @@ public class ShallowAttributeTests
         AotClassWithShallowNestedObject clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
+        await Assert.That(clone).IsNotNull();
         // The entire nested structure should be the SAME reference
-        Assert.That(clone!.ShallowNested, Is.SameAs(deepNested));
-        Assert.That(clone.ShallowNested!.Level1, Is.SameAs(deepNested.Level1));
-        Assert.That(clone.ShallowNested.Level1!.Level2, Is.SameAs(deepNested.Level1.Level2));
+        await Assert.That(clone!.ShallowNested).IsSameReferenceAs(deepNested);
+        await Assert.That(clone.ShallowNested!.Level1).IsSameReferenceAs(deepNested.Level1);
+        await Assert.That(clone.ShallowNested.Level1!.Level2).IsSameReferenceAs(deepNested.Level1.Level2);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Aot_ShallowInInheritedClass_ShouldRespectAttribute()
+    public async Task Aot_ShallowInInheritedClass_ShouldRespectAttribute()
     {
         // Arrange
         AotSharedState sharedState = new AotSharedState { ConfigValue = "AotInherited", Version = 5 };
@@ -935,16 +929,16 @@ public class ShallowAttributeTests
         AotDerivedClassWithShallowMember clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.DerivedValue, Is.EqualTo("AotDerived"));
-        Assert.That(clone.BaseValue, Is.EqualTo("AotBase"));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.DerivedValue).IsEqualTo("AotDerived");
+        await Assert.That(clone.BaseValue).IsEqualTo("AotBase");
         // Shallow member in base class should be the SAME reference
-        Assert.That(clone.SharedData, Is.SameAs(sharedState));
+        await Assert.That(clone.SharedData).IsSameReferenceAs(sharedState);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Aot_MultipleShallowMembers_ShouldAllBeShallowCloned()
+    public async Task Aot_MultipleShallowMembers_ShouldAllBeShallowCloned()
     {
         // Arrange
         AotSharedState shared1 = new AotSharedState { ConfigValue = "AotShared1", Version = 1 };
@@ -962,11 +956,11 @@ public class ShallowAttributeTests
         AotClassWithMultipleShallowMembers clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.SharedState1, Is.SameAs(shared1));
-        Assert.That(clone.SharedState2, Is.SameAs(shared2));
-        Assert.That(clone.OwnedData, Is.Not.SameAs(owned));
-        Assert.That(clone.OwnedData!.Value, Is.EqualTo("AotOwned"));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.SharedState1).IsSameReferenceAs(shared1);
+        await Assert.That(clone.SharedState2).IsSameReferenceAs(shared2);
+        await Assert.That(clone.OwnedData).IsNotSameReferenceAs(owned);
+        await Assert.That(clone.OwnedData!.Value).IsEqualTo("AotOwned");
     }
 
     #endregion
@@ -1059,7 +1053,7 @@ public class ShallowAttributeTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Aot_ShallowGetterOnlyCollection_ShouldShallowCloneItems()
+    public async Task Aot_ShallowGetterOnlyCollection_ShouldShallowCloneItems()
     {
         // Arrange - Issue #22: [FastClonerShallow] on getter-only collection should shallow clone items
         AotOwnedData item1 = new AotOwnedData { Value = "Item1", Count = 1 };
@@ -1073,21 +1067,21 @@ public class ShallowAttributeTests
         AotClassWithShallowGetterOnlyCollection clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.EqualTo("ShallowGetterOnly"));
-        Assert.That(clone.Items, Has.Count.EqualTo(2));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsEqualTo("ShallowGetterOnly");
+        await Assert.That(clone.Items).Count().IsEqualTo(2);
+
         // Items should be the SAME references (shallow cloned) - Issue #22 fix
-        Assert.That(clone.Items[0], Is.SameAs(item1), "Item 0 should be the same reference (shallow clone)");
-        Assert.That(clone.Items[1], Is.SameAs(item2), "Item 1 should be the same reference (shallow clone)");
-        
+        await Assert.That(clone.Items[0]).IsSameReferenceAs(item1).Because("Item 0 should be the same reference (shallow clone)");
+        await Assert.That(clone.Items[1]).IsSameReferenceAs(item2).Because("Item 1 should be the same reference (shallow clone)");
+
         // The collection itself is a different instance (getter-only creates new collection)
-        Assert.That(clone.Items, Is.Not.SameAs(original.Items));
+        await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Aot_DeepGetterOnlyCollection_ShouldDeepCloneItems()
+    public async Task Aot_DeepGetterOnlyCollection_ShouldDeepCloneItems()
     {
         // Arrange - Without [FastClonerShallow], getter-only collection should deep clone items
         AotOwnedData item1 = new AotOwnedData { Value = "Item1", Count = 1 };
@@ -1101,24 +1095,24 @@ public class ShallowAttributeTests
         AotClassWithDeepGetterOnlyCollection clone = original.FastDeepClone();
 
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.EqualTo("DeepGetterOnly"));
-        Assert.That(clone.Items, Has.Count.EqualTo(2));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsEqualTo("DeepGetterOnly");
+        await Assert.That(clone.Items).Count().IsEqualTo(2);
+
         // Items should be DIFFERENT references (deep cloned) - the default behavior
-        Assert.That(clone.Items[0], Is.Not.SameAs(item1), "Item 0 should be a different reference (deep clone)");
-        Assert.That(clone.Items[1], Is.Not.SameAs(item2), "Item 1 should be a different reference (deep clone)");
-        
+        await Assert.That(clone.Items[0]).IsNotSameReferenceAs(item1).Because("Item 0 should be a different reference (deep clone)");
+        await Assert.That(clone.Items[1]).IsNotSameReferenceAs(item2).Because("Item 1 should be a different reference (deep clone)");
+
         // But values should be equal
-        Assert.That(clone.Items[0].Value, Is.EqualTo("Item1"));
-        Assert.That(clone.Items[0].Count, Is.EqualTo(1));
-        Assert.That(clone.Items[1].Value, Is.EqualTo("Item2"));
-        Assert.That(clone.Items[1].Count, Is.EqualTo(2));
+        await Assert.That(clone.Items[0].Value).IsEqualTo("Item1");
+        await Assert.That(clone.Items[0].Count).IsEqualTo(1);
+        await Assert.That(clone.Items[1].Value).IsEqualTo("Item2");
+        await Assert.That(clone.Items[1].Count).IsEqualTo(2);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Aot_ShallowGetterOnlyCollection_ModifyingClonedItemsAffectsOriginal()
+    public async Task Aot_ShallowGetterOnlyCollection_ModifyingClonedItemsAffectsOriginal()
     {
         // Arrange
         AotOwnedData item1 = new AotOwnedData { Value = "Original", Count = 1 };
@@ -1131,13 +1125,13 @@ public class ShallowAttributeTests
         clone!.Items[0].Value = "Modified";
 
         // Assert - modifying through clone should affect original (shallow clone)
-        Assert.That(item1.Value, Is.EqualTo("Modified"));
-        Assert.That(original.Items[0].Value, Is.EqualTo("Modified"));
+        await Assert.That(item1.Value).IsEqualTo("Modified");
+        await Assert.That(original.Items[0].Value).IsEqualTo("Modified");
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Aot_DeepGetterOnlyCollection_ModifyingClonedItemsDoesNotAffectOriginal()
+    public async Task Aot_DeepGetterOnlyCollection_ModifyingClonedItemsDoesNotAffectOriginal()
     {
         // Arrange
         AotOwnedData item1 = new AotOwnedData { Value = "Original", Count = 1 };
@@ -1150,8 +1144,8 @@ public class ShallowAttributeTests
         clone!.Items[0].Value = "Modified";
 
         // Assert - modifying through clone should NOT affect original (deep clone)
-        Assert.That(item1.Value, Is.EqualTo("Original"));
-        Assert.That(original.Items[0].Value, Is.EqualTo("Original"));
+        await Assert.That(item1.Value).IsEqualTo("Original");
+        await Assert.That(original.Items[0].Value).IsEqualTo("Original");
     }
 
     #endregion

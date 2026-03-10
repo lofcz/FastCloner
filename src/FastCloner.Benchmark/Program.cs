@@ -5,11 +5,11 @@ using FastCloner.Benchmark.Ideas;
 
 namespace FastCloner.Benchmark;
 
-class Program
+internal class Program
 {
     static void Main(string[] args)
     {
-        // this is used only for package "FastDeepCloner" which is not properly packed; todo: fork it and pack for a fair bench
+        // this is used only for package "FastDeepCloner" which is not properly packed
         ManualConfig config = DefaultConfig.Instance
             .WithOptions(ConfigOptions.DisableOptimizationsValidator);
 
@@ -49,7 +49,7 @@ class Program
     {
         return typeof(Program).Assembly
             .GetTypes()
-            .Where(t => !t.IsAbstract && !t.IsInterface && typeof(IBenchmarkIdea).IsAssignableFrom(t))
+            .Where(t => t is { IsAbstract: false, IsInterface: false } && typeof(IBenchmarkIdea).IsAssignableFrom(t))
             .Select(t => (IBenchmarkIdea)Activator.CreateInstance(t)!)
             .OrderBy(x => x.Id, StringComparer.OrdinalIgnoreCase)
             .ToArray();

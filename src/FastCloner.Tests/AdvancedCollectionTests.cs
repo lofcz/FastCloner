@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using System.Linq;
 using FastCloner.SourceGenerator.Shared;
-using NUnit.Framework;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
 
@@ -19,19 +19,17 @@ public class AdvancedCollections
     public ImmutableDictionary<int, int> ImmutableDict { get; set; }
     public ReadOnlyDictionary<int, int> ReadOnlyDict { get; set; }
 }
-
-[TestFixture]
 public class AdvancedCollectionTests
 {
     [Test]
-    public void TestAdvancedCollections()
+    public async Task TestAdvancedCollections()
     {
         AdvancedCollections original = new AdvancedCollections
         {
-            Observable = new ObservableCollection<int> { 1, 2, 3 },
+            Observable = [1, 2, 3],
             ReadOnly = new ReadOnlyCollection<int>(new List<int> { 4, 5, 6 }),
             ImmutableList = ImmutableList.Create(7, 8, 9),
-            ImmutableArray = ImmutableArray.Create(10, 11, 12),
+            ImmutableArray = [10, 11, 12],
             ImmutableQueue = ImmutableQueue.Create(13, 14, 15),
             ImmutableStack = ImmutableStack.Create(16, 17, 18),
             ImmutableDict = ImmutableDictionary.Create<int, int>().Add(1, 100),
@@ -40,51 +38,51 @@ public class AdvancedCollectionTests
 
         AdvancedCollections clone = original.FastDeepClone();
 
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.Not.SameAs(original));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsNotSameReferenceAs(original);
 
         // Verify Observable
-        Assert.That(clone.Observable, Is.Not.Null);
-        Assert.That(clone.Observable, Is.Not.SameAs(original.Observable));
-        Assert.That(clone.Observable, Is.EqualTo(original.Observable));
+        await Assert.That(clone.Observable).IsNotNull();
+        await Assert.That(clone.Observable).IsNotSameReferenceAs(original.Observable);
+        await Assert.That(clone.Observable).IsEquivalentTo(original.Observable);
 
         // Verify ReadOnly
-        Assert.That(clone.ReadOnly, Is.Not.Null);
-        Assert.That(clone.ReadOnly, Is.Not.SameAs(original.ReadOnly));
-        Assert.That(clone.ReadOnly, Is.EqualTo(original.ReadOnly));
+        await Assert.That(clone.ReadOnly).IsNotNull();
+        await Assert.That(clone.ReadOnly).IsNotSameReferenceAs(original.ReadOnly);
+        await Assert.That(clone.ReadOnly).IsEquivalentTo(original.ReadOnly);
 
         // Verify ImmutableList
-        Assert.That(clone.ImmutableList, Is.Not.Null);
+        await Assert.That(clone.ImmutableList).IsNotNull();
         // Optimization: Immutable collections with immutable elements return the same reference
         // since there's nothing mutable to clone
-        Assert.That(clone.ImmutableList, Is.SameAs(original.ImmutableList));
-        Assert.That(clone.ImmutableList, Is.EqualTo(original.ImmutableList));
+        await Assert.That(clone.ImmutableList).IsSameReferenceAs(original.ImmutableList);
+        await Assert.That(clone.ImmutableList).IsEquivalentTo(original.ImmutableList);
 
         // Verify ImmutableArray (Struct)
-        Assert.That(clone.ImmutableArray.IsDefault, Is.False);
-        Assert.That(clone.ImmutableArray, Is.EqualTo(original.ImmutableArray));
+        await Assert.That(clone.ImmutableArray.IsDefault).IsFalse();
+        await Assert.That(clone.ImmutableArray).IsEquivalentTo(original.ImmutableArray);
 
         // Verify ImmutableQueue
-        Assert.That(clone.ImmutableQueue, Is.Not.Null);
+        await Assert.That(clone.ImmutableQueue).IsNotNull();
         // Optimization: Immutable collections with immutable elements return same reference
-        Assert.That(clone.ImmutableQueue, Is.SameAs(original.ImmutableQueue));
-        Assert.That(clone.ImmutableQueue.ToArray(), Is.EqualTo(original.ImmutableQueue.ToArray()));
+        await Assert.That(clone.ImmutableQueue).IsSameReferenceAs(original.ImmutableQueue);
+        await Assert.That(clone.ImmutableQueue.ToArray()).IsEquivalentTo(original.ImmutableQueue.ToArray());
 
         // Verify ImmutableStack
-        Assert.That(clone.ImmutableStack, Is.Not.Null);
+        await Assert.That(clone.ImmutableStack).IsNotNull();
         // Optimization: Immutable collections with immutable elements return same reference
-        Assert.That(clone.ImmutableStack, Is.SameAs(original.ImmutableStack));
-        Assert.That(clone.ImmutableStack.ToArray(), Is.EqualTo(original.ImmutableStack.ToArray()));
+        await Assert.That(clone.ImmutableStack).IsSameReferenceAs(original.ImmutableStack);
+        await Assert.That(clone.ImmutableStack.ToArray()).IsEquivalentTo(original.ImmutableStack.ToArray());
 
         // Verify ImmutableDict
-        Assert.That(clone.ImmutableDict, Is.Not.Null);
+        await Assert.That(clone.ImmutableDict).IsNotNull();
         // Optimization: Immutable dictionary with immutable keys and values returns same reference
-        Assert.That(clone.ImmutableDict, Is.SameAs(original.ImmutableDict));
-        Assert.That(clone.ImmutableDict[1], Is.EqualTo(100));
+        await Assert.That(clone.ImmutableDict).IsSameReferenceAs(original.ImmutableDict);
+        await Assert.That(clone.ImmutableDict[1]).IsEqualTo(100);
 
         // Verify ReadOnlyDict
-        Assert.That(clone.ReadOnlyDict, Is.Not.Null);
-        Assert.That(clone.ReadOnlyDict, Is.Not.SameAs(original.ReadOnlyDict));
-        Assert.That(clone.ReadOnlyDict[2], Is.EqualTo(200));
+        await Assert.That(clone.ReadOnlyDict).IsNotNull();
+        await Assert.That(clone.ReadOnlyDict).IsNotSameReferenceAs(original.ReadOnlyDict);
+        await Assert.That(clone.ReadOnlyDict[2]).IsEqualTo(200);
     }
 }

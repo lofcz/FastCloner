@@ -1,9 +1,7 @@
 using FastCloner.SourceGenerator.Shared;
-using NUnit.Framework;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
-
-[TestFixture]
 [SourceGeneratorCompatible]
 public class RecordTests
 {
@@ -76,7 +74,7 @@ public class RecordTests
     
     [Test]
     [SourceGeneratorCompatible]
-    public void SimpleRecord_Should_Clone()
+    public async Task SimpleRecord_Should_Clone()
     {
         // Arrange
         SimpleRecord record = new SimpleRecord("Alice", 30);
@@ -85,15 +83,15 @@ public class RecordTests
         SimpleRecord clone = record.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone, Is.Not.SameAs(record));
-        Assert.That(clone!.Name, Is.EqualTo("Alice"));
-        Assert.That(clone.Age, Is.EqualTo(30));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsNotSameReferenceAs(record);
+        await Assert.That(clone!.Name).IsEqualTo("Alice");
+        await Assert.That(clone.Age).IsEqualTo(30);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void SimpleRecord_Clone_Should_Be_Independent()
+    public async Task SimpleRecord_Clone_Should_Be_Independent()
     {
         // Arrange
         SimpleRecord record = new SimpleRecord("Bob", 25);
@@ -103,8 +101,8 @@ public class RecordTests
         SimpleRecord modified = record with { Name = "Charlie" };
         
         // Assert - clone should be unaffected by modifications to original
-        Assert.That(clone!.Name, Is.EqualTo("Bob"));
-        Assert.That(modified.Name, Is.EqualTo("Charlie"));
+        await Assert.That(clone!.Name).IsEqualTo("Bob");
+        await Assert.That(modified.Name).IsEqualTo("Charlie");
     }
 
     #endregion
@@ -113,7 +111,7 @@ public class RecordTests
     
     [Test]
     [SourceGeneratorCompatible]
-    public void RecordWithCollection_Should_DeepClone()
+    public async Task RecordWithCollection_Should_DeepClone()
     {
         // Arrange
         RecordWithCollection record = new RecordWithCollection
@@ -127,18 +125,18 @@ public class RecordTests
         RecordWithCollection clone = record.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.EqualTo("Test"));
-        Assert.That(clone.Count, Is.EqualTo(5));
-        Assert.That(clone.Tags, Is.Not.Null);
-        Assert.That(clone.Tags, Is.Not.SameAs(record.Tags)); // Deep cloned
-        Assert.That(clone.Tags!.Count, Is.EqualTo(3));
-        Assert.That(clone.Tags, Is.EquivalentTo(record.Tags));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsEqualTo("Test");
+        await Assert.That(clone.Count).IsEqualTo(5);
+        await Assert.That(clone.Tags).IsNotNull();
+        await Assert.That(clone.Tags).IsNotSameReferenceAs(record.Tags); // Deep cloned
+        await Assert.That(clone.Tags!.Count).IsEqualTo(3);
+        await Assert.That(clone.Tags).IsEquivalentTo(record.Tags);
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void RecordWithCollection_Clone_Should_Be_Independent()
+    public async Task RecordWithCollection_Clone_Should_Be_Independent()
     {
         // Arrange
         RecordWithCollection record = new RecordWithCollection
@@ -153,9 +151,9 @@ public class RecordTests
         record.Tags!.Add("c");
         
         // Assert - clone's list should be unchanged
-        Assert.That(record.Tags.Count, Is.EqualTo(3));
-        Assert.That(clone!.Tags!.Count, Is.EqualTo(2));
-        Assert.That(clone.Tags, Does.Not.Contain("c"));
+        await Assert.That(record.Tags.Count).IsEqualTo(3);
+        await Assert.That(clone!.Tags!.Count).IsEqualTo(2);
+        await Assert.That(clone.Tags).DoesNotContain("c");
     }
 
     #endregion
@@ -164,7 +162,7 @@ public class RecordTests
     
     [Test]
     [SourceGeneratorCompatible]
-    public void PersonRecord_Should_DeepClone_Nested()
+    public async Task PersonRecord_Should_DeepClone_Nested()
     {
         // Arrange
         PersonRecord person = new PersonRecord
@@ -184,26 +182,26 @@ public class RecordTests
         PersonRecord clone = person.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.FirstName, Is.EqualTo("John"));
-        Assert.That(clone.LastName, Is.EqualTo("Doe"));
-        
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.FirstName).IsEqualTo("John");
+        await Assert.That(clone.LastName).IsEqualTo("Doe");
+
         // Nested record should be deep cloned
-        Assert.That(clone.Address, Is.Not.Null);
-        Assert.That(clone.Address, Is.Not.SameAs(person.Address));
-        Assert.That(clone.Address!.Street, Is.EqualTo("123 Main St"));
-        Assert.That(clone.Address.City, Is.EqualTo("Seattle"));
-        
+        await Assert.That(clone.Address).IsNotNull();
+        await Assert.That(clone.Address).IsNotSameReferenceAs(person.Address);
+        await Assert.That(clone.Address!.Street).IsEqualTo("123 Main St");
+        await Assert.That(clone.Address.City).IsEqualTo("Seattle");
+
         // List should be deep cloned
-        Assert.That(clone.PhoneNumbers, Is.Not.SameAs(person.PhoneNumbers));
-        Assert.That(clone.PhoneNumbers!.Count, Is.EqualTo(2));
+        await Assert.That(clone.PhoneNumbers).IsNotSameReferenceAs(person.PhoneNumbers);
+        await Assert.That(clone.PhoneNumbers!.Count).IsEqualTo(2);
     }
 
     #endregion
     
     [Test]
     [SourceGeneratorCompatible]
-    public void PointRecord_Struct_Should_Clone()
+    public async Task PointRecord_Struct_Should_Clone()
     {
         // Arrange
         PointRecord point = new PointRecord(10.5, 20.5);
@@ -212,13 +210,13 @@ public class RecordTests
         PointRecord clone = point.FastDeepClone();
         
         // Assert
-        Assert.That(clone.X, Is.EqualTo(10.5));
-        Assert.That(clone.Y, Is.EqualTo(20.5));
+        await Assert.That(clone.X).IsEqualTo(10.5);
+        await Assert.That(clone.Y).IsEqualTo(20.5);
     }
     
     [Test]
     [SourceGeneratorCompatible]
-    public void RecordStructWithCollection_Should_DeepClone()
+    public async Task RecordStructWithCollection_Should_DeepClone()
     {
         // Arrange
         RecordStructWithCollection record = new RecordStructWithCollection
@@ -232,9 +230,9 @@ public class RecordTests
         record.Values!.Add(6);
         
         // Assert - clone's list should be independent
-        Assert.That(clone.Label, Is.EqualTo("Data"));
-        Assert.That(clone.Values!.Count, Is.EqualTo(5));
-        Assert.That(record.Values.Count, Is.EqualTo(6));
+        await Assert.That(clone.Label).IsEqualTo("Data");
+        await Assert.That(clone.Values!.Count).IsEqualTo(5);
+        await Assert.That(record.Values.Count).IsEqualTo(6);
     }
     
     // #endregion
@@ -243,7 +241,7 @@ public class RecordTests
     
     [Test]
     [SourceGeneratorCompatible]
-    public void RecordWithDictionary_Should_DeepClone()
+    public async Task RecordWithDictionary_Should_DeepClone()
     {
         // Arrange
         RecordWithDictionary record = new RecordWithDictionary
@@ -263,12 +261,12 @@ public class RecordTests
         record.Scores["Diana"] = 92;
         
         // Assert - clone's dictionary should be independent
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.EqualTo("Scores"));
-        Assert.That(clone.Scores, Is.Not.SameAs(record.Scores));
-        Assert.That(clone.Scores!.Count, Is.EqualTo(3));
-        Assert.That(clone.Scores["Alice"], Is.EqualTo(100)); // Original value
-        Assert.That(clone.Scores.ContainsKey("Diana"), Is.False);
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsEqualTo("Scores");
+        await Assert.That(clone.Scores).IsNotSameReferenceAs(record.Scores);
+        await Assert.That(clone.Scores!.Count).IsEqualTo(3);
+        await Assert.That(clone.Scores["Alice"]).IsEqualTo(100); // Original value
+        await Assert.That(clone.Scores.ContainsKey("Diana")).IsFalse();
     }
 
     #endregion
@@ -277,7 +275,7 @@ public class RecordTests
     
     [Test]
     [SourceGeneratorCompatible]
-    public void Null_Record_Should_Return_Null()
+    public async Task Null_Record_Should_Return_Null()
     {
         // Arrange
         SimpleRecord? record = null;
@@ -286,12 +284,12 @@ public class RecordTests
         SimpleRecord? clone = record.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Null);
+        await Assert.That(clone).IsNull();
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public void Record_With_Null_Properties_Should_Clone()
+    public async Task Record_With_Null_Properties_Should_Clone()
     {
         // Arrange
         RecordWithCollection record = new RecordWithCollection
@@ -305,12 +303,11 @@ public class RecordTests
         RecordWithCollection clone = record.FastDeepClone();
         
         // Assert
-        Assert.That(clone, Is.Not.Null);
-        Assert.That(clone!.Name, Is.Null);
-        Assert.That(clone.Tags, Is.Null);
-        Assert.That(clone.Count, Is.EqualTo(0));
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Name).IsNull();
+        await Assert.That(clone.Tags).IsNull();
+        await Assert.That(clone.Count).IsEqualTo(0);
     }
 
     #endregion
 }
-

@@ -1,5 +1,6 @@
 using FastCloner.SourceGenerator.Shared;
 using FastCloner.Tests.SubModels;
+using System.Threading.Tasks;
 
 // Types in a different namespace to test cross-namespace extension class resolution. #29.
 namespace FastCloner.Tests.SubModels
@@ -21,8 +22,6 @@ namespace FastCloner.Tests.SubModels
 
 namespace FastCloner.Tests
 {
-    #region Container types referencing cross-namespace clonables
-
     [FastClonerClonable]
     public class CrossNamespaceContainer
     {
@@ -42,17 +41,11 @@ namespace FastCloner.Tests
         public NestedSubModel? Nested { get; set; }
         public int Code { get; set; }
     }
-
-    #endregion
-
-    [TestFixture]
     public class SourceGeneratorCrossNamespaceTests
     {
-        #region Direct property tests
-
         [Test]
         [SourceGeneratorCompatible]
-        public void CrossNamespace_Direct_Property_Should_Deep_Clone()
+        public async Task CrossNamespace_Direct_Property_Should_Deep_Clone()
         {
             CrossNamespaceContainer original = new CrossNamespaceContainer
             {
@@ -62,79 +55,71 @@ namespace FastCloner.Tests
 
             CrossNamespaceContainer clone = original.FastDeepClone();
 
-            Assert.That(clone, Is.Not.Null);
-            Assert.That(clone!.Item, Is.Not.Null);
-            Assert.That(clone.Item, Is.Not.SameAs(original.Item));
-            Assert.That(clone.Item!.Id, Is.EqualTo(42));
-            Assert.That(clone.Item.Label, Is.EqualTo("Original"));
-            Assert.That(clone.Tag, Is.EqualTo("test"));
+            await Assert.That(clone).IsNotNull();
+            await Assert.That(clone!.Item).IsNotNull();
+            await Assert.That(clone.Item).IsNotSameReferenceAs(original.Item);
+            await Assert.That(clone.Item!.Id).IsEqualTo(42);
+            await Assert.That(clone.Item.Label).IsEqualTo("Original");
+            await Assert.That(clone.Tag).IsEqualTo("test");
 
             clone.Item.Label = "Modified";
-            Assert.That(original.Item!.Label, Is.EqualTo("Original"));
+            await Assert.That(original.Item!.Label).IsEqualTo("Original");
         }
 
         [Test]
         [SourceGeneratorCompatible]
-        public void CrossNamespace_Null_Property_Should_Remain_Null()
+        public async Task CrossNamespace_Null_Property_Should_Remain_Null()
         {
             CrossNamespaceContainer original = new CrossNamespaceContainer { Item = null, Tag = "t" };
             CrossNamespaceContainer clone = original.FastDeepClone();
 
-            Assert.That(clone, Is.Not.Null);
-            Assert.That(clone!.Item, Is.Null);
-            Assert.That(clone.Tag, Is.EqualTo("t"));
+            await Assert.That(clone).IsNotNull();
+            await Assert.That(clone!.Item).IsNull();
+            await Assert.That(clone.Tag).IsEqualTo("t");
         }
-
-        #endregion
-
-        #region Collection of cross-namespace elements
-
+        
         [Test]
         [SourceGeneratorCompatible]
-        public void CrossNamespace_List_Should_Deep_Clone_Elements()
+        public async Task CrossNamespace_List_Should_Deep_Clone_Elements()
         {
             CrossNamespaceListContainer original = new CrossNamespaceListContainer
             {
-                Items = new List<SubModelItem>
-                {
+                Items =
+                [
                     new SubModelItem { Id = 1, Label = "A" },
                     new SubModelItem { Id = 2, Label = "B" },
                     new SubModelItem { Id = 3, Label = "C" }
-                }
+                ]
             };
 
             CrossNamespaceListContainer clone = original.FastDeepClone();
 
-            Assert.That(clone, Is.Not.Null);
-            Assert.That(clone!.Items, Is.Not.Null);
-            Assert.That(clone.Items, Is.Not.SameAs(original.Items));
-            Assert.That(clone.Items!.Count, Is.EqualTo(3));
-            Assert.That(clone.Items[0].Id, Is.EqualTo(1));
-            Assert.That(clone.Items[1].Label, Is.EqualTo("B"));
-            Assert.That(clone.Items[2].Id, Is.EqualTo(3));
+            await Assert.That(clone).IsNotNull();
+            await Assert.That(clone!.Items).IsNotNull();
+            await Assert.That(clone.Items).IsNotSameReferenceAs(original.Items);
+            await Assert.That(clone.Items!.Count).IsEqualTo(3);
+            await Assert.That(clone.Items[0].Id).IsEqualTo(1);
+            await Assert.That(clone.Items[1].Label).IsEqualTo("B");
+            await Assert.That(clone.Items[2].Id).IsEqualTo(3);
 
             clone.Items[0].Label = "Modified";
-            Assert.That(original.Items[0].Label, Is.EqualTo("A"));
+            await Assert.That(original.Items[0].Label).IsEqualTo("A");
         }
 
         [Test]
         [SourceGeneratorCompatible]
-        public void CrossNamespace_Null_List_Should_Remain_Null()
+        public async Task CrossNamespace_Null_List_Should_Remain_Null()
         {
             CrossNamespaceListContainer original = new CrossNamespaceListContainer { Items = null };
             CrossNamespaceListContainer clone = original.FastDeepClone();
 
-            Assert.That(clone, Is.Not.Null);
-            Assert.That(clone!.Items, Is.Null);
+            await Assert.That(clone).IsNotNull();
+            await Assert.That(clone!.Items).IsNull();
         }
-
-        #endregion
-
-        #region Nested cross-namespace references (two levels)
 
         [Test]
         [SourceGeneratorCompatible]
-        public void CrossNamespace_Nested_Reference_Should_Deep_Clone()
+        public async Task CrossNamespace_Nested_Reference_Should_Deep_Clone()
         {
             CrossNamespaceNestedContainer original = new CrossNamespaceNestedContainer
             {
@@ -148,20 +133,18 @@ namespace FastCloner.Tests
 
             CrossNamespaceNestedContainer clone = original.FastDeepClone();
 
-            Assert.That(clone, Is.Not.Null);
-            Assert.That(clone!.Code, Is.EqualTo(123));
-            Assert.That(clone.Nested, Is.Not.Null);
-            Assert.That(clone.Nested, Is.Not.SameAs(original.Nested));
-            Assert.That(clone.Nested!.Value, Is.EqualTo(99));
-            Assert.That(clone.Nested.Child, Is.Not.Null);
-            Assert.That(clone.Nested.Child, Is.Not.SameAs(original.Nested!.Child));
-            Assert.That(clone.Nested.Child!.Id, Is.EqualTo(7));
-            Assert.That(clone.Nested.Child.Label, Is.EqualTo("Deep"));
+            await Assert.That(clone).IsNotNull();
+            await Assert.That(clone!.Code).IsEqualTo(123);
+            await Assert.That(clone.Nested).IsNotNull();
+            await Assert.That(clone.Nested).IsNotSameReferenceAs(original.Nested);
+            await Assert.That(clone.Nested!.Value).IsEqualTo(99);
+            await Assert.That(clone.Nested.Child).IsNotNull();
+            await Assert.That(clone.Nested.Child).IsNotSameReferenceAs(original.Nested!.Child);
+            await Assert.That(clone.Nested.Child!.Id).IsEqualTo(7);
+            await Assert.That(clone.Nested.Child.Label).IsEqualTo("Deep");
 
             clone.Nested.Child.Label = "Modified";
-            Assert.That(original.Nested.Child!.Label, Is.EqualTo("Deep"));
+            await Assert.That(original.Nested.Child!.Label).IsEqualTo("Deep");
         }
-
-        #endregion
     }
 }

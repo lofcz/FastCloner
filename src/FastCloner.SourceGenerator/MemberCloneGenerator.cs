@@ -169,9 +169,11 @@ internal static class MemberCloneGenerator
         if (member.TypeKind != MemberTypeKind.Collection && member.TypeKind != MemberTypeKind.Dictionary)
             return;
 
-        sb.AppendLine($"            if ({sourceVar}.{memberName} != null)");
+        string targetVar = $"target_{context.GetNextVariableId()}";
+        sb.AppendLine($"            var {targetVar} = {resultVar}.{memberName};");
+        sb.AppendLine($"            if ({sourceVar}.{memberName} != null && {targetVar} != null)");
         sb.AppendLine("            {");
-        sb.AppendLine($"                {resultVar}.{memberName}.Clear();");
+        sb.AppendLine($"                {targetVar}.Clear();");
         
         if (member.IsShallowClone)
         {
@@ -179,7 +181,7 @@ internal static class MemberCloneGenerator
             {
                 sb.AppendLine($"                foreach (var kvp in {sourceVar}.{memberName})");
                 sb.AppendLine("                {");
-                sb.AppendLine($"                    {resultVar}.{memberName}[kvp.Key] = kvp.Value;");
+                sb.AppendLine($"                    {targetVar}[kvp.Key!] = kvp.Value!;");
                 sb.AppendLine("                }");
             }
             else
@@ -187,7 +189,7 @@ internal static class MemberCloneGenerator
                 string addMethod = GetAddMethodForCollection(member.CollectionKind);
                 sb.AppendLine($"                foreach (var item in {sourceVar}.{memberName})");
                 sb.AppendLine("                {");
-                sb.AppendLine($"                    {resultVar}.{memberName}.{addMethod}(item);");
+                sb.AppendLine($"                    {targetVar}.{addMethod}(item!);");
                 sb.AppendLine("                }");
             }
         }
@@ -206,7 +208,7 @@ internal static class MemberCloneGenerator
             {
                 sb.AppendLine($"                    foreach (var kvp in {clonedVar})");
                 sb.AppendLine("                    {");
-                sb.AppendLine($"                        {resultVar}.{memberName}[kvp.Key] = kvp.Value;");
+                sb.AppendLine($"                        {targetVar}[kvp.Key!] = kvp.Value!;");
                 sb.AppendLine("                    }");
             }
             else
@@ -214,7 +216,7 @@ internal static class MemberCloneGenerator
                 string addMethod = GetAddMethodForCollection(member.CollectionKind);
                 sb.AppendLine($"                    foreach (var item in {clonedVar})");
                 sb.AppendLine("                    {");
-                sb.AppendLine($"                        {resultVar}.{memberName}.{addMethod}(item);");
+                sb.AppendLine($"                        {targetVar}.{addMethod}(item!);");
                 sb.AppendLine("                    }");
             }
             

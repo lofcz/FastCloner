@@ -1,4 +1,5 @@
 using FastCloner.SourceGenerator.Shared;
+using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
 
@@ -20,7 +21,7 @@ public class IdentityPreservationTests
     }
     
     [Test]
-    public void SimpleTree_ClonesCorrectly_NoStateNeeded()
+    public async Task SimpleTree_ClonesCorrectly_NoStateNeeded()
     {
         SimpleTreeRoot original = new SimpleTreeRoot
         {
@@ -30,10 +31,10 @@ public class IdentityPreservationTests
         
         SimpleTreeRoot clone = original.FastDeepClone();
         
-        Assert.That(clone, Is.Not.SameAs(original));
-        Assert.That(clone.Name, Is.EqualTo("Root"));
-        Assert.That(clone.Child, Is.Not.SameAs(original.Child));
-        Assert.That(clone.Child.Value, Is.EqualTo(42));
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.Name).IsEqualTo("Root");
+        await Assert.That(clone.Child).IsNotSameReferenceAs(original.Child);
+        await Assert.That(clone.Child.Value).IsEqualTo(42);
     }
     
     #endregion
@@ -68,7 +69,7 @@ public class IdentityPreservationTests
     }
     
     [Test]
-    public void MultiplePaths_PreservesIdentity_WhenSameInstanceShared()
+    public async Task MultiplePaths_PreservesIdentity_WhenSameInstanceShared()
     {
         SharedNode sharedNode = new SharedNode { Value = 100 };
         MultiPathRoot original = new MultiPathRoot
@@ -79,22 +80,21 @@ public class IdentityPreservationTests
         };
         
         // Verify original has shared identity
-        Assert.That(original.PathA.Shared, Is.SameAs(original.PathB.Shared));
-        
+        await Assert.That(original.PathA.Shared).IsSameReferenceAs(original.PathB.Shared);
+
         MultiPathRoot clone = original.FastDeepClone();
         
-        Assert.That(clone, Is.Not.SameAs(original));
-        Assert.That(clone.PathA.Shared, Is.Not.SameAs(original.PathA.Shared));
-        Assert.That(clone.PathB.Shared, Is.Not.SameAs(original.PathB.Shared));
-        
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.PathA.Shared).IsNotSameReferenceAs(original.PathA.Shared);
+        await Assert.That(clone.PathB.Shared).IsNotSameReferenceAs(original.PathB.Shared);
+
         // Key assertion: clone should preserve the shared identity
-        Assert.That(clone.PathA.Shared, Is.SameAs(clone.PathB.Shared), 
-            "Identity should be preserved: both paths should clone to the same instance");
-        Assert.That(clone.PathA.Shared.Value, Is.EqualTo(100));
+        await Assert.That(clone.PathA.Shared).IsSameReferenceAs(clone.PathB.Shared).Because("Identity should be preserved: both paths should clone to the same instance");
+        await Assert.That(clone.PathA.Shared.Value).IsEqualTo(100);
     }
     
     [Test]
-    public void MultiplePaths_CreatesSeparateClones_WhenDifferentInstances()
+    public async Task MultiplePaths_CreatesSeparateClones_WhenDifferentInstances()
     {
         MultiPathRoot original = new MultiPathRoot
         {
@@ -104,14 +104,14 @@ public class IdentityPreservationTests
         };
         
         // Verify original has different instances
-        Assert.That(original.PathA.Shared, Is.Not.SameAs(original.PathB.Shared));
-        
+        await Assert.That(original.PathA.Shared).IsNotSameReferenceAs(original.PathB.Shared);
+
         MultiPathRoot clone = original.FastDeepClone();
         
         // Clone should also have different instances
-        Assert.That(clone.PathA.Shared, Is.Not.SameAs(clone.PathB.Shared));
-        Assert.That(clone.PathA.Shared.Value, Is.EqualTo(1));
-        Assert.That(clone.PathB.Shared.Value, Is.EqualTo(2));
+        await Assert.That(clone.PathA.Shared).IsNotSameReferenceAs(clone.PathB.Shared);
+        await Assert.That(clone.PathA.Shared.Value).IsEqualTo(1);
+        await Assert.That(clone.PathB.Shared.Value).IsEqualTo(2);
     }
     
     #endregion
@@ -135,7 +135,7 @@ public class IdentityPreservationTests
     }
     
     [Test]
-    public void DuplicateProperties_PreservesIdentity_WhenSameInstance()
+    public async Task DuplicateProperties_PreservesIdentity_WhenSameInstance()
     {
         DuplicateChild sharedChild = new DuplicateChild { Id = 1, Data = "Shared" };
         DuplicatePropsRoot original = new DuplicatePropsRoot
@@ -146,18 +146,17 @@ public class IdentityPreservationTests
         };
         
         // Verify original has shared identity
-        Assert.That(original.Child1, Is.SameAs(original.Child2));
-        
+        await Assert.That(original.Child1).IsSameReferenceAs(original.Child2);
+
         DuplicatePropsRoot clone = original.FastDeepClone();
         
-        Assert.That(clone, Is.Not.SameAs(original));
-        Assert.That(clone.Child1, Is.Not.SameAs(original.Child1));
-        
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.Child1).IsNotSameReferenceAs(original.Child1);
+
         // Key assertion: clone should preserve the shared identity
-        Assert.That(clone.Child1, Is.SameAs(clone.Child2),
-            "Identity should be preserved: both properties should reference the same cloned instance");
-        Assert.That(clone.Child1.Id, Is.EqualTo(1));
-        Assert.That(clone.Child1.Data, Is.EqualTo("Shared"));
+        await Assert.That(clone.Child1).IsSameReferenceAs(clone.Child2).Because("Identity should be preserved: both properties should reference the same cloned instance");
+        await Assert.That(clone.Child1.Id).IsEqualTo(1);
+        await Assert.That(clone.Child1.Data).IsEqualTo("Shared");
     }
     
     #endregion
@@ -169,7 +168,7 @@ public class IdentityPreservationTests
     public class CollectionRoot
     {
         public string Name { get; set; } = "";
-        public List<CollectionItem> Items { get; set; } = new();
+        public List<CollectionItem> Items { get; set; } = [];
     }
     
     [FastClonerClonable]
@@ -180,29 +179,28 @@ public class IdentityPreservationTests
     }
     
     [Test]
-    public void Collection_PreservesIdentity_WhenSameInstanceAppearsTwice()
+    public async Task Collection_PreservesIdentity_WhenSameInstanceAppearsTwice()
     {
         CollectionItem sharedItem = new CollectionItem { Id = 1, Description = "Shared" };
         CollectionRoot original = new CollectionRoot
         {
             Name = "CollectionTest",
-            Items = new List<CollectionItem> { sharedItem, new CollectionItem { Id = 2 }, sharedItem }
+            Items = [sharedItem, new CollectionItem { Id = 2 }, sharedItem]
         };
         
         // Verify original: first and third items are the same instance
-        Assert.That(original.Items[0], Is.SameAs(original.Items[2]));
-        Assert.That(original.Items[0], Is.Not.SameAs(original.Items[1]));
-        
+        await Assert.That(original.Items[0]).IsSameReferenceAs(original.Items[2]);
+        await Assert.That(original.Items[0]).IsNotSameReferenceAs(original.Items[1]);
+
         CollectionRoot clone = original.FastDeepClone();
         
-        Assert.That(clone.Items.Count, Is.EqualTo(3));
-        Assert.That(clone.Items[0], Is.Not.SameAs(original.Items[0]));
-        
+        await Assert.That(clone.Items.Count).IsEqualTo(3);
+        await Assert.That(clone.Items[0]).IsNotSameReferenceAs(original.Items[0]);
+
         // Key assertion: clone should preserve identity
-        Assert.That(clone.Items[0], Is.SameAs(clone.Items[2]),
-            "Identity should be preserved: same original instance should clone to same cloned instance");
-        Assert.That(clone.Items[0], Is.Not.SameAs(clone.Items[1]));
-        Assert.That(clone.Items[0].Description, Is.EqualTo("Shared"));
+        await Assert.That(clone.Items[0]).IsSameReferenceAs(clone.Items[2]).Because("Identity should be preserved: same original instance should clone to same cloned instance");
+        await Assert.That(clone.Items[0]).IsNotSameReferenceAs(clone.Items[1]);
+        await Assert.That(clone.Items[0].Description).IsEqualTo("Shared");
     }
     
     #endregion
@@ -218,7 +216,7 @@ public class IdentityPreservationTests
     }
     
     [Test]
-    public void CircularReference_HandlesCorrectly()
+    public async Task CircularReference_HandlesCorrectly()
     {
         CircularNode node1 = new CircularNode { Id = 1, Name = "First" };
         CircularNode node2 = new CircularNode { Id = 2, Name = "Second" };
@@ -229,30 +227,28 @@ public class IdentityPreservationTests
         
         CircularNode clone = node1.FastDeepClone();
         
-        Assert.That(clone, Is.Not.SameAs(node1));
-        Assert.That(clone.Id, Is.EqualTo(1));
-        Assert.That(clone.Next, Is.Not.Null);
-        Assert.That(clone.Next!.Id, Is.EqualTo(2));
-        
+        await Assert.That(clone).IsNotSameReferenceAs(node1);
+        await Assert.That(clone.Id).IsEqualTo(1);
+        await Assert.That(clone.Next).IsNotNull();
+        await Assert.That(clone.Next!.Id).IsEqualTo(2);
+
         // Verify cycle is preserved correctly
-        Assert.That(clone.Next.Next, Is.SameAs(clone),
-            "Circular reference should be preserved: clone.Next.Next should be the same as clone");
+        await Assert.That(clone.Next.Next).IsSameReferenceAs(clone).Because("Circular reference should be preserved: clone.Next.Next should be the same as clone");
     }
     
     [Test]
-    public void SelfReference_HandlesCorrectly()
+    public async Task SelfReference_HandlesCorrectly()
     {
         CircularNode node = new CircularNode { Id = 1, Name = "Self" };
         node.Next = node; // Self-reference
         
         CircularNode clone = node.FastDeepClone();
         
-        Assert.That(clone, Is.Not.SameAs(node));
-        Assert.That(clone.Id, Is.EqualTo(1));
-        
+        await Assert.That(clone).IsNotSameReferenceAs(node);
+        await Assert.That(clone.Id).IsEqualTo(1);
+
         // Verify self-reference is preserved
-        Assert.That(clone.Next, Is.SameAs(clone),
-            "Self-reference should be preserved: clone.Next should be the same as clone");
+        await Assert.That(clone.Next).IsSameReferenceAs(clone).Because("Self-reference should be preserved: clone.Next should be the same as clone");
     }
     
     #endregion
@@ -282,7 +278,7 @@ public class IdentityPreservationTests
     }
     
     [Test]
-    public void DeepGraph_PreservesIdentity_AtMultipleLevels()
+    public async Task DeepGraph_PreservesIdentity_AtMultipleLevels()
     {
         DeepGraphLeaf sharedLeaf = new DeepGraphLeaf { Data = "SharedLeaf" };
         DeepGraphLevel1 sharedLevel1 = new DeepGraphLevel1 { Value = 10, Leaf = sharedLeaf };
@@ -295,20 +291,18 @@ public class IdentityPreservationTests
         };
         
         // Verify original has shared identity at multiple levels
-        Assert.That(original.Level1A, Is.SameAs(original.Level1B));
-        Assert.That(original.Level1A.Leaf, Is.SameAs(original.Level1B.Leaf));
-        
+        await Assert.That(original.Level1A).IsSameReferenceAs(original.Level1B);
+        await Assert.That(original.Level1A.Leaf).IsSameReferenceAs(original.Level1B.Leaf);
+
         DeepGraphRoot clone = original.FastDeepClone();
         
-        Assert.That(clone, Is.Not.SameAs(original));
-        Assert.That(clone.Level1A, Is.Not.SameAs(original.Level1A));
-        
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.Level1A).IsNotSameReferenceAs(original.Level1A);
+
         // Key assertions: clone should preserve identity at all levels
-        Assert.That(clone.Level1A, Is.SameAs(clone.Level1B),
-            "Identity at Level1 should be preserved");
-        Assert.That(clone.Level1A.Leaf, Is.SameAs(clone.Level1B.Leaf),
-            "Identity at Leaf level should be preserved (same Level1 means same Leaf)");
-        Assert.That(clone.Level1A.Leaf.Data, Is.EqualTo("SharedLeaf"));
+        await Assert.That(clone.Level1A).IsSameReferenceAs(clone.Level1B).Because("Identity at Level1 should be preserved");
+        await Assert.That(clone.Level1A.Leaf).IsSameReferenceAs(clone.Level1B.Leaf).Because("Identity at Leaf level should be preserved (same Level1 means same Leaf)");
+        await Assert.That(clone.Level1A.Leaf.Data).IsEqualTo("SharedLeaf");
     }
     
     #endregion
@@ -334,7 +328,7 @@ public class IdentityPreservationTests
     }
     
     [Test]
-    public void TypeWithPreserveIdentity_PreservesIdentity()
+    public async Task TypeWithPreserveIdentity_PreservesIdentity()
     {
         SharedItem shared = new SharedItem { Id = 42 };
         TypeWithPreserveIdentity original = new TypeWithPreserveIdentity
@@ -344,13 +338,12 @@ public class IdentityPreservationTests
             Item2 = shared
         };
         
-        Assert.That(original.Item1, Is.SameAs(original.Item2));
-        
+        await Assert.That(original.Item1).IsSameReferenceAs(original.Item2);
+
         TypeWithPreserveIdentity clone = original.FastDeepClone();
         
-        Assert.That(clone.Item1, Is.Not.SameAs(original.Item1));
-        Assert.That(clone.Item1, Is.SameAs(clone.Item2),
-            "With [FastClonerPreserveIdentity], shared references should be preserved");
+        await Assert.That(clone.Item1).IsNotSameReferenceAs(original.Item1);
+        await Assert.That(clone.Item1).IsSameReferenceAs(clone.Item2).Because("With [FastClonerPreserveIdentity], shared references should be preserved");
     }
     
     #endregion
@@ -363,7 +356,7 @@ public class IdentityPreservationTests
         public string Name { get; set; } = "";
         
         [FastClonerPreserveIdentity]
-        public List<MemberItem> Items { get; set; } = new();
+        public List<MemberItem> Items { get; set; } = [];
     }
     
     [FastClonerClonable]
@@ -373,22 +366,21 @@ public class IdentityPreservationTests
     }
     
     [Test]
-    public void MemberWithPreserveIdentity_PreservesIdentityInCollection()
+    public async Task MemberWithPreserveIdentity_PreservesIdentityInCollection()
     {
         MemberItem shared = new MemberItem { Value = 100 };
         TypeWithMemberPreserveIdentity original = new TypeWithMemberPreserveIdentity
         {
             Name = "Test",
-            Items = new List<MemberItem> { shared, new MemberItem { Value = 200 }, shared }
+            Items = [shared, new MemberItem { Value = 200 }, shared]
         };
         
-        Assert.That(original.Items[0], Is.SameAs(original.Items[2]));
-        
+        await Assert.That(original.Items[0]).IsSameReferenceAs(original.Items[2]);
+
         TypeWithMemberPreserveIdentity clone = original.FastDeepClone();
         
-        Assert.That(clone.Items[0], Is.Not.SameAs(original.Items[0]));
-        Assert.That(clone.Items[0], Is.SameAs(clone.Items[2]),
-            "With [FastClonerPreserveIdentity] on member, shared references should be preserved");
+        await Assert.That(clone.Items[0]).IsNotSameReferenceAs(original.Items[0]);
+        await Assert.That(clone.Items[0]).IsSameReferenceAs(clone.Items[2]).Because("With [FastClonerPreserveIdentity] on member, shared references should be preserved");
     }
     
     #endregion
@@ -410,7 +402,7 @@ public class IdentityPreservationTests
     }
     
     [Test]
-    public void TypeWithoutPreserveIdentity_DoesNotPreserveIdentity()
+    public async Task TypeWithoutPreserveIdentity_DoesNotPreserveIdentity()
     {
         NoIdentityItem shared = new NoIdentityItem { Id = 42 };
         TypeWithoutPreserveIdentity original = new TypeWithoutPreserveIdentity
@@ -420,14 +412,14 @@ public class IdentityPreservationTests
             Item2 = shared
         };
         
-        Assert.That(original.Item1, Is.SameAs(original.Item2));
-        
+        await Assert.That(original.Item1).IsSameReferenceAs(original.Item2);
+
         TypeWithoutPreserveIdentity clone = original.FastDeepClone();
         
         // Without PreserveIdentity, both items are cloned separately (faster, but loses identity)
         // This is the expected behavior for performance - users opt-in to identity preservation
-        Assert.That(clone.Item1.Id, Is.EqualTo(42));
-        Assert.That(clone.Item2.Id, Is.EqualTo(42));
+        await Assert.That(clone.Item1.Id).IsEqualTo(42);
+        await Assert.That(clone.Item2.Id).IsEqualTo(42);
         // Note: We don't assert they're different because cycles still require tracking
         // The key difference is we don't track identity for performance when not needed
     }

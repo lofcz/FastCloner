@@ -1,5 +1,3 @@
-using System;
-
 namespace FastCloner.Tests;
 
 /// <summary>
@@ -7,7 +5,7 @@ namespace FastCloner.Tests;
 /// Tests marked with this attribute can be run against both the reflection-based
 /// FastCloner and the source generator-based FastCloner.
 /// </summary>
-[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
+[AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
 public class SourceGeneratorCompatibleAttribute : Attribute
 {
 }
