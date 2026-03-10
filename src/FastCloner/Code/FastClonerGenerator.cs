@@ -237,19 +237,10 @@ internal static class FastClonerGenerator
 
         return new FastClonerCache.TypeCloneMetadata
         {
-            Type = type,
             IsSafe = isSafe,
-            CanHaveCycles = canHaveCycles,
             CanSkipReferenceTracking = canSkipReferenceTracking,
-            HasDirectSelfReference = hasDirectSelfReference,
             HasBehaviorSensitiveMembers = hasBehaviorSensitiveMembers,
             RequiresSpecializedCloner = requiresSpecializedCloner,
-            CollectionStrategy = requiresSpecializedCloner
-                ? FastClonerCache.CollectionCloneStrategy.SpecializedRebuild
-                : FastClonerCache.CollectionCloneStrategy.MemberwiseFast,
-            ExecutionMode = isSafe
-                ? FastClonerCache.CloneExecutionMode.SafeReturn
-                : FastClonerCache.CloneExecutionMode.MemberwiseThenPatch,
             CyclePolicy = cyclePolicy,
             RecursiveCloner = recursive
         };

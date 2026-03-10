@@ -1,8 +1,6 @@
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Threading;
 
 namespace FastCloner.Code;
 
@@ -42,14 +40,12 @@ internal static class ClonerCache<T>
         Func<T, FastCloneState, T>? cloner,
         bool isSafe,
         bool canUseNoTrackingState,
-        FastClonerCache.TypeCloneMetadata? metadata,
-        long version)
+        FastClonerCache.TypeCloneMetadata? metadata)
     {
         public Func<T, FastCloneState, T>? Cloner { get; } = cloner;
         public bool IsSafe { get; } = isSafe;
         public bool CanUseNoTrackingState { get; } = canUseNoTrackingState;
         public FastClonerCache.TypeCloneMetadata? Metadata { get; } = metadata;
-        public long Version { get; } = version;
     }
 
     #if MODERN_10
@@ -77,7 +73,7 @@ internal static class ClonerCache<T>
             }
         }
 
-        return new CacheEntry(cloner, isSafe, canUseNoTrackingState, metadata, currentVersion);
+        return new CacheEntry(cloner, isSafe, canUseNoTrackingState, metadata);
     }
 
     private static void Refresh(long currentVersion)
@@ -125,21 +121,6 @@ internal static class FastClonerCache
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static long BumpCacheVersion() => Interlocked.Increment(ref cacheVersion);
 
-    internal enum CollectionCloneStrategy
-    {
-        None = 0,
-        MemberwiseFast = 1,
-        SpecializedRebuild = 2,
-        Hybrid = 3
-    }
-
-    internal enum CloneExecutionMode
-    {
-        SafeReturn = 0,
-        MemberwiseThenPatch = 1,
-        RebuildCollection = 2
-    }
-
     internal enum CyclePolicy
     {
         None = 0,
@@ -149,15 +130,10 @@ internal static class FastClonerCache
 
     internal sealed class TypeCloneMetadata
     {
-        public Type Type { get; set; } = typeof(object);
         public bool IsSafe { get; set; }
-        public bool CanHaveCycles { get; set; }
         public bool CanSkipReferenceTracking { get; set; }
-        public bool HasDirectSelfReference { get; set; }
         public bool HasBehaviorSensitiveMembers { get; set; }
         public bool RequiresSpecializedCloner { get; set; }
-        public CollectionCloneStrategy CollectionStrategy { get; set; }
-        public CloneExecutionMode ExecutionMode { get; set; }
         public CyclePolicy CyclePolicy { get; set; }
         public Func<object, FastCloneState, object>? RecursiveCloner { get; set; }
     }
