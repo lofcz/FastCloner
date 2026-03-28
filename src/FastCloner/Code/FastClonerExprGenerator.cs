@@ -347,7 +347,10 @@ internal static class FastClonerExprGenerator
 
     internal static object? GenerateProcessMethod(Type realType, bool asObject) => GenerateProcessMethod(realType, asObject && realType.IsValueType(), new ExpressionPosition(0, 0));
     public static bool IsListType(Type type) => type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>);
-    public static bool IsSetType(Type type) => type.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ISet<>));
+    public static bool IsSetType(Type type) => GetSetInterface(type) is not null;
+
+    private static Type? GetSetInterface(Type type) =>
+        type.GetInterfaces().FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ISet<>));
 
     public static bool IsConcurrentBagOrQueue(Type type)
     {
@@ -921,9 +924,10 @@ internal static class FastClonerExprGenerator
             return GenerateProcessConcurrentBagOrQueueMethod(type, position);
         }
 
-        if (IsSetType(type))
+        Type? setInterface = GetSetInterface(type);
+        if (setInterface is not null)
         {
-            return GenerateProcessSetMethod(type, position);
+            return GenerateProcessSetMethod(type, setInterface, position);
         }
 
         if (type.IsArray)
@@ -1853,7 +1857,7 @@ internal static class FastClonerExprGenerator
         ).Compile();
     }
 
-    private static object GenerateProcessSetMethod(Type type, ExpressionPosition position)
+    private static object GenerateProcessSetMethod(Type type, Type setInterface, ExpressionPosition position)
     {
         if (FastClonerCache.IsTypeIgnored(type))
         {
@@ -1862,7 +1866,7 @@ internal static class FastClonerExprGenerator
             return Expression.Lambda<Func<object, FastCloneState, object>>(pFrom, pFrom, pState).Compile();
         }
 
-        Type elementType = type.GenericArguments()[0];
+        Type elementType = setInterface.GetGenericArguments()[0];
         
         // Fast path check first - avoid creating expressions if we don't need them
         bool isImmutable = IsImmutableCollection(type);

@@ -209,7 +209,7 @@ internal sealed class ContextCodeGenerator
 
     private void GenerateIsHandled()
     {
-        _sb.AppendLine("        public override bool IsHandled(Type type)");
+        _sb.AppendLine("        public override bool IsHandled(global::System.Type type)");
         _sb.AppendLine("        {");
         foreach (TypeModel? type in _model.RegisteredTypes)
         {
