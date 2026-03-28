@@ -1,7 +1,41 @@
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
+
+/// <summary>
+/// A non-generic class that implements ISet&lt;string&gt; directly.
+/// Exercises the code path where type.GetGenericArguments() returns an empty array
+/// but IsSetType() matches via the interface.
+/// </summary>
+public class StringSet : ISet<string>
+{
+    private readonly HashSet<string> _inner = new();
+
+    public int Count => _inner.Count;
+    public bool IsReadOnly => false;
+
+    public bool Add(string item) => _inner.Add(item);
+    public void Clear() => _inner.Clear();
+    public bool Contains(string item) => _inner.Contains(item);
+    public void CopyTo(string[] array, int arrayIndex) => _inner.CopyTo(array, arrayIndex);
+    public void ExceptWith(IEnumerable<string> other) => _inner.ExceptWith(other);
+    public IEnumerator<string> GetEnumerator() => _inner.GetEnumerator();
+    public void IntersectWith(IEnumerable<string> other) => _inner.IntersectWith(other);
+    public bool IsProperSubsetOf(IEnumerable<string> other) => _inner.IsProperSubsetOf(other);
+    public bool IsProperSupersetOf(IEnumerable<string> other) => _inner.IsProperSupersetOf(other);
+    public bool IsSubsetOf(IEnumerable<string> other) => _inner.IsSubsetOf(other);
+    public bool IsSupersetOf(IEnumerable<string> other) => _inner.IsSupersetOf(other);
+    public bool Overlaps(IEnumerable<string> other) => _inner.Overlaps(other);
+    public bool Remove(string item) => _inner.Remove(item);
+    public bool SetEquals(IEnumerable<string> other) => _inner.SetEquals(other);
+    public void SymmetricExceptWith(IEnumerable<string> other) => _inner.SymmetricExceptWith(other);
+    public void UnionWith(IEnumerable<string> other) => _inner.UnionWith(other);
+    void ICollection<string>.Add(string item) => _inner.Add(item);
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+}
+
 public class CollectionTests
 {
     [Test]
@@ -176,4 +210,56 @@ public class CollectionTests
         // Original should remain untouched
         await Assert.That(original.Count).IsEqualTo(3);
     }
+
+    [Test]
+    public async Task NonGenericSetImplementingISet_Should_Be_Deep_Cloned_Correctly()
+    {
+        StringSet original = new StringSet();
+        original.Add("alpha");
+        original.Add("beta");
+        original.Add("gamma");
+
+        StringSet clone = original.DeepClone();
+
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.Count).IsEqualTo(3);
+        await Assert.That(clone.Contains("alpha")).IsTrue();
+        await Assert.That(clone.Contains("beta")).IsTrue();
+        await Assert.That(clone.Contains("gamma")).IsTrue();
+
+        // Mutating clone should not affect original
+        clone.Add("delta");
+        await Assert.That(clone.Count).IsEqualTo(4);
+        await Assert.That(original.Count).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task NonGenericSetInsideObject_Should_Be_Deep_Cloned_Correctly()
+    {
+        ObjectWithNonGenericSet original = new ObjectWithNonGenericSet
+        {
+            Name = "test",
+            Tags = new StringSet()
+        };
+        original.Tags.Add("a");
+        original.Tags.Add("b");
+
+        ObjectWithNonGenericSet clone = original.DeepClone();
+
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.Tags).IsNotSameReferenceAs(original.Tags);
+        await Assert.That(clone.Tags.Count).IsEqualTo(2);
+        await Assert.That(clone.Tags.Contains("a")).IsTrue();
+        await Assert.That(clone.Tags.Contains("b")).IsTrue();
+
+        clone.Tags.Add("c");
+        await Assert.That(clone.Tags.Count).IsEqualTo(3);
+        await Assert.That(original.Tags.Count).IsEqualTo(2);
+    }
+}
+
+public class ObjectWithNonGenericSet
+{
+    public string Name { get; set; } = "";
+    public StringSet Tags { get; set; } = new();
 }
