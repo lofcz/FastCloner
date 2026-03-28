@@ -924,9 +924,10 @@ internal static class FastClonerExprGenerator
             return GenerateProcessConcurrentBagOrQueueMethod(type, position);
         }
 
-        if (IsSetType(type))
+        Type? setInterface = GetSetInterface(type);
+        if (setInterface is not null)
         {
-            return GenerateProcessSetMethod(type, position);
+            return GenerateProcessSetMethod(type, setInterface, position);
         }
 
         if (type.IsArray)
@@ -1856,7 +1857,7 @@ internal static class FastClonerExprGenerator
         ).Compile();
     }
 
-    private static object GenerateProcessSetMethod(Type type, ExpressionPosition position)
+    private static object GenerateProcessSetMethod(Type type, Type setInterface, ExpressionPosition position)
     {
         if (FastClonerCache.IsTypeIgnored(type))
         {
@@ -1865,14 +1866,7 @@ internal static class FastClonerExprGenerator
             return Expression.Lambda<Func<object, FastCloneState, object>>(pFrom, pFrom, pState).Compile();
         }
 
-        Type? setInterface = GetSetInterface(type);
-        if (setInterface is null)
-            return GenerateMemberwiseCloner(type, position);
-
-        Type[] genericArguments = type.GenericArguments();
-        Type elementType = genericArguments.Length > 0
-            ? genericArguments[0]
-            : setInterface.GetGenericArguments()[0];
+        Type elementType = setInterface.GetGenericArguments()[0];
         
         // Fast path check first - avoid creating expressions if we don't need them
         bool isImmutable = IsImmutableCollection(type);

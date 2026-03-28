@@ -256,10 +256,73 @@ public class CollectionTests
         await Assert.That(clone.Tags.Count).IsEqualTo(3);
         await Assert.That(original.Tags.Count).IsEqualTo(2);
     }
+
+    [Test]
+    public async Task GenericSetWhereElementIsNotFirstTypeArg_Should_Be_Deep_Cloned_Correctly()
+    {
+        // TTag=List<int> (mutable, no stable hash semantics) forces the iterate-and-clone
+        // path rather than the memberwise fast path, exposing the wrong element type.
+        TaggedSet<List<int>, string> original = new TaggedSet<List<int>, string>
+        {
+            Tag = new List<int> { 1, 2, 3 }
+        };
+        original.Add("one");
+        original.Add("two");
+        original.Add("three");
+
+        TaggedSet<List<int>, string> clone = original.DeepClone();
+
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.Tag).IsNotSameReferenceAs(original.Tag);
+        await Assert.That(clone.Tag).IsEquivalentTo(original.Tag);
+        await Assert.That(clone.Count).IsEqualTo(3);
+        await Assert.That(clone.Contains("one")).IsTrue();
+        await Assert.That(clone.Contains("two")).IsTrue();
+        await Assert.That(clone.Contains("three")).IsTrue();
+
+        // Mutating clone should not affect original
+        clone.Add("four");
+        clone.Tag = new List<int> { 99 };
+        await Assert.That(clone.Count).IsEqualTo(4);
+        await Assert.That(original.Count).IsEqualTo(3);
+        await Assert.That(original.Tag).IsEquivalentTo(new List<int> { 1, 2, 3 });
+    }
 }
 
 public class ObjectWithNonGenericSet
 {
     public string Name { get; set; } = "";
     public StringSet Tags { get; set; } = new();
+}
+
+/// <summary>
+/// A generic set where the ISet element type is NOT the first generic parameter.
+/// Exercises the case where type.GetGenericArguments()[0] != the ISet&lt;T&gt; element type.
+/// </summary>
+public class TaggedSet<TTag, TElement> : ISet<TElement>
+{
+    private readonly HashSet<TElement> _inner = new();
+    public TTag? Tag { get; set; }
+
+    public int Count => _inner.Count;
+    public bool IsReadOnly => false;
+
+    public bool Add(TElement item) => _inner.Add(item);
+    public void Clear() => _inner.Clear();
+    public bool Contains(TElement item) => _inner.Contains(item);
+    public void CopyTo(TElement[] array, int arrayIndex) => _inner.CopyTo(array, arrayIndex);
+    public void ExceptWith(IEnumerable<TElement> other) => _inner.ExceptWith(other);
+    public IEnumerator<TElement> GetEnumerator() => _inner.GetEnumerator();
+    public void IntersectWith(IEnumerable<TElement> other) => _inner.IntersectWith(other);
+    public bool IsProperSubsetOf(IEnumerable<TElement> other) => _inner.IsProperSubsetOf(other);
+    public bool IsProperSupersetOf(IEnumerable<TElement> other) => _inner.IsProperSupersetOf(other);
+    public bool IsSubsetOf(IEnumerable<TElement> other) => _inner.IsSubsetOf(other);
+    public bool IsSupersetOf(IEnumerable<TElement> other) => _inner.IsSupersetOf(other);
+    public bool Overlaps(IEnumerable<TElement> other) => _inner.Overlaps(other);
+    public bool Remove(TElement item) => _inner.Remove(item);
+    public bool SetEquals(IEnumerable<TElement> other) => _inner.SetEquals(other);
+    public void SymmetricExceptWith(IEnumerable<TElement> other) => _inner.SymmetricExceptWith(other);
+    public void UnionWith(IEnumerable<TElement> other) => _inner.UnionWith(other);
+    void ICollection<TElement>.Add(TElement item) => _inner.Add(item);
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }
