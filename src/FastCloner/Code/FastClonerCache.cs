@@ -227,7 +227,11 @@ internal static class FastClonerCache
     public static object? GetOrAddStructAsObject(Type type, Func<Type, object?> valueFactory) => cacheStore.StructCache.GetOrAdd(type, valueFactory);
     public static object GetOrAddDeepClassTo(Type type, Func<Type, object> valueFactory) => cacheStore.DeepClassToCache.GetOrAdd(type, valueFactory);
     public static object GetOrAddShallowClassTo(Type type, Func<Type, object> valueFactory) => cacheStore.ShallowClassToCache.GetOrAdd(type, valueFactory);
-    public static T GetOrAddConvertor<T>(Type from, Type to, Func<Type, Type, T> valueFactory) => (T)cacheStore.TypeConvertCache.GetOrAdd(from, to, (f, t) => valueFactory(f, t));
+    public static T GetOrAddConvertor<T>(Type from, Type to, Func<Type, Type, T> valueFactory)
+    {
+        object? value = cacheStore.TypeConvertCache.GetOrAdd(from, to, (f, t) => valueFactory(f, t)!);
+        return (T)value!;
+    }
     public static CloneBehavior? GetOrAddMemberBehavior(MemberInfo memberInfo, Func<MemberInfo, CloneBehavior?> valueFactory) => cacheStore.MemberBehaviorCache.GetOrAdd(memberInfo, valueFactory);
     public static CloneBehavior? GetOrAddAttributedTypeBehavior(Type type, Func<Type, CloneBehavior?> valueFactory)
         => cacheStore.AttributedTypeBehaviorCache.GetOrAdd(type, valueFactory);

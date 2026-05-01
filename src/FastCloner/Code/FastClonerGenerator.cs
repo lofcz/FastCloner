@@ -683,7 +683,7 @@ internal static class FastClonerGenerator
             // value types: avoid the worklist because ClonerToExprGenerator.GenerateClonerInternal doesn't support value types
             if (objType.IsValueType())
             {
-                object cloned = recursiveCloner(obj, state);
+                object cloned = recursiveCloner!(obj, state);
                 state.AddKnownRef(obj, cloned);
                 return cloned;
             }
@@ -706,7 +706,7 @@ internal static class FastClonerGenerator
                 // value types: avoid the worklist because ClonerToExprGenerator.GenerateClonerInternal doesn't support value types
                 if (objType.IsValueType())
                 {
-                    object cloned = recursiveCloner(obj, state);
+                    object cloned = recursiveCloner!(obj, state);
                     state.AddKnownRef(obj, cloned);
                     return cloned;
                 }
@@ -714,7 +714,7 @@ internal static class FastClonerGenerator
                 return CloneClassShallowAndTrack(obj, state);
             }
 
-            return recursiveCloner(obj, state);
+            return recursiveCloner!(obj, state);
         }
         finally
         {
@@ -1152,8 +1152,8 @@ internal static class FastClonerGenerator
 #if NET6_0_OR_GREATER
         foreach (KeyValuePair<TKey, TValue> kvp in obj)
         {
-            ref TValue valueRef = ref CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
-            valueRef = ignoreValues ? default! : kvp.Value;
+            ref TValue? valueRef = ref CollectionsMarshal.GetValueRefOrAddDefault(result, kvp.Key, out _);
+            valueRef = ignoreValues ? default : kvp.Value;
         }
 #else
         foreach (KeyValuePair<TKey, TValue> kvp in obj)

@@ -7,7 +7,7 @@ internal static class FieldAccessorGenerator
 {
     internal static Action<object, object> GetFieldSetter(FieldInfo field)
     {
-        return (Action<object, object>)FastClonerCache.GetOrAddField(field.DeclaringType, field.Name, _ => CreateFieldSetter(field));
+        return (Action<object, object>)FastClonerCache.GetOrAddField(field.DeclaringType!, field.Name, _ => CreateFieldSetter(field))!;
     }
 
     private static Action<object, object> CreateFieldSetter(FieldInfo field)
@@ -15,7 +15,7 @@ internal static class FieldAccessorGenerator
         ParameterExpression targetParam = Expression.Parameter(typeof(object), "target");
         ParameterExpression valueParam = Expression.Parameter(typeof(object), "value");
 
-        UnaryExpression targetCast = Expression.Convert(targetParam, field.DeclaringType);
+        UnaryExpression targetCast = Expression.Convert(targetParam, field.DeclaringType!);
         
         Expression body;
         

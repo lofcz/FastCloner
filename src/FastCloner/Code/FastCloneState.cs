@@ -332,6 +332,8 @@ internal sealed class FastCloneState
 
         public MiniDictionary(int capacity)
         {
+            buckets = null!;
+            entries = null!;
             int size = RoundUpToPowerOf2(capacity < DefaultCapacity ? DefaultCapacity : capacity);
             Initialize(size);
         }

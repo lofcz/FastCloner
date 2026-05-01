@@ -1421,7 +1421,7 @@ internal static class FastClonerExprGenerator
             enumerator,
             Expression.Call(
                 Expression.Convert(typedFrom, enumerableType),
-                getEnumeratorMethod
+                getEnumeratorMethod!
             )
         );
 
@@ -1457,7 +1457,7 @@ internal static class FastClonerExprGenerator
 
         BlockExpression loopBody = Expression.Block(
             [kvp, key, value],
-            Expression.Assign(kvp, Expression.Property(enumerator, current)),
+            Expression.Assign(kvp, Expression.Property(enumerator, current!)),
             Expression.Assign(
                 key,
                 keyForAdd
@@ -2081,7 +2081,7 @@ internal static class FastClonerExprGenerator
             enumerator,
             Expression.Call(
                 Expression.Convert(typedFrom, enumerableType),
-                getEnumeratorMethod
+                getEnumeratorMethod!
             )
         );
 

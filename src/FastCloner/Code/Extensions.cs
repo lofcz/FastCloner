@@ -15,7 +15,7 @@ internal static class Extensions
         return source.IndexOf(value, comparisonType) >= 0;
     }
 
-    public static TValue GetValueOrDefault<TKey, TValue>(this Dictionary<TKey, TValue> dictionary, TKey key, TValue defaultValue = default(TValue))
+    public static TValue? GetValueOrDefault<TKey, TValue>(this Dictionary<TKey, TValue> dictionary, TKey key, TValue? defaultValue = default)
     {
         return dictionary.TryGetValue(key, out TValue value) ? value : defaultValue;
     }

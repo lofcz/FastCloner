@@ -26,7 +26,7 @@ public class AhoCorasick
             Node current = root;
             foreach (char c in pattern)
             {
-                if (!current.Children.TryGetValue(c, out Node value))
+                if (!current.Children.TryGetValue(c, out Node? value))
                 {
                     value = new Node();
                     current.Children[c] = value;
