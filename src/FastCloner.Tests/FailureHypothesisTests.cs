@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using System.Threading.Tasks.Dataflow;
 using System.Threading.Tasks;
@@ -7,6 +8,127 @@ using System.Threading.Tasks;
 namespace FastCloner.Tests;
 public class FailureHypothesisTests
 {
+    /// <summary>
+    /// Demonstrates a weakness: <see cref="FastClonerSafeTypes"/> assumes any class that overrides
+    /// <c>GetHashCode</c> has value-based hashing (<c>HasStableHashSemantics == true</c>). This drives
+    /// hash-based collections through a memberwise (raw field) clone path that copies the internal
+    /// <c>_slots</c>/<c>_buckets</c> arrays verbatim. When the override actually returns an identity-based
+    /// hash (e.g. <c>RuntimeHelpers.GetHashCode(this)</c>), the cloned bucket entries store the *original*
+    /// object's identity hash, but the elements inside are themselves deep-cloned and therefore have a
+    /// brand-new identity hash. The cloned set/dictionary is structurally corrupt: lookups by the
+    /// cloned key miss, even though the key is the very element stored in the clone.
+    /// </summary>
+    private sealed class IdentityHashedKey
+    {
+        public string Tag { get; set; } = "";
+        public override int GetHashCode() => RuntimeHelpers.GetHashCode(this);
+        public override bool Equals(object? obj) => ReferenceEquals(this, obj);
+    }
+
+    [Test]
+    public async Task HashSet_With_IdentityBased_OverriddenGetHashCode_Should_Be_Lookupable_After_Clone()
+    {
+        IdentityHashedKey item = new IdentityHashedKey { Tag = "a" };
+        HashSet<IdentityHashedKey> original = [item];
+
+        HashSet<IdentityHashedKey> clone = original.DeepClone();
+
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.Count).IsEqualTo(1);
+
+        IdentityHashedKey cloneItem = clone.Single();
+        await Assert.That(cloneItem).IsNotSameReferenceAs(item)
+            .Because("Element is a reference type and should be deep-cloned");
+
+        await Assert.That(clone.Contains(cloneItem)).IsTrue()
+            .Because("Looking up the actual element of the cloned set must succeed; " +
+                     "FastCloner copies the original identity-based hash into the cloned bucket, " +
+                     "while the cloned element has a new identity hash, so lookup misses.");
+    }
+
+    [Test]
+    public async Task Dictionary_With_IdentityBased_OverriddenGetHashCode_Key_Should_Be_Lookupable_After_Clone()
+    {
+        IdentityHashedKey key = new IdentityHashedKey { Tag = "k" };
+        Dictionary<IdentityHashedKey, int> original = new Dictionary<IdentityHashedKey, int> { [key] = 42 };
+
+        Dictionary<IdentityHashedKey, int> clone = original.DeepClone();
+
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.Count).IsEqualTo(1);
+
+        IdentityHashedKey cloneKey = clone.Keys.Single();
+        await Assert.That(cloneKey).IsNotSameReferenceAs(key);
+
+        await Assert.That(clone.TryGetValue(cloneKey, out int value)).IsTrue()
+            .Because("The cloned dictionary must be able to find its own key. " +
+                     "FastCloner stores stale identity hashes from the original key in the cloned bucket.");
+        await Assert.That(value).IsEqualTo(42);
+    }
+
+    /// <summary>
+    /// Type whose override would normally throw on a default-state probe instance (Tag is null, ToUpper NREs).
+    /// Without an opt-in, the probe catches the throw and conservatively rebuilds the collection. With
+    /// <see cref="FastClonerStableHashAttribute"/> the type author asserts the override is value-based, so
+    /// FastCloner skips the probe and uses the fast memberwise path. Lookups in the cloned set must still work.
+    /// </summary>
+    [FastClonerStableHash]
+    private sealed class ProbeUnfriendlyButStableKey
+    {
+        public string Tag { get; set; } = "";
+        public override int GetHashCode() => Tag.ToUpperInvariant().GetHashCode();
+        public override bool Equals(object? obj)
+            => obj is ProbeUnfriendlyButStableKey other
+               && string.Equals(Tag, other.Tag, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Same hash semantics as <see cref="ProbeUnfriendlyButStableKey"/> but without the attribute. Used to
+    /// assert that the attribute really is what changes the verdict (not some unrelated probe success).
+    /// </summary>
+    private sealed class ProbeUnfriendlyKeyNoAttribute
+    {
+        public string Tag { get; set; } = "";
+        public override int GetHashCode() => Tag.ToUpperInvariant().GetHashCode();
+        public override bool Equals(object? obj)
+            => obj is ProbeUnfriendlyKeyNoAttribute other
+               && string.Equals(Tag, other.Tag, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Test]
+    public async Task FastClonerStableHashAttribute_Marks_Type_As_Stable()
+    {
+        await Assert.That(global::FastCloner.Code.FastClonerSafeTypes.HasStableHashSemantics(typeof(ProbeUnfriendlyButStableKey)))
+            .IsTrue()
+            .Because("[FastClonerStableHash] must short-circuit the probe and declare stable semantics, " +
+                     "even when GetHashCode would throw on default-state instances.");
+
+        // Unchanged behavior for the attribute-less twin: probe throws on null Tag, conservative rebuild.
+        await Assert.That(global::FastCloner.Code.FastClonerSafeTypes.HasStableHashSemantics(typeof(ProbeUnfriendlyKeyNoAttribute)))
+            .IsFalse()
+            .Because("Without the opt-in, a probe that NREs on default state must fall back to rebuild.");
+    }
+
+    [Test]
+    public async Task FastClonerStableHashAttribute_Allows_FastPath_With_Correct_Lookup()
+    {
+        ProbeUnfriendlyButStableKey key = new ProbeUnfriendlyButStableKey { Tag = "Alpha" };
+        HashSet<ProbeUnfriendlyButStableKey> original = [key];
+
+        HashSet<ProbeUnfriendlyButStableKey> clone = original.DeepClone();
+
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.Count).IsEqualTo(1);
+
+        ProbeUnfriendlyButStableKey cloneKey = clone.Single();
+        await Assert.That(cloneKey).IsNotSameReferenceAs(key);
+        await Assert.That(clone.Contains(cloneKey)).IsTrue();
+
+        // Equality is case-insensitive, so a fresh key with different casing must also resolve.
+        await Assert.That(clone.Contains(new ProbeUnfriendlyButStableKey { Tag = "alpha" })).IsTrue()
+            .Because("Hash is value-based on Tag (case-insensitive) and survives the clone unchanged.");
+    }
+
     [Test]
     public async Task BufferBlock_Should_Be_Deep_Cloned_Independently()
     {

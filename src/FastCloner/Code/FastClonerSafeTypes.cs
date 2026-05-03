@@ -1,8 +1,12 @@
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+#if !MODERN
+using System.Runtime.Serialization;
+#endif
 using System.Text;
 
 namespace FastCloner.Code;
@@ -115,8 +119,6 @@ internal static class FastClonerSafeTypes
         public const string SystemRuntimeType = "System.RuntimeType";
         public const string MicrosoftExtensions = "Microsoft.Extensions.DependencyInjection.";
     }
-
-    private static readonly Assembly propertyInfoAssembly = typeof(PropertyInfo).Assembly;
     
     private static bool IsReflectionType(Type type)
     {
@@ -206,7 +208,8 @@ internal static class FastClonerSafeTypes
         
         if (type.IsGenericType)
         {
-            Type? genericDef = type.GetGenericTypeDefinition();
+            Type genericDef = type.GetGenericTypeDefinition();
+            
             if (knownTypes.TryGetValue(genericDef, out bool isGenericSafe))
             {
                 knownTypes.TryAdd(type, isGenericSafe);
@@ -271,7 +274,7 @@ internal static class FastClonerSafeTypes
     }
     
     /// <summary>
-    /// Determines whether GetHashCode() result won't change after deep cloning (best effort).
+    /// Determines whether GetHashCode() result won't change after deep cloning.
     /// </summary>
     internal static bool HasStableHashSemantics(Type type)
     {
@@ -280,29 +283,24 @@ internal static class FastClonerSafeTypes
     
     private static bool CalculateHasStableHashSemantics(Type type)
     {
-        // Primitives are always stable - their hash is based on their value
         if (type.IsPrimitive)
             return true;
         
-        // String is immutable and has value-based hash
         if (type == typeof(string))
             return true;
         
-        // Enums are always stable - hash is based on underlying value
         if (type.IsEnum)
             return true;
         
-        // Value types: even if they don't override GetHashCode, their fields are copied
-        // so the hash remains consistent after cloning
         if (type.IsValueType)
             return true;
         
-        // Known safe types from our dictionary are stable
         if (DefaultKnownTypes.ContainsKey(type))
             return true;
-        
-        // Check if the type overrides GetHashCode (not using object.GetHashCode)
-        // If a type has overridden GetHashCode, it's using value-based hashing
+
+        if (type.IsDefined(typeof(FastClonerStableHashAttribute), inherit: true))
+            return true;
+
         MethodInfo? getHashCodeMethod = type.GetMethod(
             "GetHashCode",
             BindingFlags.Public | BindingFlags.Instance,
@@ -312,13 +310,46 @@ internal static class FastClonerSafeTypes
         
         if (getHashCodeMethod is not null && getHashCodeMethod.DeclaringType != typeof(object))
         {
-            // Type has custom GetHashCode implementation
-            // This indicates value-based equality semantics
-            return true;
+            return ProbeOverriddenHashIsValueBased(type);
         }
         
-        // Reference types using default GetHashCode use identity-based hash
-        // These are NOT stable after cloning
         return false;
+    }
+
+    [SuppressMessage("Usage", "CA1816:Dispose methods should call SuppressFinalize")]
+    private static bool ProbeOverriddenHashIsValueBased(Type type)
+    {
+        if (type.IsAbstract || type.IsInterface || type.ContainsGenericParameters
+            || type.IsArray || type.IsPointer || type.IsByRef || type == typeof(string))
+        {
+            return false;
+        }
+
+        try
+        {
+            object instance1 = CreateUninitialized(type);
+            object instance2 = CreateUninitialized(type);
+            
+            GC.SuppressFinalize(instance1);
+            GC.SuppressFinalize(instance2);
+
+            int hash1 = instance1.GetHashCode();
+            int hash2 = instance2.GetHashCode();
+
+            return hash1 == hash2;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static object CreateUninitialized(Type type)
+    {
+#if MODERN
+        return RuntimeHelpers.GetUninitializedObject(type);
+#else
+        return FormatterServices.GetUninitializedObject(type);
+#endif
     }
 }
