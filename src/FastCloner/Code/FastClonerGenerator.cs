@@ -270,7 +270,9 @@ internal static class FastClonerGenerator
 
             if (cacheEntry.Cloner is not null)
             {
-                return CloneRootWithTrackedState(obj, cacheEntry.Cloner, cacheEntry.Metadata!);
+                return cacheEntry.CanUseNoTrackingState ?
+                    cacheEntry.Cloner(obj, FastCloneState.GetSimpleState()) :
+                    CloneRootWithTrackedState(obj, cacheEntry.Cloner, cacheEntry.Metadata!);
             }
         }
 
@@ -370,7 +372,11 @@ internal static class FastClonerGenerator
             return obj;
         }
         
-        return metadata.CanSkipReferenceTracking ? cloner(obj, FastCloneState.GetSimpleState()) : CloneRootWithTrackedState(obj, cloner, metadata);
+        if (metadata.CanSkipReferenceTracking ||
+            (metadata is { CyclePolicy: FastClonerCache.CyclePolicy.None, HasBehaviorSensitiveMembers: false } && !rootType.IsValueType))
+            return cloner(obj, FastCloneState.GetSimpleState());
+
+        return CloneRootWithTrackedState(obj, cloner, metadata);
     }
 
     private static T CloneRootWithTrackedState<T>(T obj, Func<T, FastCloneState, T> cloner, FastClonerCache.TypeCloneMetadata metadata)

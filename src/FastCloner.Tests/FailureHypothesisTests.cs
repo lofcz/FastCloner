@@ -9,16 +9,6 @@ using System.Threading.Tasks;
 namespace FastCloner.Tests;
 public class FailureHypothesisTests
 {
-    /// <summary>
-    /// Demonstrates a weakness: <see cref="FastClonerSafeTypes"/> assumes any class that overrides
-    /// <c>GetHashCode</c> has value-based hashing (<c>HasStableHashSemantics == true</c>). This drives
-    /// hash-based collections through a memberwise (raw field) clone path that copies the internal
-    /// <c>_slots</c>/<c>_buckets</c> arrays verbatim. When the override actually returns an identity-based
-    /// hash (e.g. <c>RuntimeHelpers.GetHashCode(this)</c>), the cloned bucket entries store the *original*
-    /// object's identity hash, but the elements inside are themselves deep-cloned and therefore have a
-    /// brand-new identity hash. The cloned set/dictionary is structurally corrupt: lookups by the
-    /// cloned key miss, even though the key is the very element stored in the clone.
-    /// </summary>
     private sealed class IdentityHashedKey
     {
         public string Tag { get; set; } = "";
@@ -66,13 +56,7 @@ public class FailureHypothesisTests
                      "FastCloner stores stale identity hashes from the original key in the cloned bucket.");
         await Assert.That(value).IsEqualTo(42);
     }
-
-    /// <summary>
-    /// Type whose override would normally throw on a default-state probe instance (Tag is null, ToUpper NREs).
-    /// Without an opt-in, the probe catches the throw and conservatively rebuilds the collection. With
-    /// <see cref="FastClonerStableHashAttribute"/> the type author asserts the override is value-based, so
-    /// FastCloner skips the probe and uses the fast memberwise path. Lookups in the cloned set must still work.
-    /// </summary>
+    
     [FastClonerStableHash]
     private sealed class ProbeUnfriendlyButStableKey
     {
@@ -82,11 +66,7 @@ public class FailureHypothesisTests
             => obj is ProbeUnfriendlyButStableKey other
                && string.Equals(Tag, other.Tag, StringComparison.OrdinalIgnoreCase);
     }
-
-    /// <summary>
-    /// Same hash semantics as <see cref="ProbeUnfriendlyButStableKey"/> but without the attribute. Used to
-    /// assert that the attribute really is what changes the verdict (not some unrelated probe success).
-    /// </summary>
+    
     private sealed class ProbeUnfriendlyKeyNoAttribute
     {
         public string Tag { get; set; } = "";
