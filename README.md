@@ -270,6 +270,26 @@ public struct MyHandle
 
 This is the default behavior for system types like `System.Net.Http.Headers.HeaderDescriptor` to prevent breaking internal framework logic. Use this attribute if your custom structs behave similarly.
 
+### Stable Hash Opt-in
+
+Hash-based collections (`HashSet<T>`, `Dictionary<TKey, TValue>`, …) are cloned via a fast memberwise path whenever the key/element type's `GetHashCode` is known to be value-based. FastCloner figures this out automatically (and falls back to rebuilding the collection for identity-based hashes), but it can also be told explicitly with `[FastClonerStableHash]`:
+
+```csharp
+[FastClonerStableHash]
+public sealed class CompositeKey
+{
+    public int Major { get; }
+    public int Minor { get; }
+    public override int GetHashCode() => HashCode.Combine(Major, Minor);
+    public override bool Equals(object? obj)
+        => obj is CompositeKey other && other.Major == Major && other.Minor == Minor;
+}
+```
+
+Use it when `GetHashCode` is a pure function of the type's fields (or returns a constant). The attribute skips the runtime probe entirely, which is useful for types the probe cannot construct (abstract bases, types whose default-state `GetHashCode` would throw, etc.) and as a way to lock in the fast path explicitly.
+
+> **Do not** apply this attribute if `GetHashCode` depends on object identity (e.g. `RuntimeHelpers.GetHashCode(this)`, or hashes a per-instance handle that isn't preserved through cloning) — the cloned collection will be unable to find its own contents.
+
 ### Identity Preservation
 
 By default, FastCloner prioritizes performance by not tracking object identity during cloning. This means if the same object instance appears multiple times in your graph, each reference becomes a separate clone.
