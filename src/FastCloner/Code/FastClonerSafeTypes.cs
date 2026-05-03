@@ -81,7 +81,7 @@ internal static class FastClonerSafeTypes
 
     private static ConcurrentDictionary<Type, bool> BuildKnownTypes()
     {
-        ConcurrentDictionary<Type, bool> result = new();
+        ConcurrentDictionary<Type, bool> result = new ConcurrentDictionary<Type, bool>();
         
         foreach (KeyValuePair<Type, bool> x in DefaultKnownTypes)
         {
@@ -118,6 +118,7 @@ internal static class FastClonerSafeTypes
         public const string SystemReflection = "System.Reflection.";
         public const string SystemRuntimeType = "System.RuntimeType";
         public const string MicrosoftExtensions = "Microsoft.Extensions.DependencyInjection.";
+        public const string SystemCollectionsFrozen = "System.Collections.Frozen.";
     }
     
     private static bool IsReflectionType(Type type)
@@ -130,19 +131,42 @@ internal static class FastClonerSafeTypes
         return type.FullName?.StartsWith(TypePrefixes.SystemReflection) is true && Equals(type.GetTypeInfo().Assembly, typeof(PropertyInfo).GetTypeInfo().Assembly);
     }
 
-    private static IEnumerable<FieldInfo> GetAllTypeFields(Type type)
+    private static readonly ConcurrentDictionary<Type, FieldInfo[]> allTypeFieldsCache = new ConcurrentDictionary<Type, FieldInfo[]>();
+
+    private static FieldInfo[] GetAllTypeFields(Type type)
     {
-        Type? currentType = type;
-    
-        while (currentType is not null)
+        return allTypeFieldsCache.TryGetValue(type, out FieldInfo[]? cached) ? cached : allTypeFieldsCache.GetOrAdd(type, BuildAllTypeFields);
+    }
+
+    private static FieldInfo[] BuildAllTypeFields(Type type)
+    {
+        Type? current = type;
+        List<FieldInfo>? acc = null;
+        FieldInfo[]? singleLevel = null;
+
+        while (current is not null)
         {
-            foreach (FieldInfo field in currentType.GetAllFields())
+            FieldInfo[] level = current.GetAllFields();
+            if (level.Length > 0)
             {
-                yield return field;
+                if (singleLevel is null)
+                {
+                    singleLevel = level;
+                }
+                else
+                {
+                    acc ??= [.. singleLevel];
+                    acc.AddRange(level);
+                }
             }
-            
-            currentType = currentType.BaseType();
+
+            current = current.BaseType;
         }
+
+        if (acc is not null)
+            return acc.ToArray();
+
+        return singleLevel ?? [];
     }
     
     private static bool IsAnonymousType(Type type)
@@ -163,6 +187,7 @@ internal static class FastClonerSafeTypes
     private static readonly AhoCorasick safeTypePrefixes = new AhoCorasick([
         TypePrefixes.SystemRuntimeType,
         TypePrefixes.MicrosoftExtensions,
+        TypePrefixes.SystemCollectionsFrozen,
         "System.Threading.Tasks.Task`"
     ]);
 
@@ -278,7 +303,30 @@ internal static class FastClonerSafeTypes
     /// </summary>
     internal static bool HasStableHashSemantics(Type type)
     {
-        return FastClonerCache.GetOrAddStableHashSemantics(type, CalculateHasStableHashSemantics);
+        HashSet<Type>? stack = probeStack;
+        if (stack is not null && stack.Contains(type))
+        {
+            return false;
+        }
+
+        return FastClonerCache.GetOrAddStableHashSemantics(type, ComputeStableHashSemanticsWithCycleGuard);
+    }
+
+    [ThreadStatic]
+    private static HashSet<Type>? probeStack;
+
+    private static bool ComputeStableHashSemanticsWithCycleGuard(Type type)
+    {
+        HashSet<Type> stack = probeStack ??= [];
+        stack.Add(type);
+        try
+        {
+            return CalculateHasStableHashSemantics(type);
+        }
+        finally
+        {
+            stack.Remove(type);
+        }
     }
     
     private static bool CalculateHasStableHashSemantics(Type type)
@@ -292,13 +340,13 @@ internal static class FastClonerSafeTypes
         if (type.IsEnum)
             return true;
         
-        if (type.IsValueType)
-            return true;
-        
         if (DefaultKnownTypes.ContainsKey(type))
             return true;
 
         if (type.IsDefined(typeof(FastClonerStableHashAttribute), inherit: true))
+            return true;
+        
+        if (type.IsValueType && ValueTypeHasNoReferenceFields(type))
             return true;
 
         MethodInfo? getHashCodeMethod = type.GetMethod(
@@ -307,13 +355,42 @@ internal static class FastClonerSafeTypes
             null,
             Type.EmptyTypes,
             null);
-        
-        if (getHashCodeMethod is not null && getHashCodeMethod.DeclaringType != typeof(object))
+
+        if (getHashCodeMethod is null)
+            return false;
+
+        if (!type.IsValueType && getHashCodeMethod.DeclaringType == typeof(object))
+            return false;
+
+        return ProbeOverriddenHashIsValueBased(type);
+    }
+
+    private static bool ValueTypeHasNoReferenceFields(Type type, HashSet<Type>? visited = null)
+    {
+        if (!type.IsValueType)
+            return false;
+
+        if (type.IsPrimitive || type.IsEnum)
+            return true;
+
+        visited ??= [];
+        if (!visited.Add(type))
+            return true;
+
+        foreach (FieldInfo f in type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public))
         {
-            return ProbeOverriddenHashIsValueBased(type);
+            Type ft = f.FieldType;
+            if (!ft.IsValueType)
+                return false;
+
+            if (ft.IsPrimitive || ft.IsEnum)
+                continue;
+
+            if (!ValueTypeHasNoReferenceFields(ft, visited))
+                return false;
         }
-        
-        return false;
+
+        return true;
     }
 
     [SuppressMessage("Usage", "CA1816:Dispose methods should call SuppressFinalize")]
@@ -329,9 +406,45 @@ internal static class FastClonerSafeTypes
         {
             object instance1 = CreateUninitialized(type);
             object instance2 = CreateUninitialized(type);
+
+            if (!type.IsValueType)
+            {
+                GC.SuppressFinalize(instance1);
+                GC.SuppressFinalize(instance2);
+            }
             
-            GC.SuppressFinalize(instance1);
-            GC.SuppressFinalize(instance2);
+            foreach (FieldInfo field in GetAllTypeFields(type))
+            {
+                if (field.IsStatic)
+                    continue;
+
+                Type ft = field.FieldType;
+                if (ft.IsValueType)
+                    continue;
+
+                if (!CanProbeAllocate(ft))
+                    continue;
+
+                if (HasStableHashSemantics(ft))
+                {
+                    object? sample = TryCreateProbeSample(ft);
+                    if (sample is null)
+                        continue;
+
+                    TrySetField(field, instance1, sample);
+                    TrySetField(field, instance2, sample);
+                }
+                else
+                {
+                    object? a = TryCreateProbeSample(ft);
+                    object? b = TryCreateProbeSample(ft);
+                    if (a is null || b is null)
+                        continue;
+
+                    TrySetField(field, instance1, a);
+                    TrySetField(field, instance2, b);
+                }
+            }
 
             int hash1 = instance1.GetHashCode();
             int hash2 = instance2.GetHashCode();
@@ -341,6 +454,41 @@ internal static class FastClonerSafeTypes
         catch
         {
             return false;
+        }
+    }
+
+    private static bool CanProbeAllocate(Type type)
+    {
+        return type is { IsClass: true, IsAbstract: false, ContainsGenericParameters: false, IsArray: false, IsPointer: false, IsByRef: false, IsCOMObject: false };
+    }
+
+    [SuppressMessage("Usage", "CA1816:Dispose methods should call SuppressFinalize")]
+    private static object? TryCreateProbeSample(Type type)
+    {
+        if (type == typeof(string))
+            return string.Empty;
+
+        try
+        {
+            object inst = CreateUninitialized(type);
+            GC.SuppressFinalize(inst);
+            return inst;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void TrySetField(FieldInfo field, object target, object value)
+    {
+        try
+        {
+            field.SetValue(target, value);
+        }
+        catch
+        {
+            // init-only/readonly with strict runtime enforcement: leave field as default.
         }
     }
 

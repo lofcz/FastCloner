@@ -270,9 +270,7 @@ internal static class FastClonerGenerator
 
             if (cacheEntry.Cloner is not null)
             {
-                return cacheEntry.CanUseNoTrackingState ? 
-                    cacheEntry.Cloner(obj, FastCloneState.GetSimpleState()) : 
-                    CloneRootWithTrackedState(obj, cacheEntry.Cloner, cacheEntry.Metadata!);
+                return CloneRootWithTrackedState(obj, cacheEntry.Cloner, cacheEntry.Metadata!);
             }
         }
 
@@ -371,12 +369,8 @@ internal static class FastClonerGenerator
         {
             return obj;
         }
-
-        if (metadata.CanSkipReferenceTracking ||
-            (metadata is { CyclePolicy: FastClonerCache.CyclePolicy.None, HasBehaviorSensitiveMembers: false } && !rootType.IsValueType))
-            return cloner(obj, FastCloneState.GetSimpleState());
-
-        return CloneRootWithTrackedState(obj, cloner, metadata);
+        
+        return metadata.CanSkipReferenceTracking ? cloner(obj, FastCloneState.GetSimpleState()) : CloneRootWithTrackedState(obj, cloner, metadata);
     }
 
     private static T CloneRootWithTrackedState<T>(T obj, Func<T, FastCloneState, T> cloner, FastClonerCache.TypeCloneMetadata metadata)
@@ -469,11 +463,14 @@ internal static class FastClonerGenerator
         Type? payloadType = GetCollectionPayloadType(type);
         if (payloadType is not null)
         {
-            if (FastClonerSafeTypes.CanReturnSameObject(payloadType))
-                return false;
+            bool payloadTriviallyAcyclic =
+                FastClonerSafeTypes.CanReturnSameObject(payloadType) ||
+                (payloadType.IsValueType && !ValueTypeContainsReferenceFieldsCached(payloadType));
 
-            if (payloadType.IsValueType && !ValueTypeContainsReferenceFieldsCached(payloadType))
-                return false;
+            if (payloadTriviallyAcyclic)
+            {
+                return ContainerHasStructMediatedSelfReference(type);
+            }
         }
 
         Type[] fieldTypes = GetCycleFieldTypes(type);
@@ -488,6 +485,61 @@ internal static class FastClonerGenerator
 
             if (ValueTypeContainsReferenceFieldsCached(fieldType))
                 return true;
+        }
+
+        return false;
+    }
+    
+    private static bool ContainerHasStructMediatedSelfReference(Type rootType)
+    {
+        HashSet<Type> visited = [];
+        return HasStructMediatedSelfReferenceCore(rootType, rootType, visited);
+    }
+
+    private static bool HasStructMediatedSelfReferenceCore(Type current, Type rootType, HashSet<Type> visited)
+    {
+        if (!visited.Add(current))
+            return false;
+
+        Type[] fieldTypes = GetCycleFieldTypes(current);
+        for (int i = 0; i < fieldTypes.Length; i++)
+        {
+            Type fieldType = fieldTypes[i];
+
+            if (FastClonerSafeTypes.CanReturnSameObject(fieldType))
+                continue;
+
+            if (fieldType.IsValueType)
+            {
+                if (HasStructMediatedSelfReferenceCore(fieldType, rootType, visited))
+                    return true;
+                continue;
+            }
+
+            if (FieldTypeCouldReferenceRoot(fieldType, rootType))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool FieldTypeCouldReferenceRoot(Type fieldType, Type rootType)
+    {
+        if (fieldType == rootType ||
+            fieldType.IsAssignableFrom(rootType) ||
+            rootType.IsAssignableFrom(fieldType))
+        {
+            return true;
+        }
+
+        if (fieldType.IsArray)
+        {
+            Type? element = fieldType.GetElementType();
+            if (element is not null &&
+                (element == rootType || element.IsAssignableFrom(rootType) || rootType.IsAssignableFrom(element)))
+            {
+                return true;
+            }
         }
 
         return false;

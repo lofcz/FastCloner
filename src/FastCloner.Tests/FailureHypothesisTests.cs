@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Collections.Frozen;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
@@ -98,15 +99,16 @@ public class FailureHypothesisTests
     [Test]
     public async Task FastClonerStableHashAttribute_Marks_Type_As_Stable()
     {
-        await Assert.That(global::FastCloner.Code.FastClonerSafeTypes.HasStableHashSemantics(typeof(ProbeUnfriendlyButStableKey)))
+        await Assert.That(Code.FastClonerSafeTypes.HasStableHashSemantics(typeof(ProbeUnfriendlyButStableKey)))
             .IsTrue()
             .Because("[FastClonerStableHash] must short-circuit the probe and declare stable semantics, " +
                      "even when GetHashCode would throw on default-state instances.");
-
-        // Unchanged behavior for the attribute-less twin: probe throws on null Tag, conservative rebuild.
-        await Assert.That(global::FastCloner.Code.FastClonerSafeTypes.HasStableHashSemantics(typeof(ProbeUnfriendlyKeyNoAttribute)))
-            .IsFalse()
-            .Because("Without the opt-in, a probe that NREs on default state must fall back to rebuild.");
+        
+        await Assert.That(Code.FastClonerSafeTypes.HasStableHashSemantics(typeof(ProbeUnfriendlyKeyNoAttribute)))
+            .IsTrue()
+            .Because("The smarter probe substitutes string.Empty for stable-hash reference fields, " +
+                     "so an override of Tag.ToUpperInvariant().GetHashCode() no longer NREs and is " +
+                     "correctly classified as stable even without the [FastClonerStableHash] opt-in.");
     }
 
     [Test]
@@ -127,6 +129,45 @@ public class FailureHypothesisTests
         // Equality is case-insensitive, so a fresh key with different casing must also resolve.
         await Assert.That(clone.Contains(new ProbeUnfriendlyButStableKey { Tag = "alpha" })).IsTrue()
             .Because("Hash is value-based on Tag (case-insensitive) and survives the clone unchanged.");
+    }
+    
+    private sealed class IdentityNode
+    {
+        public string Tag { get; set; } = "";
+    }
+
+    private struct IdentityDelegatingStruct : IEquatable<IdentityDelegatingStruct>
+    {
+        public IdentityNode? Node;
+
+        public override int GetHashCode() => Node is null ? 0 : Node.GetHashCode();
+
+        public bool Equals(IdentityDelegatingStruct other) => ReferenceEquals(Node, other.Node);
+
+        public override bool Equals(object? obj)
+            => obj is IdentityDelegatingStruct other && Equals(other);
+    }
+
+    [Test]
+    public async Task HashSet_Of_Struct_With_IdentityHashed_Reference_Field_Should_Be_Lookupable_After_Clone()
+    {
+        IdentityNode node = new IdentityNode { Tag = "n" };
+        IdentityDelegatingStruct entry = new IdentityDelegatingStruct { Node = node };
+
+        HashSet<IdentityDelegatingStruct> original = [entry];
+        HashSet<IdentityDelegatingStruct> clone = original.DeepClone();
+
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.Count).IsEqualTo(1);
+
+        IdentityDelegatingStruct cloneEntry = clone.Single();
+        await Assert.That(cloneEntry.Node).IsNotSameReferenceAs(node)
+            .Because("Reference field inside the struct must be deep-cloned to a fresh instance.");
+
+        await Assert.That(clone.Contains(cloneEntry)).IsTrue()
+            .Because("FastCloner treats every value type as having stable hash semantics, but this struct's " +
+                     "hash delegates to an identity-hashed reference field that gets a new identity on clone, " +
+                     "so the bucket-stored hash no longer matches the element's actual hash and lookup misses.");
     }
 
     [Test]
@@ -348,6 +389,47 @@ public class FailureHypothesisTests
         {
             // Ignore cleanup errors
         }
+    }
+    
+    [Test]
+    public async Task FrozenSet_Should_Be_Cloned_Without_StackOverflow()
+    {
+        FrozenSet<string> original = new[] { "alpha", "beta", "gamma" }.ToFrozenSet();
+
+        FrozenSet<string> clone = original.DeepClone();
+
+        await Assert.That(clone.Count).IsEqualTo(3)
+            .Because("All elements must survive the clone.");
+        await Assert.That(clone.Contains("alpha")).IsTrue();
+        await Assert.That(clone.Contains("beta")).IsTrue();
+        await Assert.That(clone.Contains("gamma")).IsTrue();
+        await Assert.That(clone.Contains("delta")).IsFalse();
+    }
+
+    private sealed class StructWrappedSelfReferenceContainer
+    {
+        public List<int> Payload { get; set; } = [1, 2, 3];
+        public StructBackRef BackRef;
+    }
+
+    private struct StructBackRef
+    {
+        public StructWrappedSelfReferenceContainer? Owner;
+    }
+
+    [Test]
+    public async Task Container_With_StructMediated_SelfReference_Should_Clone_Without_Overflow()
+    {
+        StructWrappedSelfReferenceContainer original = new StructWrappedSelfReferenceContainer();
+        original.BackRef = new StructBackRef { Owner = original };
+        await Assert.That(original.BackRef.Owner).IsSameReferenceAs(original);
+
+        StructWrappedSelfReferenceContainer clone = original.DeepClone();
+
+        await Assert.That(clone).IsNotSameReferenceAs(original);
+        await Assert.That(clone.Payload).IsEquivalentTo(new[] { 1, 2, 3 });
+        await Assert.That(clone.BackRef.Owner).IsSameReferenceAs(clone)
+            .Because("The cycle must be rebound to the clone, not left dangling at the original.");
     }
 
     [Test]
