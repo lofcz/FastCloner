@@ -36,6 +36,14 @@ internal static class MemberCollector
                 if (member.IsStatic || member.IsImplicitlyDeclared)
                     continue;
 
+                bool hasAccessibleVisibility =
+                    member.DeclaredAccessibility == Accessibility.Public ||
+                    member.DeclaredAccessibility == Accessibility.Internal ||
+                    member.DeclaredAccessibility == Accessibility.ProtectedOrInternal;
+
+                if (!hasAccessibleVisibility)
+                    continue;
+
                 // Skip if we've already seen this member name (base class members override derived)
                 if (!seenNames.Add(member.Name))
                     continue;

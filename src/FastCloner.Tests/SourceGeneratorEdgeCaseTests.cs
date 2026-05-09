@@ -256,6 +256,99 @@ public class SourceGeneratorEdgeCaseTests
         await Assert.That(clone.PrivateSetterProperty).IsEqualTo(0);
     }
 
+    [FastClonerClonable]
+    public class ClassWithPrivateField
+    {
+        public int PublicProperty { get; set; }
+        private int privateField;
+
+        public int PrivateFieldValue => privateField;
+
+        public void SetPrivateField(int value) => privateField = value;
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task Private_Fields_Should_Be_Skipped()
+    {
+        // Arrange
+        ClassWithPrivateField original = new ClassWithPrivateField
+        {
+            PublicProperty = 100
+        };
+        original.SetPrivateField(200);
+
+        // Act
+        ClassWithPrivateField clone = original.FastDeepClone();
+
+        // Assert
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.PublicProperty).IsEqualTo(100);
+        await Assert.That(clone.PrivateFieldValue).IsEqualTo(0);
+    }
+
+    [FastClonerClonable]
+    public class ClassWithProtectedField
+    {
+        public int PublicProperty { get; set; }
+        protected int protectedField;
+
+        public int ProtectedFieldValue => protectedField;
+
+        public void SetProtectedField(int value) => protectedField = value;
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task Protected_Fields_Should_Be_Skipped()
+    {
+        // Arrange
+        ClassWithProtectedField original = new ClassWithProtectedField
+        {
+            PublicProperty = 100
+        };
+        original.SetProtectedField(300);
+
+        // Act
+        ClassWithProtectedField clone = original.FastDeepClone();
+
+        // Assert
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.PublicProperty).IsEqualTo(100);
+        await Assert.That(clone.ProtectedFieldValue).IsEqualTo(0);
+    }
+
+    [FastClonerClonable]
+    public class ClassWithInternalField
+    {
+        public int PublicProperty { get; set; }
+        internal int internalField;
+
+        public int InternalFieldValue => internalField;
+
+        public void SetInternalField(int value) => internalField = value;
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task Internal_Fields_Should_Be_Cloned()
+    {
+        // Arrange
+        ClassWithInternalField original = new ClassWithInternalField
+        {
+            PublicProperty = 100
+        };
+        original.SetInternalField(400);
+
+        // Act
+        ClassWithInternalField clone = original.FastDeepClone();
+
+        // Assert
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.PublicProperty).IsEqualTo(100);
+        await Assert.That(clone.InternalFieldValue).IsEqualTo(400);
+    }
+
     #endregion
 
     #region Issue 5: Delegate and Behavioral Types (Lazy, Func, Task)
