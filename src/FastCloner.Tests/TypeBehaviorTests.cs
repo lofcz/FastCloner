@@ -825,19 +825,44 @@ public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
         };
 
         long startingVersion = FastClonerCache.GetCacheVersion();
-
-        FastCloner.MaxRecursionDepth = 999;
+        
+        FastCloner.SetTypeBehavior<int>(CloneBehavior.Reference);
         _ = simple.DeepClone();
         _ = dictionary.DeepClone();
 
         long firstMutationVersion = FastClonerCache.GetCacheVersion();
         await Assert.That(firstMutationVersion).IsGreaterThan(startingVersion);
 
-        FastCloner.MaxRecursionDepth = 998;
+        FastCloner.ClearTypeBehavior<int>();
         _ = simple.DeepClone();
         _ = dictionary.DeepClone();
 
         await Assert.That(FastClonerCache.GetCacheVersion()).IsGreaterThan(firstMutationVersion);
+    }
+
+    [Test]
+    public async Task MaxRecursionDepth_Update_Does_Not_Bump_Cache_Version()
+    {
+        FastCloner.ClearCache();
+        FastCloner.ClearAllTypeBehaviors();
+        FastCloner.SetDisableOptionalFeatures(false);
+
+        SimpleClass simple = new SimpleClass { IntValue = 7, StringValue = "Seven" };
+        _ = simple.DeepClone();
+
+        long versionBefore = FastClonerCache.GetCacheVersion();
+
+        FastCloner.MaxRecursionDepth = 999;
+        SimpleClass clone1 = simple.DeepClone();
+
+        FastCloner.MaxRecursionDepth = 998;
+        SimpleClass clone2 = simple.DeepClone();
+
+        await Assert.That(FastClonerCache.GetCacheVersion()).IsEqualTo(versionBefore);
+        await Assert.That(clone1.IntValue).IsEqualTo(7);
+        await Assert.That(clone2.IntValue).IsEqualTo(7);
+
+        FastCloner.MaxRecursionDepth = 1_000;
     }
 
     [Test]
