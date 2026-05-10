@@ -3,7 +3,7 @@ using FastCloner.Code;
 
 namespace FastCloner.Tests;
 
-[NotInParallel("FastClonerGlobalState")]
+[NotInParallel]
 public class ConcurrentTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     private class TestClass

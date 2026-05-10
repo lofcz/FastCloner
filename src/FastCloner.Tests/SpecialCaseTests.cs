@@ -1861,7 +1861,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    [NotInParallel("FastClonerGlobalState")]
+    [NotInParallel]
     public async Task Issue27_Clone_Entity_With_Ignored_EventHandlers_Nulls_Delegates()
     {
         // Arrange - user opts to ignore event handler types (OP's preferred workaround)
@@ -1896,7 +1896,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
     }
 
     [Test]
-    [NotInParallel("FastClonerGlobalState")]
+    [NotInParallel]
     public async Task Issue27_Clone_Entity_With_Ignored_EventHandlers_After_PreWarm_Nulls_Delegates()
     {
         MvvmEntity original = new MvvmEntity { Name = "Test", Value = 42 };
@@ -3135,7 +3135,7 @@ public class SpecialCaseTests(int maxRecursionDepth) : BaseTestFixture(maxRecurs
 
 
     [Test]
-    [NotInParallel("FastClonerGlobalState")]
+    [NotInParallel]
     public async Task Lazy_Clone()
     {
         LazyClass.Counter = 0;

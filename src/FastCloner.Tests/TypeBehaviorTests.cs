@@ -3,7 +3,7 @@ using FastCloner.Code;
 using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
-[NotInParallel("FastClonerGlobalState")]
+[NotInParallel]
 public class TypeBehaviorTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     public class SimpleClass
