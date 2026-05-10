@@ -388,6 +388,40 @@ public class SourceGeneratorEdgeCaseTests
     }
 
     [FastClonerClonable]
+    public class ClassWithNonAutoPrivateGetterAndSetter
+    {
+        private int _backing;
+
+        public string? PublicTag { get; set; }
+        
+        private int HiddenValue
+        {
+            get => _backing;
+            set => _backing = value;
+        }
+
+        public int InspectHiddenValue() => HiddenValue;
+        public void AssignHiddenValue(int v) => HiddenValue = v;
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task NonAuto_Property_With_NonPublic_Getter_And_Setter_Is_Cloned()
+    {
+        ClassWithNonAutoPrivateGetterAndSetter original = new ClassWithNonAutoPrivateGetterAndSetter
+        {
+            PublicTag = "hidden"
+        };
+        original.AssignHiddenValue(123);
+
+        ClassWithNonAutoPrivateGetterAndSetter clone = original.FastDeepClone();
+
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.PublicTag).IsEqualTo("hidden");
+        await Assert.That(clone.InspectHiddenValue()).IsEqualTo(123);
+    }
+
+    [FastClonerClonable]
     public class GenericWithPrivateField<T>
     {
         public string? Tag { get; set; }
@@ -554,6 +588,192 @@ public class SourceGeneratorEdgeCaseTests
         await Assert.That(clone!.Pub).IsEqualTo(1);
         await Assert.That(clone.SkippedValue).IsEqualTo(0);
     }
+
+    [FastClonerVisibility(FastClonerMemberVisibility.Public)]
+    public class SgBaseWithPolicy
+    {
+        public int BasePublic;
+        private int _basePrivate;
+        public void SetBasePrivate(int v) => _basePrivate = v;
+        public int GetBasePrivate() => _basePrivate;
+    }
+
+    [FastClonerClonable]
+    public class SgDerivedInheritsPolicy : SgBaseWithPolicy
+    {
+        public int DerivedPublic { get; set; }
+        private int _derivedPrivate;
+        public void SetDerivedPrivate(int v) => _derivedPrivate = v;
+        public int GetDerivedPrivate() => _derivedPrivate;
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task SG_Visibility_Policy_Is_Inherited_From_Base_Type()
+    {
+        SgDerivedInheritsPolicy original = new SgDerivedInheritsPolicy { BasePublic = 1, DerivedPublic = 3 };
+        original.SetBasePrivate(2);
+        original.SetDerivedPrivate(4);
+
+        SgDerivedInheritsPolicy clone = original.FastDeepClone();
+
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.BasePublic).IsEqualTo(1);
+        await Assert.That(clone.GetBasePrivate()).IsEqualTo(0);
+        await Assert.That(clone.DerivedPublic).IsEqualTo(3);
+        await Assert.That(clone.GetDerivedPrivate()).IsEqualTo(0);
+    }
+
+    [FastClonerClonable]
+    [FastClonerVisibility(FastClonerMemberVisibility.Public)]
+    public class SgMixedAccessibilityPropertyDto
+    {
+        // Property is publicly declared even though the setter is private. Under
+        // [FastClonerVisibility(Public)] it must be cloned (mask = most-permissive of get/set).
+        public int PublicGetPrivateSet { get; private set; }
+        public void Set(int v) => PublicGetPrivateSet = v;
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task SG_PublicOnly_Policy_Includes_Property_With_Public_Get_And_Private_Set()
+    {
+        SgMixedAccessibilityPropertyDto original = new SgMixedAccessibilityPropertyDto();
+        original.Set(42);
+
+        SgMixedAccessibilityPropertyDto clone = original.FastDeepClone();
+
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.PublicGetPrivateSet).IsEqualTo(42);
+    }
+
+    [FastClonerClonable]
+    [FastClonerVisibility(FastClonerMemberVisibility.Public)]
+    public class SgIgnoreFalseOverridesPolicy
+    {
+        public int Pub;
+
+        // Type-level Public-only policy excludes private; explicit "don't ignore me"
+        // member-level attribute should put it back in (parity with runtime).
+        [global::FastCloner.Code.FastClonerIgnore(false)]
+        private int forciblyIncluded;
+
+        public int IncludedValue => forciblyIncluded;
+        public void SetIncluded(int v) => forciblyIncluded = v;
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task SG_FastClonerIgnore_False_Overrides_Visibility_Policy_Exclusion()
+    {
+        SgIgnoreFalseOverridesPolicy original = new SgIgnoreFalseOverridesPolicy { Pub = 1 };
+        original.SetIncluded(7);
+
+        SgIgnoreFalseOverridesPolicy clone = original.FastDeepClone();
+
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Pub).IsEqualTo(1);
+        await Assert.That(clone.IncludedValue).IsEqualTo(7);
+    }
+
+    [FastClonerClonable]
+    public class SgClassWithPrivateInitProperty
+    {
+        // Non-accessible init setter on an auto-property. The SG routes the assignment
+        // through the auto-property's backing field via [UnsafeAccessor], bypassing the
+        // init-restriction entirely.
+        public int PrivateInit { get; private init; }
+
+        public string? Tag { get; set; }
+
+        public SgClassWithPrivateInitProperty() { }
+        public SgClassWithPrivateInitProperty(int init) { PrivateInit = init; }
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task SG_PrivateInit_Property_Is_Cloned_Via_Backing_Field()
+    {
+        SgClassWithPrivateInitProperty original = new SgClassWithPrivateInitProperty(99) { Tag = "ok" };
+
+        SgClassWithPrivateInitProperty clone = original.FastDeepClone();
+
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Tag).IsEqualTo("ok");
+        await Assert.That(clone.PrivateInit).IsEqualTo(99);
+    }
+
+    [FastClonerClonable]
+    public class SgClassWithPrivateInitNonAutoProperty
+    {
+        private int _backing;
+
+        // Non-auto property whose init setter is private. There is no auto-property backing
+        // field, so the SG must emit an [UnsafeAccessor] for set_X. The IsExternalInit modreq
+        // on the init setter is ignored by name-based UnsafeAccessor binding.
+        public int CustomInit
+        {
+            get => _backing;
+            private init => _backing = value;
+        }
+
+        public string? Tag { get; set; }
+
+        public SgClassWithPrivateInitNonAutoProperty() { }
+        public SgClassWithPrivateInitNonAutoProperty(int init) { CustomInit = init; }
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task SG_NonAuto_PrivateInit_Property_Is_Cloned_Via_Backing_Field()
+    {
+        // The non-auto property's setter is a trivial assignment (`_backing = value`) to a
+        // field that is also collected, so the SG dedups the property's SetterMethod accessor
+        // and clones via the field directly. The post-condition is the same: PrivateInit is
+        // observed equal in the clone.
+        SgClassWithPrivateInitNonAutoProperty original = new SgClassWithPrivateInitNonAutoProperty(123) { Tag = "ok2" };
+
+        SgClassWithPrivateInitNonAutoProperty clone = original.FastDeepClone();
+
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Tag).IsEqualTo("ok2");
+        await Assert.That(clone.CustomInit).IsEqualTo(123);
+    }
+
+    [FastClonerClonable]
+    public class SgClassWithComputedPrivateInitNonAuto
+    {
+        // Storage and observed value differ: the setter doubles the input. Dedup-via-field
+        // would lose this transformation, so the SG must keep the SetterMethod UnsafeAccessor
+        // here (i.e. NOT dedup). Cloning then observes the same `Computed` value because
+        // we go through the property accessor which inverts the doubling on read.
+        private int _half;
+
+        public int Computed
+        {
+            get => _half * 2;
+            private init => _half = value / 2;
+        }
+
+        public string? Tag { get; set; }
+
+        public SgClassWithComputedPrivateInitNonAuto() { }
+        public SgClassWithComputedPrivateInitNonAuto(int v) { Computed = v; }
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task SG_NonAuto_PrivateInit_With_Computed_Setter_Keeps_Setter_Accessor()
+    {
+        SgClassWithComputedPrivateInitNonAuto original = new SgClassWithComputedPrivateInitNonAuto(20) { Tag = "ok3" };
+
+        SgClassWithComputedPrivateInitNonAuto clone = original.FastDeepClone();
+
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Tag).IsEqualTo("ok3");
+        await Assert.That(clone.Computed).IsEqualTo(20);
+    }
+
 
     #endregion
 

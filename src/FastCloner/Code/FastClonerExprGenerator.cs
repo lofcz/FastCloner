@@ -847,13 +847,21 @@ internal static class FastClonerExprGenerator
                     continue;
                 }
 
-                if (hasNonDefaultPolicy && !HasExplicitMemberBehavior(field))
+                if (hasNonDefaultPolicy)
                 {
-                    FastClonerMemberVisibility memberMask = FieldVisibilityMask(field);
-                    if ((visibilityPolicy & memberMask) == 0)
+                    PropertyInfo? backedProperty = TryGetBackingPropertyForField(field);
+                    bool hasExplicit = HasExplicitMemberBehavior(field) ||
+                                       (backedProperty is not null && HasExplicitMemberBehavior(backedProperty));
+                    if (!hasExplicit)
                     {
-                        (excludedByVisibility ??= []).Add(field);
-                        continue;
+                        FastClonerMemberVisibility memberMask = backedProperty is not null
+                            ? PropertyVisibilityMask(backedProperty)
+                            : FieldVisibilityMask(field);
+                        if ((visibilityPolicy & memberMask) == 0)
+                        {
+                            (excludedByVisibility ??= []).Add(field);
+                            continue;
+                        }
                     }
                 }
 
@@ -954,11 +962,57 @@ internal static class FastClonerExprGenerator
     
     private static FastClonerMemberVisibility PropertyVisibilityMask(PropertyInfo property)
     {
-        MethodInfo? accessor = property.GetSetMethod(nonPublic: true) ?? property.GetGetMethod(nonPublic: true);
-        if (accessor is null)
-            return FastClonerMemberVisibility.Private;
+        MethodInfo? getter = property.GetGetMethod(nonPublic: true);
+        MethodInfo? setter = property.GetSetMethod(nonPublic: true);
 
-        MethodAttributes access = accessor.Attributes & MethodAttributes.MemberAccessMask;
+        FastClonerMemberVisibility? getMask = getter is null ? null : MaskFromMethodAttributes(getter.Attributes);
+        FastClonerMemberVisibility? setMask = setter is null ? null : MaskFromMethodAttributes(setter.Attributes);
+
+        switch (getMask)
+        {
+            case null when setMask is null:
+                return FastClonerMemberVisibility.Private;
+            case null:
+                return setMask.Value;
+        }
+
+        if (setMask is null)
+            return getMask.Value;
+
+        // Pick the more permissive of the two single-value masks.
+        return Score(getMask.Value) >= Score(setMask.Value) ? getMask.Value : setMask.Value;
+
+        static int Score(FastClonerMemberVisibility v) => v switch
+        {
+            FastClonerMemberVisibility.Public => 6,
+            // protected internal / private protected (Protected | Internal)
+            (FastClonerMemberVisibility.Protected | FastClonerMemberVisibility.Internal) => 5,
+            FastClonerMemberVisibility.Internal => 4,
+            FastClonerMemberVisibility.Protected => 3,
+            FastClonerMemberVisibility.Private => 1,
+            _ => 0,
+        };
+    }
+    
+    private static PropertyInfo? TryGetBackingPropertyForField(FieldInfo field)
+    {
+        string name = field.Name;
+        if (name.Length < "<>k__BackingField".Length || name[0] != '<' || !name.EndsWith(">k__BackingField"))
+            return null;
+
+        int closingBracket = name.IndexOf('>');
+        if (closingBracket <= 1)
+            return null;
+
+        string propertyName = name.Substring(1, closingBracket - 1);
+        return field.DeclaringType?.GetProperty(
+            propertyName,
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+    }
+
+    private static FastClonerMemberVisibility MaskFromMethodAttributes(MethodAttributes attributes)
+    {
+        MethodAttributes access = attributes & MethodAttributes.MemberAccessMask;
         switch (access)
         {
             case MethodAttributes.Public:

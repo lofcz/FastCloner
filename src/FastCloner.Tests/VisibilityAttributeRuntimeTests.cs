@@ -264,4 +264,112 @@ public class VisibilityAttributeRuntimeTests
             await Assert.That(clone.GetPrivate()).IsEqualTo(0);
         }
     }
+
+    #region Test types - inherited policy attribute
+
+    [FastClonerVisibility(FastClonerMemberVisibility.Public)]
+    public class BaseWithVisibilityPolicy
+    {
+        public int BasePublic;
+        private int _basePrivate;
+
+        public void SetBase(int p, int priv)
+        {
+            BasePublic = p;
+            _basePrivate = priv;
+        }
+
+        public int GetBasePrivate() => _basePrivate;
+    }
+
+    public class DerivedInheritsPolicy : BaseWithVisibilityPolicy
+    {
+        public int DerivedPublic;
+        private int _derivedPrivate;
+
+        public void SetDerived(int p, int priv)
+        {
+            DerivedPublic = p;
+            _derivedPrivate = priv;
+        }
+
+        public int GetDerivedPrivate() => _derivedPrivate;
+    }
+
+    #endregion
+
+    [Test]
+    public async Task Visibility_policy_is_inherited_from_base_type()
+    {
+        DerivedInheritsPolicy src = new DerivedInheritsPolicy();
+        src.SetBase(p: 1, priv: 2);
+        src.SetDerived(p: 3, priv: 4);
+
+        DerivedInheritsPolicy clone = src.DeepClone();
+
+        await Assert.That(clone.BasePublic).IsEqualTo(1);
+        await Assert.That(clone.GetBasePrivate()).IsEqualTo(0);
+        await Assert.That(clone.DerivedPublic).IsEqualTo(3);
+        await Assert.That(clone.GetDerivedPrivate()).IsEqualTo(0);
+    }
+
+    #region Test types - mixed-accessibility property
+
+    [FastClonerVisibility(FastClonerMemberVisibility.Public)]
+    public class MixedAccessibilityPropertyDto
+    {
+        // Property is "public" by C# rules even though the setter is private. The visibility
+        // policy must treat it as Public (most permissive of getter/setter).
+        public int PublicGetPrivateSet { get; private set; }
+
+        public void Set(int v) => PublicGetPrivateSet = v;
+    }
+
+    #endregion
+
+    [Test]
+    public async Task PublicOnly_policy_includes_property_with_public_getter_and_private_setter()
+    {
+        MixedAccessibilityPropertyDto src = new MixedAccessibilityPropertyDto();
+        src.Set(42);
+
+        MixedAccessibilityPropertyDto clone = src.DeepClone();
+
+        await Assert.That(clone.PublicGetPrivateSet).IsEqualTo(42);
+    }
+
+    #region Test types - [FastClonerIgnore(false)] overrides visibility policy
+
+    [FastClonerVisibility(FastClonerMemberVisibility.Public)]
+    public class IgnoreFalseOverridesPolicy
+    {
+        public int Public;
+
+        // Type-level policy excludes private members; an explicit "don't ignore me"
+        // member-level attribute must put it back in (parity with explicit Clone behavior).
+        [FastClonerIgnore(false)]
+        private int _private;
+
+        public void Set(int p, int priv)
+        {
+            Public = p;
+            _private = priv;
+        }
+
+        public int GetPrivate() => _private;
+    }
+
+    #endregion
+
+    [Test]
+    public async Task FastClonerIgnore_false_overrides_visibility_policy_exclusion()
+    {
+        IgnoreFalseOverridesPolicy src = new IgnoreFalseOverridesPolicy();
+        src.Set(p: 10, priv: 20);
+
+        IgnoreFalseOverridesPolicy clone = src.DeepClone();
+
+        await Assert.That(clone.Public).IsEqualTo(10);
+        await Assert.That(clone.GetPrivate()).IsEqualTo(20);
+    }
 }

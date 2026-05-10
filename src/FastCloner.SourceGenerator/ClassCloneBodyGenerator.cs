@@ -68,13 +68,18 @@ internal static class ClassCloneBodyGenerator
                 List<string> initOnlyMembers = [];
                 foreach (MemberModel member in ctx.Model.Members)
                 {
-                    if (member is { IsProperty: true, IsInitOnly: true } || member.IsRequired)
+                    bool participatesInInitializer =
+                        (member is { IsProperty: true, IsInitOnly: true } || member.IsRequired);
+                    if (!participatesInInitializer)
+                        continue;
+
+                    if (member.AccessorStrategy != NonPublicAccessorStrategy.None)
+                        continue;
+
+                    string assignment = MemberCloneGenerator.GetMemberAssignment(ctx, member, sourceVarName, stateVar, "                ");
+                    if (!string.IsNullOrEmpty(assignment))
                     {
-                        string assignment = MemberCloneGenerator.GetMemberAssignment(ctx, member, sourceVarName, stateVar, "                ");
-                        if (!string.IsNullOrEmpty(assignment))
-                        {
-                            initOnlyMembers.Add($"                {assignment}");
-                        }
+                        initOnlyMembers.Add($"                {assignment}");
                     }
                 }
 
@@ -92,13 +97,13 @@ internal static class ClassCloneBodyGenerator
                 
                 foreach (MemberModel member in ctx.Model.Members)
                 {
-                    if (member is { IsProperty: true, IsInitOnly: true } || member.IsRequired)
+                    bool participatedInInitializer =
+                        (member is { IsProperty: true, IsInitOnly: true } || member.IsRequired)
+                        && member.AccessorStrategy == NonPublicAccessorStrategy.None;
+                    if (participatedInInitializer)
                         continue;
-
-                    if (!member.IsProperty || !member.IsInitOnly)
-                    {
-                        MemberCloneGenerator.WriteMemberCloning(ctx, member, "result", sourceVarName, stateVar);
-                    }
+                    
+                    MemberCloneGenerator.WriteMemberCloning(ctx, member, "result", sourceVarName, stateVar);
                 }
             }
             else

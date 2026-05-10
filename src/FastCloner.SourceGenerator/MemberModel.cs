@@ -150,7 +150,7 @@ internal readonly record struct MemberModel(
 
         // Accessor strategy: only relevant when the SETTER is non-public (we always need to write into the clone target).
         NonPublicAccessorStrategy accessorStrategy = NonPublicAccessorStrategy.None;
-        if (property.SetMethod != null && !setterIsAccessible && !isInitOnly)
+        if (property.SetMethod != null && !setterIsAccessible)
         {
             accessorStrategy = HasAutoPropertyBackingField(property)
                 ? NonPublicAccessorStrategy.BackingField

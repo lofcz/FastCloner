@@ -9,7 +9,8 @@ internal readonly record struct NonPublicAccessor(
     string MemberTypeFqn,               // FQN of the field/property type
     NonPublicAccessorStrategy Strategy, // Field, BackingField, or SetterMethod
     bool IsBackingFieldStorage,         // True if the runtime storage is a field (true for Field & BackingField, false for SetterMethod)
-    bool DeclaringTypeIsStruct          // For struct receivers we need 'this' to be passed by ref to mutate it
+    bool DeclaringTypeIsStruct,         // For struct receivers we need 'this' to be passed by ref to mutate it
+    bool RequiresGetterAccessor         // True when the property's getter is also non-public, so we must emit a separate UnsafeAccessor for it
 );
 
 internal static class NonPublicAccessorEmitter
@@ -23,7 +24,11 @@ internal static class NonPublicAccessorEmitter
         };
     
     public static string GetSetterMethodName(NonPublicAccessor accessor) => $"set_{accessor.MemberName}";
-    
+
+    public static string GetGetterMethodName(NonPublicAccessor accessor) => $"get_{accessor.MemberName}";
+
+    public static string GetGetterAccessorIdentifier(NonPublicAccessor accessor) => $"{accessor.AccessorMethodName}_get";
+
     public static NonPublicAccessor BuildFor(MemberModel member, string declaringTypeFqnFallback, bool declaringTypeIsStruct)
     {
         string declaringFqn = member.DeclaringTypeFullName ?? declaringTypeFqnFallback;
@@ -31,6 +36,8 @@ internal static class NonPublicAccessorEmitter
 
         bool isBackingFieldStorage =
             member.AccessorStrategy is NonPublicAccessorStrategy.Field or NonPublicAccessorStrategy.BackingField;
+        
+        bool requiresGetterAccessor = !isBackingFieldStorage && !member.GetterIsAccessible;
 
         return new NonPublicAccessor(
             MemberName: member.Name,
@@ -39,7 +46,8 @@ internal static class NonPublicAccessorEmitter
             MemberTypeFqn: member.TypeFullName,
             Strategy: member.AccessorStrategy,
             IsBackingFieldStorage: isBackingFieldStorage,
-            DeclaringTypeIsStruct: declaringTypeIsStruct);
+            DeclaringTypeIsStruct: declaringTypeIsStruct,
+            RequiresGetterAccessor: requiresGetterAccessor);
     }
     
     public static void WriteDeclarations(CloneGeneratorContext context, StringBuilder sb, string indent, bool insideNestedShell)
@@ -82,12 +90,19 @@ internal static class NonPublicAccessorEmitter
             string fieldName = GetFieldStorageName(accessor);
             sb.AppendLine($"{indent}[global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Field, Name = \"{fieldName}\")]");
             sb.AppendLine($"{indent}{memberAccess} static extern ref {accessor.MemberTypeFqn} {accessor.AccessorMethodName}({thisParam});");
+            return;
         }
-        else
+
+        string setterName = GetSetterMethodName(accessor);
+        sb.AppendLine($"{indent}[global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = \"{setterName}\")]");
+        sb.AppendLine($"{indent}{memberAccess} static extern void {accessor.AccessorMethodName}({thisParam}, {accessor.MemberTypeFqn} value);");
+
+        if (accessor.RequiresGetterAccessor)
         {
-            string setterName = GetSetterMethodName(accessor);
-            sb.AppendLine($"{indent}[global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = \"{setterName}\")]");
-            sb.AppendLine($"{indent}{memberAccess} static extern void {accessor.AccessorMethodName}({thisParam}, {accessor.MemberTypeFqn} value);");
+            string getterName = GetGetterMethodName(accessor);
+            string getterAccessorId = GetGetterAccessorIdentifier(accessor);
+            sb.AppendLine($"{indent}[global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = \"{getterName}\")]");
+            sb.AppendLine($"{indent}{memberAccess} static extern {accessor.MemberTypeFqn} {getterAccessorId}({thisParam});");
         }
     }
 
@@ -155,12 +170,20 @@ internal static class NonPublicAccessorEmitter
         string structRefTarget = accessor.DeclaringTypeIsStruct ? "ref " : string.Empty;
         string accessorPrefix = context.GetNonPublicAccessorPrefix();
 
-        string readExpression = member.GetterIsAccessible
-            ? $"{sourceVar}.{member.Name}"
-            : (accessor.IsBackingFieldStorage
-                ? $"{accessorPrefix}{accessor.AccessorMethodName}({structRefSource}{sourceVar})"
-                : throw new System.InvalidOperationException(
-                    $"FastCloner SG: cannot read non-public, non-field member '{accessor.MemberName}' via UnsafeAccessor (would need a getter accessor)."));
+        string readExpression;
+        if (member.GetterIsAccessible)
+        {
+            readExpression = $"{sourceVar}.{member.Name}";
+        }
+        else if (accessor.IsBackingFieldStorage)
+        {
+            readExpression = $"{accessorPrefix}{accessor.AccessorMethodName}({structRefSource}{sourceVar})";
+        }
+        else
+        {
+            string getterAccessorId = GetGetterAccessorIdentifier(accessor);
+            readExpression = $"{accessorPrefix}{getterAccessorId}({structRefSource}{sourceVar})";
+        }
 
         string clonedExpression = ProduceClonedExpression(context, member, readExpression, stateVar);
 

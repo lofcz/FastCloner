@@ -168,8 +168,8 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
                                     "FCG010",
                                     "Non-public members skipped by source generator",
                                     "Type '{0}' has non-public members ({1}) that the source generator cannot clone on this target framework. " +
-                                    "Either upgrade the consumer to .NET 8+, or install the FastCloner runtime package " +
-                                    ", or apply [FastClonerVisibility] / [FastClonerIgnore] to opt out explicitly.",
+                                    "Either upgrade the consumer to .NET 8+, or install the FastCloner runtime package, " +
+                                    "or apply [FastClonerVisibility] / [FastClonerIgnore] to opt out explicitly.",
                                     "FastCloner",
                                     DiagnosticSeverity.Warning,
                                     isEnabledByDefault: true),
