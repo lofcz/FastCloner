@@ -21,6 +21,19 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
         
         IncrementalValueProvider<TargetFramework> targetFrameworkProvider = context.AnalyzerConfigOptionsProvider
             .Select(static (provider, _) => TargetFrameworkDetector.Detect(provider));
+        IncrementalValueProvider<BridgeContract> bridgeContractProvider = context.CompilationProvider
+            .Select(static (compilation, _) => BridgeContractCollector.Collect(compilation));
+        IncrementalValueProvider<(TargetFramework Tfm, BridgeContract Contract)> bridgeProxyConditions =
+            targetFrameworkProvider.Combine(bridgeContractProvider);
+        
+        context.RegisterSourceOutput(bridgeProxyConditions, static (ctx, args) =>
+        {
+            (TargetFramework tfm, BridgeContract contract) = args;
+            if (BridgeProxyEmitter.ShouldEmit(tfm, contract))
+            {
+                ctx.AddSource(BridgeProxyEmitter.HintName, SourceText.From(BridgeProxyEmitter.Emit(contract), Encoding.UTF8));
+            }
+        });
         
         IncrementalValuesProvider<(GeneratorAttributeSyntaxContext Ctx, TargetFramework Tfm)> attributeProvider = 
             context.SyntaxProvider.ForAttributeWithMetadataName(
@@ -90,9 +103,9 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
 
                 return new EquatableArray<GenericUsage>(list.Distinct().ToArray());
             });
-
-        // Combine type models with collected usages
-        IncrementalValuesProvider<(Result<TypeModel> Left, EquatableArray<GenericUsage> Right)> combinedPipeline = pipeline.Combine(usagePipeline);
+        
+        IncrementalValuesProvider<((Result<TypeModel> Left, EquatableArray<GenericUsage> Right) Data, BridgeContract Contract)> combinedPipeline =
+            pipeline.Combine(usagePipeline).Combine(bridgeContractProvider);
 
         // OPTIMAL PERFORMANCE: No Compilation combine!
         // All type analysis is pre-computed in TypeModel during the transform step.
@@ -100,7 +113,7 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
         // not on every keypress.
         context.RegisterSourceOutput(combinedPipeline, static (ctx, source) =>
         {
-            (Result<TypeModel>? result, EquatableArray<GenericUsage> usages) = source;
+            ((Result<TypeModel>? result, EquatableArray<GenericUsage> usages), BridgeContract contract) = source;
             
             result.Handle(
                 model =>
@@ -144,9 +157,27 @@ public class FastClonerIncrementalGenerator : IIncrementalGenerator
                             }
                         }
 
-                        CloneCodeGenerator generator = new CloneCodeGenerator(model, usages);
+                        CloneCodeGenerator generator = new CloneCodeGenerator(model, usages, contract);
                         string generatedSource = generator.Generate();
-                        
+
+                        if (generator.SkippedNonPublicMembers.Count > 0)
+                        {
+                            string skippedList = string.Join(", ", generator.SkippedNonPublicMembers);
+                            ctx.ReportDiagnostic(Diagnostic.Create(
+                                new DiagnosticDescriptor(
+                                    "FCG010",
+                                    "Non-public members skipped by source generator",
+                                    "Type '{0}' has non-public members ({1}) that the source generator cannot clone on this target framework. " +
+                                    "Either upgrade the consumer to .NET 8+, or install the FastCloner runtime package " +
+                                    ", or apply [FastClonerVisibility] / [FastClonerIgnore] to opt out explicitly.",
+                                    "FastCloner",
+                                    DiagnosticSeverity.Warning,
+                                    isEnabledByDefault: true),
+                                Location.None,
+                                model.Name,
+                                skippedList));
+                        }
+
                         // Use FullyQualifiedName to avoid collisions when same class name exists in different namespaces
                         string safeName = model.FullyQualifiedName
                             .Replace("global::", "")

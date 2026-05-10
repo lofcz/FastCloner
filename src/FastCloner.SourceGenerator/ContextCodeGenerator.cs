@@ -72,7 +72,7 @@ internal sealed class ContextCodeGenerator
     
     private void GenerateTypeCloner(TypeModel model)
     {
-        CloneGeneratorContext ctx = new CloneGeneratorContext(model, _sharedMethodNames, _sharedNeededHelpers);
+        CloneGeneratorContext ctx = new CloneGeneratorContext(model, sharedMethodNames: _sharedMethodNames, sharedNeededHelpers: _sharedNeededHelpers);
         ctx.NeedsStateClass = true; // Use shared state class logic
         ctx.UseStaticMethods = false; // Use instance methods for context
 

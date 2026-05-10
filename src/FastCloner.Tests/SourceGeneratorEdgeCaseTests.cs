@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using FastCloner.Code;
 using FastCloner.SourceGenerator.Shared;
 using System.Threading.Tasks;
 
@@ -218,42 +219,32 @@ public class SourceGeneratorEdgeCaseTests
 
     #endregion
 
-    #region Issue 4: Private Setter Accessibility
-    
-    // Note: Properties with private setters should be SKIPPED by the source generator
-    // because extension classes can't access them. We verify this compiles and works
-    // for the accessible properties.
+    #region Issue 4: Private / Protected / Internal member cloning fidelity
 
     [FastClonerClonable]
     public class ClassWithPrivateSetter
     {
         public int PublicProperty { get; set; }
         public int PrivateSetterProperty { get; private set; }
-        
-        // Method to set the private property for testing
+
         public void SetPrivate(int value) => PrivateSetterProperty = value;
     }
 
     [Test]
     [SourceGeneratorCompatible]
-    public async Task PrivateSetter_Properties_Should_Be_Skipped()
+    public async Task PrivateSetter_Property_Is_Cloned_Via_Backing_Field_Accessor()
     {
-        // Arrange
         ClassWithPrivateSetter original = new ClassWithPrivateSetter
         {
             PublicProperty = 100
         };
         original.SetPrivate(200);
 
-        // Act
         ClassWithPrivateSetter clone = original.FastDeepClone();
 
-        // Assert - public property should be cloned, private setter property will be default
         await Assert.That(clone).IsNotNull();
         await Assert.That(clone!.PublicProperty).IsEqualTo(100);
-        // Private setter property is not cloned (can't access from extension class)
-        // It will have default value
-        await Assert.That(clone.PrivateSetterProperty).IsEqualTo(0);
+        await Assert.That(clone.PrivateSetterProperty).IsEqualTo(200);
     }
 
     [FastClonerClonable]
@@ -269,22 +260,19 @@ public class SourceGeneratorEdgeCaseTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public async Task Private_Fields_Should_Be_Skipped()
+    public async Task Private_Field_Is_Cloned_Via_UnsafeAccessor()
     {
-        // Arrange
         ClassWithPrivateField original = new ClassWithPrivateField
         {
             PublicProperty = 100
         };
         original.SetPrivateField(200);
 
-        // Act
         ClassWithPrivateField clone = original.FastDeepClone();
 
-        // Assert
         await Assert.That(clone).IsNotNull();
         await Assert.That(clone!.PublicProperty).IsEqualTo(100);
-        await Assert.That(clone.PrivateFieldValue).IsEqualTo(0);
+        await Assert.That(clone.PrivateFieldValue).IsEqualTo(200);
     }
 
     [FastClonerClonable]
@@ -300,22 +288,19 @@ public class SourceGeneratorEdgeCaseTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public async Task Protected_Fields_Should_Be_Skipped()
+    public async Task Protected_Field_Is_Cloned_Via_UnsafeAccessor()
     {
-        // Arrange
         ClassWithProtectedField original = new ClassWithProtectedField
         {
             PublicProperty = 100
         };
         original.SetProtectedField(300);
 
-        // Act
         ClassWithProtectedField clone = original.FastDeepClone();
 
-        // Assert
         await Assert.That(clone).IsNotNull();
         await Assert.That(clone!.PublicProperty).IsEqualTo(100);
-        await Assert.That(clone.ProtectedFieldValue).IsEqualTo(0);
+        await Assert.That(clone.ProtectedFieldValue).IsEqualTo(300);
     }
 
     [FastClonerClonable]
@@ -331,22 +316,243 @@ public class SourceGeneratorEdgeCaseTests
 
     [Test]
     [SourceGeneratorCompatible]
-    public async Task Internal_Fields_Should_Be_Cloned()
+    public async Task Internal_Field_Is_Cloned()
     {
-        // Arrange
         ClassWithInternalField original = new ClassWithInternalField
         {
             PublicProperty = 100
         };
         original.SetInternalField(400);
 
-        // Act
         ClassWithInternalField clone = original.FastDeepClone();
 
-        // Assert
         await Assert.That(clone).IsNotNull();
         await Assert.That(clone!.PublicProperty).IsEqualTo(100);
         await Assert.That(clone.InternalFieldValue).IsEqualTo(400);
+    }
+
+    [FastClonerClonable]
+    public class ClassWithReferenceTypePrivateField
+    {
+        public string? PublicTag { get; set; }
+        private List<int>? privateList;
+
+        public IReadOnlyList<int>? PrivateListSnapshot => privateList;
+
+        public void SetPrivateList(List<int>? list) => privateList = list;
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task Private_Reference_Field_Is_Deep_Cloned()
+    {
+        List<int> originalList = [1, 2, 3];
+        ClassWithReferenceTypePrivateField original = new ClassWithReferenceTypePrivateField { PublicTag = "tag" };
+        original.SetPrivateList(originalList);
+
+        ClassWithReferenceTypePrivateField clone = original.FastDeepClone();
+
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.PublicTag).IsEqualTo("tag");
+        await Assert.That(clone.PrivateListSnapshot).IsNotNull();
+        // Deep clone, so values match but the instance is independent of the original.
+        await Assert.That(clone.PrivateListSnapshot!).IsEquivalentTo(originalList);
+        await Assert.That(ReferenceEquals(clone.PrivateListSnapshot, originalList)).IsFalse();
+    }
+
+    public class BaseWithPrivateField
+    {
+        private int inheritedPrivate;
+        public int InheritedPrivateValue => inheritedPrivate;
+        public void SetInheritedPrivate(int v) => inheritedPrivate = v;
+    }
+
+    [FastClonerClonable]
+    public class DerivedWithBasePrivateField : BaseWithPrivateField
+    {
+        public int Own { get; set; }
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task Inherited_Private_Field_Is_Cloned()
+    {
+        DerivedWithBasePrivateField original = new DerivedWithBasePrivateField { Own = 7 };
+        original.SetInheritedPrivate(42);
+
+        DerivedWithBasePrivateField clone = original.FastDeepClone();
+
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Own).IsEqualTo(7);
+        await Assert.That(clone.InheritedPrivateValue).IsEqualTo(42);
+    }
+
+    [FastClonerClonable]
+    public class GenericWithPrivateField<T>
+    {
+        public string? Tag { get; set; }
+        private T? value;
+
+        public T? Value => value;
+        public void SetValue(T? v) => value = v;
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task Generic_Private_Field_Is_Cloned_Via_Generic_Accessor_Shell()
+    {
+        GenericWithPrivateField<int> original = new GenericWithPrivateField<int> { Tag = "g" };
+        original.SetValue(99);
+
+        GenericWithPrivateField<int> clone = original.FastDeepClone();
+
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone!.Tag).IsEqualTo("g");
+        await Assert.That(clone.Value).IsEqualTo(99);
+    }
+
+    [FastClonerClonable]
+    public struct StructWithPrivateField
+    {
+        public int Public;
+        private int hidden;
+
+        public int Hidden => hidden;
+        public void SetHidden(int v) => hidden = v;
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task Struct_Private_Field_Is_Cloned()
+    {
+        StructWithPrivateField original = new StructWithPrivateField { Public = 5 };
+        original.SetHidden(11);
+
+        StructWithPrivateField clone = original.FastDeepClone();
+
+        await Assert.That(clone.Public).IsEqualTo(5);
+        await Assert.That(clone.Hidden).IsEqualTo(11);
+    }
+
+    #endregion
+
+    #region Type-level [FastClonerVisibility] policy
+
+    [FastClonerClonable]
+    [FastClonerVisibility(FastClonerMemberVisibility.Public)]
+    public class PublicOnlyDto
+    {
+        public int Pub { get; set; }
+        private int priv;
+        public int PrivValue => priv;
+        public void SetPriv(int v) => priv = v;
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task Visibility_Public_Excludes_Private_Fields()
+    {
+        PublicOnlyDto original = new PublicOnlyDto { Pub = 10 };
+        original.SetPriv(99);
+
+        PublicOnlyDto clone = original.FastDeepClone();
+
+        await Assert.That(clone!.Pub).IsEqualTo(10);
+        await Assert.That(clone.PrivValue).IsEqualTo(0); // explicitly opted out via type policy
+    }
+
+    [FastClonerClonable]
+    [FastClonerVisibility(FastClonerMemberVisibility.Public | FastClonerMemberVisibility.Internal)]
+    public class PublicAndInternalOnly
+    {
+        public int Pub;
+        internal int Inter;
+        protected int Prot;
+        private int Priv;
+
+        public int ProtValue => Prot;
+        public int PrivValue => Priv;
+        public void SetAll(int prot, int priv)
+        {
+            Prot = prot;
+            Priv = priv;
+        }
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task Visibility_Public_And_Internal_Excludes_Protected_And_Private()
+    {
+        PublicAndInternalOnly original = new PublicAndInternalOnly { Pub = 1, Inter = 2 };
+        original.SetAll(3, 4);
+
+        PublicAndInternalOnly clone = original.FastDeepClone();
+
+        await Assert.That(clone!.Pub).IsEqualTo(1);
+        await Assert.That(clone.Inter).IsEqualTo(2);
+        await Assert.That(clone.ProtValue).IsEqualTo(0);
+        await Assert.That(clone.PrivValue).IsEqualTo(0);
+    }
+
+    [FastClonerClonable]
+    [FastClonerVisibility(FastClonerMemberVisibility.Public)]
+    public class MemberLevelOverridesPolicy
+    {
+        public int Pub;
+
+        // Type policy excludes private, but the explicit member-level FastClonerBehavior
+        // overrides it - this private field IS cloned.
+        [global::FastCloner.Code.FastClonerBehavior(global::FastCloner.Code.CloneBehavior.Clone)]
+        private int includedDespitePolicy;
+
+        // Type policy excludes private, no override -> stays excluded.
+        private int excludedByPolicy;
+
+        public int IncludedValue => includedDespitePolicy;
+        public int ExcludedValue => excludedByPolicy;
+        public void SetBoth(int included, int excluded)
+        {
+            includedDespitePolicy = included;
+            excludedByPolicy = excluded;
+        }
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task Member_Level_FastClonerBehavior_Wins_Over_Type_Visibility_Policy()
+    {
+        MemberLevelOverridesPolicy original = new MemberLevelOverridesPolicy { Pub = 1 };
+        original.SetBoth(included: 42, excluded: 99);
+
+        MemberLevelOverridesPolicy clone = original.FastDeepClone();
+
+        await Assert.That(clone!.Pub).IsEqualTo(1);
+        await Assert.That(clone.IncludedValue).IsEqualTo(42);
+        await Assert.That(clone.ExcludedValue).IsEqualTo(0);
+    }
+
+    [FastClonerClonable]
+    [FastClonerVisibility(FastClonerMemberVisibility.All)]
+    public class IgnoreWinsOverPolicy
+    {
+        public int Pub;
+        [global::FastCloner.Code.FastClonerIgnore] private int alwaysSkipped;
+
+        public int SkippedValue => alwaysSkipped;
+        public void SetSkipped(int v) => alwaysSkipped = v;
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task Member_Level_Ignore_Wins_Over_Permissive_Type_Policy()
+    {
+        IgnoreWinsOverPolicy original = new IgnoreWinsOverPolicy { Pub = 1 };
+        original.SetSkipped(123);
+
+        IgnoreWinsOverPolicy clone = original.FastDeepClone();
+
+        await Assert.That(clone!.Pub).IsEqualTo(1);
+        await Assert.That(clone.SkippedValue).IsEqualTo(0);
     }
 
     #endregion

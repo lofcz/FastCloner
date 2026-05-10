@@ -4,9 +4,18 @@ using Microsoft.CodeAnalysis;
 
 namespace FastCloner.SourceGenerator;
 
-/// <summary>
-/// Categorizes member types for optimized clone code generation.
-/// </summary>
+[Flags]
+internal enum FastClonerMemberVisibility
+{
+    None = 0,
+    Public = 1,
+    Internal = 2,
+    Protected = 4,
+    Private = 8,
+    NonPublic = Internal | Protected | Private,
+    All = Public | NonPublic,
+}
+
 internal enum MemberTypeKind
 {
     Safe,           // Primitives, strings - can be shallow copied
@@ -18,6 +27,14 @@ internal enum MemberTypeKind
     Object,         // System.Object
     Implicit,       // Implicitly clonable (struct/class with all clonable members)
     Other           // Everything else - shallow copy fallback
+}
+
+internal enum NonPublicAccessorStrategy
+{
+    None = 0,
+    Field = 1,
+    BackingField = 2,
+    SetterMethod = 3
 }
 
 internal enum CollectionKind
@@ -89,7 +106,11 @@ internal readonly record struct MemberModel(
     bool CollectionHasCount = true,  // Whether the source collection type has Count property
     bool CollectionHasIndexer = true, // Whether the source collection type supports [i] indexing
     string? ClonableExtensionClass = null,         // Precomputed FQN of the extension class for this type (when TypeKind == Clonable)
-    string? ElementClonableExtensionClass = null    // Precomputed FQN of the extension class for the element type (when ElementHasClonableAttr)
+    string? ElementClonableExtensionClass = null,   // Precomputed FQN of the extension class for the element type (when ElementHasClonableAttr)
+    FastClonerMemberVisibility MemberVisibility = FastClonerMemberVisibility.Public, // Visibility mask of the member, used by the type-level [FastClonerVisibility] policy
+    NonPublicAccessorStrategy AccessorStrategy = NonPublicAccessorStrategy.None,  // How to access the member when it is not publicly accessible
+    string? DeclaringTypeFullName = null,  // FQN of the type that DECLARES this member (may differ from the cloned type for inherited members)
+    bool GetterIsAccessible = true   // Whether the value can be read directly via source.X (false => read via accessor too)
 ) : IEquatable<MemberModel>
 {
     /// <summary>
@@ -122,6 +143,25 @@ internal readonly record struct MemberModel(
         
         // Check for PreserveIdentity attribute
         bool? preserveIdentity = GetPreserveIdentityFromAttributes(property.GetAttributes());
+
+        // Visibility mask: take the most permissive of getter/setter, mirroring the runtime mask helper.
+        FastClonerMemberVisibility visibility = MapAccessibility(GetEffectivePropertyAccessibility(property));
+        bool getterIsAccessible = property.GetMethod == null || IsAccessibleFromExternalClass(property.GetMethod.DeclaredAccessibility);
+
+        // Accessor strategy: only relevant when the SETTER is non-public (we always need to write into the clone target).
+        NonPublicAccessorStrategy accessorStrategy = NonPublicAccessorStrategy.None;
+        if (property.SetMethod != null && !setterIsAccessible && !isInitOnly)
+        {
+            accessorStrategy = HasAutoPropertyBackingField(property)
+                ? NonPublicAccessorStrategy.BackingField
+                : NonPublicAccessorStrategy.SetterMethod;
+        }
+        else if (property.SetMethod == null && property.GetMethod != null && !getterIsAccessible)
+        {
+            // Truly read-only & non-public property; we can't clone it via direct assignment.
+        }
+
+        string? declaringTypeFqn = property.ContainingType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         
         return new MemberModel(
             property.Name,
@@ -155,7 +195,11 @@ internal readonly record struct MemberModel(
             collHasCount,
             collHasIndexer,
             clonableExtClass,
-            elemClonableExtClass);
+            elemClonableExtClass,
+            visibility,
+            accessorStrategy,
+            declaringTypeFqn,
+            getterIsAccessible);
     }
 
     public static MemberModel Create(IFieldSymbol field, bool nullabilityEnabled, Compilation compilation, MemberCloneBehavior memberBehavior = MemberCloneBehavior.Clone)
@@ -169,10 +213,17 @@ internal readonly record struct MemberModel(
         // Field accessor capabilities - fields always have getters, setters depend on readonly
         bool hasGetter = true;
         bool hasSetter = !field.IsReadOnly;
-        bool setterIsAccessible = !field.IsReadOnly; // If not readonly, it's accessible (we only collect public fields)
+        bool fieldIsAccessible = IsAccessibleFromExternalClass(field.DeclaredAccessibility);
+        bool setterIsAccessible = !field.IsReadOnly && fieldIsAccessible;
         
         // Check for PreserveIdentity attribute
         bool? preserveIdentity = GetPreserveIdentityFromAttributes(field.GetAttributes());
+
+        FastClonerMemberVisibility visibility = MapAccessibility(field.DeclaredAccessibility);
+        NonPublicAccessorStrategy accessorStrategy = fieldIsAccessible
+            ? NonPublicAccessorStrategy.None
+            : NonPublicAccessorStrategy.Field;
+        string? declaringTypeFqn = field.ContainingType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         
         return new MemberModel(
             field.Name,
@@ -206,12 +257,64 @@ internal readonly record struct MemberModel(
             collHasCount,
             collHasIndexer,
             clonableExtClass,
-            elemClonableExtClass);
+            elemClonableExtClass,
+            visibility,
+            accessorStrategy,
+            declaringTypeFqn,
+            fieldIsAccessible);
     }
     
-    /// <summary>
-    /// Extracts PreserveIdentity value from attributes if present.
-    /// </summary>
+    private static bool IsAccessibleFromExternalClass(Accessibility accessibility) =>
+        accessibility is Accessibility.Public
+            or Accessibility.Internal
+            or Accessibility.ProtectedOrInternal;
+    
+    private static Accessibility GetEffectivePropertyAccessibility(IPropertySymbol property)
+    {
+        Accessibility get = property.GetMethod?.DeclaredAccessibility ?? Accessibility.Private;
+        Accessibility set = property.SetMethod?.DeclaredAccessibility ?? Accessibility.Private;
+        return MoreAccessible(get, set);
+    }
+
+    private static Accessibility MoreAccessible(Accessibility a, Accessibility b)
+    {
+        return Score(a) >= Score(b) ? a : b;
+        static int Score(Accessibility ac) => ac switch
+        {
+            Accessibility.Public => 6,
+            Accessibility.ProtectedOrInternal => 5,
+            Accessibility.Internal => 4,
+            Accessibility.Protected => 3,
+            Accessibility.ProtectedAndInternal => 2,
+            Accessibility.Private => 1,
+            _ => 0,
+        };
+    }
+
+    public static FastClonerMemberVisibility MapAccessibility(Accessibility accessibility) =>
+        accessibility switch
+        {
+            Accessibility.Public => FastClonerMemberVisibility.Public,
+            Accessibility.Internal => FastClonerMemberVisibility.Internal,
+            Accessibility.Protected => FastClonerMemberVisibility.Protected,
+            Accessibility.ProtectedOrInternal => FastClonerMemberVisibility.Protected | FastClonerMemberVisibility.Internal,
+            Accessibility.ProtectedAndInternal => FastClonerMemberVisibility.Protected | FastClonerMemberVisibility.Internal,
+            _ => FastClonerMemberVisibility.Private,
+        };
+    
+    private static bool HasAutoPropertyBackingField(IPropertySymbol property)
+    {
+        INamedTypeSymbol? container = property.ContainingType;
+        if (container == null) return false;
+        string backingFieldName = $"<{property.Name}>k__BackingField";
+        foreach (ISymbol member in container.GetMembers(backingFieldName))
+        {
+            if (member is IFieldSymbol)
+                return true;
+        }
+        return false;
+    }
+    
     private static bool? GetPreserveIdentityFromAttributes(System.Collections.Immutable.ImmutableArray<AttributeData> attributes)
     {
         foreach (AttributeData attr in attributes)

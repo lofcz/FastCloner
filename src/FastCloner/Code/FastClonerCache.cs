@@ -146,6 +146,7 @@ internal static class FastClonerCache
         public bool HasReadonlyFields { get; init; }
         public bool ContainsIgnoredMembers { get; init; }
         public bool HasDirectSelfReference { get; init; }
+        public MemberInfo[]? MembersExcludedByVisibility { get; init; }
     }
 
     internal static readonly ConcurrentDictionary<Type, CloneBehavior> TypeBehaviors = [];
@@ -206,6 +207,7 @@ internal static class FastClonerCache
         public readonly GenericClrCache<TypeNameKey, object?> FieldCache = new GenericClrCache<TypeNameKey, object?>();
         public readonly GenericClrCache<MemberInfo, CloneBehavior?> MemberBehaviorCache = new GenericClrCache<MemberInfo, CloneBehavior?>();
         public readonly ClrCache<CloneBehavior?> AttributedTypeBehaviorCache = new ClrCache<CloneBehavior?>();
+        public readonly ClrCache<FastClonerMemberVisibility?> AttributedTypeVisibilityCache = new ClrCache<FastClonerMemberVisibility?>();
         public readonly ClrCache<bool> ImmutableCollectionStatusCache = new ClrCache<bool>();
         public readonly ClrCache<object> SpecialTypesCache = new ClrCache<object>();
         public readonly ClrCache<bool> IsTypeSafeHandleCache = new ClrCache<bool>();
@@ -229,14 +231,13 @@ internal static class FastClonerCache
     public static object GetOrAddShallowClassTo(Type type, Func<Type, object> valueFactory) => cacheStore.ShallowClassToCache.GetOrAdd(type, valueFactory);
     public static T GetOrAddConvertor<T>(Type from, Type to, Func<Type, Type, T> valueFactory)
     {
-        object? value = cacheStore.TypeConvertCache.GetOrAdd(from, to, (f, t) => valueFactory(f, t)!);
-        return (T)value!;
+        object value = cacheStore.TypeConvertCache.GetOrAdd(from, to, (f, t) => valueFactory(f, t)!);
+        return (T)value;
     }
     public static CloneBehavior? GetOrAddMemberBehavior(MemberInfo memberInfo, Func<MemberInfo, CloneBehavior?> valueFactory) => cacheStore.MemberBehaviorCache.GetOrAdd(memberInfo, valueFactory);
-    public static CloneBehavior? GetOrAddAttributedTypeBehavior(Type type, Func<Type, CloneBehavior?> valueFactory)
-        => cacheStore.AttributedTypeBehaviorCache.GetOrAdd(type, valueFactory);
-    public static bool GetOrAddImmutableCollectionStatus(Type type, Func<Type, bool> valueFactory)
-        => cacheStore.ImmutableCollectionStatusCache.GetOrAdd(type, valueFactory);
+    public static CloneBehavior? GetOrAddAttributedTypeBehavior(Type type, Func<Type, CloneBehavior?> valueFactory) => cacheStore.AttributedTypeBehaviorCache.GetOrAdd(type, valueFactory);
+    public static FastClonerMemberVisibility? GetOrAddAttributedTypeVisibility(Type type, Func<Type, FastClonerMemberVisibility?> valueFactory) => cacheStore.AttributedTypeVisibilityCache.GetOrAdd(type, valueFactory);
+    public static bool GetOrAddImmutableCollectionStatus(Type type, Func<Type, bool> valueFactory) => cacheStore.ImmutableCollectionStatusCache.GetOrAdd(type, valueFactory);
     public static object GetOrAddSpecialType(Type type, Func<Type, object> valueFactory) => cacheStore.SpecialTypesCache.GetOrAdd(type, valueFactory);
     public static bool GetOrAddIsTypeSafeHandle(Type type, Func<Type, bool> valueFactory) => cacheStore.IsTypeSafeHandleCache.GetOrAdd(type, valueFactory);
     public static bool GetOrAddAnonymousTypeStatus(Type type, Func<Type, bool> valueFactory) => cacheStore.AnonymousTypeStatusCache.GetOrAdd(type, valueFactory);

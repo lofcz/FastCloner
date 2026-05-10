@@ -26,6 +26,7 @@ internal static class MemberCollector
     {
         List<MemberAnalysis> members = [];
         HashSet<string> seenNames = [];
+        FastClonerMemberVisibility visibilityPolicy = GetVisibilityPolicyFromType(symbol);
 
         // Get all members from base types too (walking up the inheritance chain)
         INamedTypeSymbol? currentType = symbol;
@@ -36,14 +37,6 @@ internal static class MemberCollector
                 if (member.IsStatic || member.IsImplicitlyDeclared)
                     continue;
 
-                bool hasAccessibleVisibility =
-                    member.DeclaredAccessibility == Accessibility.Public ||
-                    member.DeclaredAccessibility == Accessibility.Internal ||
-                    member.DeclaredAccessibility == Accessibility.ProtectedOrInternal;
-
-                if (!hasAccessibleVisibility)
-                    continue;
-
                 // Skip if we've already seen this member name (base class members override derived)
                 if (!seenNames.Add(member.Name))
                     continue;
@@ -52,37 +45,42 @@ internal static class MemberCollector
                 {
                     if (property is { GetMethod: not null, IsIndexer: false })
                     {
-                        // Check if property has an accessible setter
-                        bool hasAccessibleSetter = property.SetMethod != null &&
-                            (property.SetMethod.DeclaredAccessibility == Accessibility.Public ||
-                             property.SetMethod.DeclaredAccessibility == Accessibility.Internal ||
-                             property.SetMethod.DeclaredAccessibility == Accessibility.ProtectedOrInternal);
-                        
-                        // For getter-only properties, we can still clone if:
-                        // 1. It's a collection type that supports population (Add/Clear)
-                        // 2. The property returns a non-null collection instance
                         bool isPopulatableCollection = IsPopulatableCollectionType(property.Type);
+                        bool hasSetter = property.SetMethod != null;
                         
-                        // Include property if it has an accessible setter OR it's a getter-only populatable collection
-                        if (hasAccessibleSetter || isPopulatableCollection)
+                        if (hasSetter || isPopulatableCollection)
                         {
                             MemberCloneBehavior behavior = GetMemberBehavior(property, compilation);
-                            if (behavior != MemberCloneBehavior.Ignore)
+                            if (behavior == MemberCloneBehavior.Ignore)
+                                continue;
+                            
+                            if (!HasExplicitMemberBehaviorAttribute(property, compilation))
                             {
-                                members.Add(new MemberAnalysis(MemberModel.Create(property, nullabilityEnabled, compilation, behavior), property.Type));
+                                FastClonerMemberVisibility memberMask = MemberModel.MapAccessibility(property.DeclaredAccessibility);
+                                if ((visibilityPolicy & memberMask) == 0)
+                                    continue;
                             }
+
+                            members.Add(new MemberAnalysis(MemberModel.Create(property, nullabilityEnabled, compilation, behavior), property.Type));
                         }
                     }
                 }
                 else if (member is IFieldSymbol field)
                 {
                     if (field.IsConst) continue; // Skip const fields
-                    
+
                     MemberCloneBehavior behavior = GetMemberBehavior(field, compilation);
-                    if (behavior != MemberCloneBehavior.Ignore)
+                    if (behavior == MemberCloneBehavior.Ignore)
+                        continue;
+
+                    if (!HasExplicitMemberBehaviorAttribute(field, compilation))
                     {
-                        members.Add(new MemberAnalysis(MemberModel.Create(field, nullabilityEnabled, compilation, behavior), field.Type));
+                        FastClonerMemberVisibility memberMask = MemberModel.MapAccessibility(field.DeclaredAccessibility);
+                        if ((visibilityPolicy & memberMask) == 0)
+                            continue;
                     }
+
+                    members.Add(new MemberAnalysis(MemberModel.Create(field, nullabilityEnabled, compilation, behavior), field.Type));
                 }
             }
 
@@ -91,21 +89,48 @@ internal static class MemberCollector
 
         return members;
     }
+    
+    private static FastClonerMemberVisibility GetVisibilityPolicyFromType(INamedTypeSymbol type)
+    {
+        foreach (AttributeData attr in type.GetAttributes())
+        {
+            if (attr.AttributeClass?.ToDisplayString() != "FastCloner.Code.FastClonerVisibilityAttribute")
+                continue;
 
-    /// <summary>
-    /// Checks if a type is a collection that can be populated via Add/Clear methods.
-    /// This allows getter-only collection properties to be cloned by clearing and repopulating.
-    /// </summary>
+            if (attr.ConstructorArguments.Length > 0 &&
+                attr.ConstructorArguments[0].Value is int rawFlags)
+            {
+                return (FastClonerMemberVisibility)rawFlags;
+            }
+        }
+
+        return FastClonerMemberVisibility.All;
+    }
+    
+    private static bool HasExplicitMemberBehaviorAttribute(ISymbol member, Compilation compilation)
+    {
+        INamedTypeSymbol? behaviorAttribute = compilation.GetTypeByMetadataName("FastCloner.Code.FastClonerBehaviorAttribute");
+        INamedTypeSymbol? shallowAttribute = compilation.GetTypeByMetadataName("FastCloner.Code.FastClonerShallowAttribute");
+        INamedTypeSymbol? referenceAttribute = compilation.GetTypeByMetadataName("FastCloner.Code.FastClonerReferenceAttribute");
+
+        foreach (AttributeData attr in member.GetAttributes())
+        {
+            INamedTypeSymbol? attrClass = attr.AttributeClass;
+            if (attrClass == null) continue;
+
+            if (behaviorAttribute != null && SymbolEqualityComparer.Default.Equals(attrClass, behaviorAttribute)) return true;
+            if (shallowAttribute != null && SymbolEqualityComparer.Default.Equals(attrClass, shallowAttribute)) return true;
+            if (referenceAttribute != null && SymbolEqualityComparer.Default.Equals(attrClass, referenceAttribute)) return true;
+        }
+
+        return false;
+    }
+    
     private static bool IsPopulatableCollectionType(ITypeSymbol type)
     {
-        // Arrays cannot be populated (fixed size)
         if (type is IArrayTypeSymbol)
             return false;
         
-        // Check for common populatable collection types
-        string typeName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-        
-        // Check if it's a generic type
         if (type is INamedTypeSymbol { IsGenericType: true } namedType)
         {
             string originalDef = namedType.OriginalDefinition.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);

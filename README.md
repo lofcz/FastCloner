@@ -239,6 +239,24 @@ if (ctx.TryClone(obj, out var cloned))
 }
 ```
 
+### Member Visibility
+
+By default, all members are eligible for cloning regardless of access modifier. Apply `[FastClonerVisibility]` to a type to restrict cloning to a specific subset:
+
+```csharp
+[FastClonerVisibility(FastClonerMemberVisibility.Public | FastClonerMemberVisibility.Internal)]
+public class Dto
+{
+    public int Id { get; set; }        // cloned
+    internal string Tag;               // cloned
+    private string _secret;            // skipped
+}
+```
+
+The policy applies to both reflection and source-generated paths; excluded members are left at their default value on the clone.
+
+The visibility filter runs before the behavior pipeline and is bypassed for any member carrying a member-level behavior attribute (`[FastClonerBehavior]`, `[FastClonerIgnore]`, `[FastClonerShallow]`, `[FastClonerReference]`), so those members are always included with their declared behavior.
+
 ### Nullability Trust
 
 The generator can be instructed to fully trust nullability annotations. When `[FastClonerTrustNullability]` attribute is applied, FastCloner will skip null checks for non-nullable reference types (e.g., `string` vs `string?`), assuming the contract is valid.
