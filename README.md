@@ -24,7 +24,7 @@ FastCloner is a zero-dependency deep cloning library for .NET, from <code>.NET 4
 - **Precise control** - Override clone behavior per type or member with `Clone`, `Reference`, `Shallow`, or `Ignore`, at compile time or runtime
 - **Selective tracking** - FastCloner avoids identity and cycle-tracking overhead by default, but enables it when graph shape or `[FastClonerPreserveIdentity]` requires it
 - **Easy Integration** - `FastDeepClone()` for AOT cloning, `DeepClone()` for reflection cloning. FastCloner respects standard .NET attributes like `[NonSerialized]`, so you can adopt it without depending on library-specific annotations
-- **Production Ready** - Used by projects like [Foundatio](https://github.com/FoundatioFx/Foundatio), [Jobbr](https://jobbr.readthedocs.io/en/latest), [TarkovSP](https://sp-tarkov.com), [SnapX](https://github.com/SnapXL/SnapX), and [WinPaletter](https://github.com/Abdelrhman-AK/WinPaletter), with over [300K downloads on NuGet](https://www.nuget.org/packages/fastCloner#usedby-body-tab)
+- **Production Ready** - Used by projects like [Foundatio](https://github.com/FoundatioFx/Foundatio), [Jobbr](https://jobbr.readthedocs.io/en/latest), [TarkovSP](https://sp-tarkov.com), [SnapX](https://github.com/SnapXL/SnapX), and [WinPaletter](https://github.com/Abdelrhman-AK/WinPaletter), with over [500K downloads on NuGet](https://www.nuget.org/packages/fastCloner#usedby-body-tab)
 ## Getting Started
 
 Install the package via NuGet:

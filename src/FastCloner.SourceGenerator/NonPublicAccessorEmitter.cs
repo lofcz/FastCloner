@@ -208,23 +208,43 @@ internal static class NonPublicAccessorEmitter
     {
         string accessorPrefix = context.GetNonPublicAccessorPrefix();
         string proxyFqn = "global::" + context.BridgeContract.ProxyTypeFullName;
-        
+
+        if (accessor.DeclaringTypeIsStruct)
+        {
+            string boxVar = $"__nptarget_{context.GetNextVariableId()}";
+            string structFqn = context.Model.FullyQualifiedName;
+            sb.AppendLine($"{indent}{{");
+            sb.AppendLine($"{indent}    object {boxVar} = (object){resultVar};");
+            WriteRuntimeBridgeCallStatement(sb, indent + "    ", proxyFqn, accessorPrefix, accessor, member, sourceVar, boxVar);
+            sb.AppendLine($"{indent}    {resultVar} = ({structFqn}){boxVar};");
+            sb.AppendLine($"{indent}}}");
+        }
+        else
+        {
+            WriteRuntimeBridgeCallStatement(sb, indent, proxyFqn, accessorPrefix, accessor, member, sourceVar, resultVar);
+        }
+    }
+
+    private static void WriteRuntimeBridgeCallStatement(
+        StringBuilder sb,
+        string indent,
+        string proxyFqn,
+        string accessorPrefix,
+        NonPublicAccessor accessor,
+        MemberModel member,
+        string sourceVar,
+        string targetVar)
+    {
         if (accessor.IsBackingFieldStorage)
         {
             string fiRef = $"{accessorPrefix}{accessor.AccessorMethodName}_FI";
-            if (member.IsShallowClone)
-            {
-                sb.AppendLine($"{indent}{proxyFqn}.CopyField({sourceVar}, {resultVar}, {fiRef});");
-            }
-            else
-            {
-                sb.AppendLine($"{indent}{proxyFqn}.DeepCloneField({sourceVar}, {resultVar}, {fiRef});");
-            }
+            string method = member.IsShallowClone ? "CopyField" : "DeepCloneField";
+            sb.AppendLine($"{indent}{proxyFqn}.{method}({sourceVar}, {targetVar}, {fiRef});");
         }
         else
         {
             string piRef = $"{accessorPrefix}{accessor.AccessorMethodName}_PI";
-            sb.AppendLine($"{indent}{proxyFqn}.DeepCloneProperty({sourceVar}, {resultVar}, {piRef});");
+            sb.AppendLine($"{indent}{proxyFqn}.DeepCloneProperty({sourceVar}, {targetVar}, {piRef});");
         }
     }
 
