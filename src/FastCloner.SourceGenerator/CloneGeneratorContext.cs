@@ -6,15 +6,15 @@ namespace FastCloner.SourceGenerator;
 internal sealed class CloneGeneratorContext
 {
     public TypeModel Model { get; }
-    public StringBuilder Source { get; } = new();
+    public StringBuilder Source { get; } = new StringBuilder();
     
     private readonly Dictionary<string, string> _typeNameToMethodName;
     private readonly HashSet<string> _neededHelperMethods;
-    private readonly Queue<string> _pendingHelperMethods = new();
-    private readonly Dictionary<string, MemberModel> _typeNameToMemberModel = new();
-    private readonly Dictionary<string, TypeModel> _implicitTypeModels = new();
-    private readonly Dictionary<string, TypeModel> _derivedTypeHelpers = new();
-    private readonly Dictionary<string, int> _helperUsageCounts = new();
+    private readonly Queue<string> _pendingHelperMethods = new Queue<string>();
+    private readonly Dictionary<string, MemberModel> _typeNameToMemberModel = new Dictionary<string, MemberModel>();
+    private readonly Dictionary<string, TypeModel> _implicitTypeModels = new Dictionary<string, TypeModel>();
+    private readonly Dictionary<string, TypeModel> _derivedTypeHelpers = new Dictionary<string, TypeModel>();
+    private readonly Dictionary<string, int> _helperUsageCounts = new Dictionary<string, int>();
 
     public bool NeedsStateClass { get; set; }
     public bool NeedsClonerClass { get; set; }
@@ -24,15 +24,19 @@ internal sealed class CloneGeneratorContext
     public bool NeedsStateTracking { get; set; }
     public bool IsFastClonerAvailable { get; }
     public TargetFramework TargetFramework { get; }
-    
+    public BridgeContract BridgeContract { get; }
+    public List<NonPublicAccessor> NonPublicAccessors { get; } = [];
+    public List<string> SkippedNonPublicMembers { get; } = [];
+
     private readonly Dictionary<string, bool> _circularReferenceOverrides = new Dictionary<string, bool>();
 
-    public CloneGeneratorContext(TypeModel model, Dictionary<string, string>? sharedMethodNames = null, HashSet<string>? sharedNeededHelpers = null)
+    public CloneGeneratorContext(TypeModel model, BridgeContract? bridgeContract = null, Dictionary<string, string>? sharedMethodNames = null, HashSet<string>? sharedNeededHelpers = null)
     {
         Model = model;
         CanHaveCircularReferences = model.CanHaveCircularReferences;
         IsFastClonerAvailable = model.IsFastClonerAvailable;
         TargetFramework = model.TargetFramework;
+        BridgeContract = bridgeContract ?? BridgeContract.Empty;
         
         bool anyMemberNeedsIdentity = false;
         foreach (MemberModel m in model.Members)
@@ -207,9 +211,25 @@ internal sealed class CloneGeneratorContext
         return GetHelperUsageCount(typeFullName) == 1;
     }
 
-    private int _variableCounter = 0;
-    public int GetNextVariableId() => System.Threading.Interlocked.Increment(ref _variableCounter);
+    private int variableCounter;
+    public int GetNextVariableId() => System.Threading.Interlocked.Increment(ref variableCounter);
     
+    public string GetNonPublicAccessorPrefix()
+    {
+        return Model.TypeParameters.Count == 0 ? string.Empty : $"__FcAccessors<{string.Join(", ", Model.TypeParameters)}>.";
+    }
+
+    public NonPublicAccessor RegisterNonPublicAccessor(NonPublicAccessor accessor)
+    {
+        foreach (NonPublicAccessor existing in NonPublicAccessors)
+        {
+            if (existing.AccessorMethodName == accessor.AccessorMethodName)
+                return existing;
+        }
+        NonPublicAccessors.Add(accessor);
+        return accessor;
+    }
+
     public static string FastClonerDeepCloneCall(string expression) => $"global::FastCloner.FastCloner.DeepClone({expression})";
     
     public static string NotNullIfNotNullAttr(bool isAvailable, string paramName = "source") 

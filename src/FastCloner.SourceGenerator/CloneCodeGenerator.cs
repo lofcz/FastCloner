@@ -10,9 +10,9 @@ internal sealed class CloneCodeGenerator
     private readonly CloneGeneratorContext _context;
     private readonly EquatableArray<GenericUsage> _usages;
 
-    public CloneCodeGenerator(TypeModel model, EquatableArray<GenericUsage> usages)
+    public CloneCodeGenerator(TypeModel model, EquatableArray<GenericUsage> usages, BridgeContract bridgeContract)
     {
-        _context = new CloneGeneratorContext(model);
+        _context = new CloneGeneratorContext(model, bridgeContract);
         _usages = usages;
     }
 
@@ -27,6 +27,8 @@ internal sealed class CloneCodeGenerator
 
         return _context.Source.ToString();
     }
+    
+    public IReadOnlyList<string> SkippedNonPublicMembers => _context.SkippedNonPublicMembers;
 
     private void PreAnalyzeHelperUsages()
     {
@@ -45,41 +47,47 @@ internal sealed class CloneCodeGenerator
     {
         foreach (MemberModel member in members)
         {
-            if (member.TypeKind == MemberTypeKind.Implicit)
+            switch (member.TypeKind)
             {
-                _context.IncrementHelperUsage(member.TypeFullName);
-            }
-            else if (member.TypeKind == MemberTypeKind.Collection || 
-                     member.TypeKind == MemberTypeKind.Array || 
-                     member.TypeKind == MemberTypeKind.MultiDimArray)
-            {
-                if (member.ElementTypeName != null)
+                case MemberTypeKind.Implicit:
+                    _context.IncrementHelperUsage(member.TypeFullName);
+                    break;
+                case MemberTypeKind.Collection:
+                case MemberTypeKind.Array:
+                case MemberTypeKind.MultiDimArray:
                 {
-                    if (_context.TryGetImplicitTypeModel(member.ElementTypeName, out _) ||
-                        _context.TryGetMemberModel(member.ElementTypeName, out _))
+                    if (member.ElementTypeName != null)
                     {
-                        _context.IncrementHelperUsage(member.ElementTypeName);
+                        if (_context.TryGetImplicitTypeModel(member.ElementTypeName, out _) ||
+                            _context.TryGetMemberModel(member.ElementTypeName, out _))
+                        {
+                            _context.IncrementHelperUsage(member.ElementTypeName);
+                        }
                     }
+
+                    break;
                 }
-            }
-            else if (member.TypeKind == MemberTypeKind.Dictionary)
-            {
-                if (member.KeyTypeName != null)
+                case MemberTypeKind.Dictionary:
                 {
-                    if (_context.TryGetImplicitTypeModel(member.KeyTypeName, out _) ||
-                        _context.TryGetMemberModel(member.KeyTypeName, out _))
+                    if (member.KeyTypeName != null)
                     {
-                        _context.IncrementHelperUsage(member.KeyTypeName);
+                        if (_context.TryGetImplicitTypeModel(member.KeyTypeName, out _) ||
+                            _context.TryGetMemberModel(member.KeyTypeName, out _))
+                        {
+                            _context.IncrementHelperUsage(member.KeyTypeName);
+                        }
                     }
-                }
                 
-                if (member.ValueTypeName != null)
-                {
-                    if (_context.TryGetImplicitTypeModel(member.ValueTypeName, out _) ||
-                        _context.TryGetMemberModel(member.ValueTypeName, out _))
+                    if (member.ValueTypeName != null)
                     {
-                        _context.IncrementHelperUsage(member.ValueTypeName);
+                        if (_context.TryGetImplicitTypeModel(member.ValueTypeName, out _) ||
+                            _context.TryGetMemberModel(member.ValueTypeName, out _))
+                        {
+                            _context.IncrementHelperUsage(member.ValueTypeName);
+                        }
                     }
+
+                    break;
                 }
             }
         }
@@ -138,8 +146,35 @@ internal sealed class CloneCodeGenerator
         WriteClonerClass();
         
         CollectionHelperGenerator.GenerateHelpers(_context);
+        
+        EmitNonPublicAccessorBlock(sb);
 
         sb.AppendLine("    }");
+    }
+
+    private void EmitNonPublicAccessorBlock(StringBuilder sb)
+    {
+        if (_context.NonPublicAccessors.Count == 0)
+            return;
+
+        bool isGeneric = _context.Model.TypeParameters.Count > 0;
+
+        if (!isGeneric)
+        {
+            NonPublicAccessorEmitter.WriteDeclarations(_context, sb, "        ", insideNestedShell: false);
+            return;
+        }
+
+        string typeParams = $"<{string.Join(", ", _context.Model.TypeParameters)}>";
+        string constraints = _context.Model.TypeConstraints.Count == 0
+            ? string.Empty
+            : " " + string.Join(" ", _context.Model.TypeConstraints);
+
+        sb.AppendLine();
+        sb.AppendLine($"        private static class __FcAccessors{typeParams}{constraints}");
+        sb.AppendLine("        {");
+        NonPublicAccessorEmitter.WriteDeclarations(_context, sb, "            ", insideNestedShell: true);
+        sb.AppendLine("        }");
     }
 
     private void WritePublicFastDeepCloneMethod(string typeName, string fullTypeName)

@@ -45,7 +45,7 @@ public static class FastCloner
                 if (maxRecursionDepth == value)
                     return;
 
-                PublishEngine(CreatePublishedEngine(value, disableOptionalFeatures, GetTypeBehaviors()));
+                PublishMaxRecursionDepth(value);
             }
         }
     }
@@ -196,6 +196,25 @@ public static class FastCloner
         FastClonerCache.RecalculateTypeBehaviorState();
         FastClonerCache.ClearCache();
         Volatile.Write(ref publishedEngine, engine);
+    }
+    
+    private static void PublishMaxRecursionDepth(int value)
+    {
+        FastClonerPublishedEngine current = Volatile.Read(ref publishedEngine);
+        FastClonerRuntimeConfig oldConfig = current.RuntimeConfig;
+        FastClonerRuntimeConfig newConfig = FastClonerRuntimeConfig.Create(
+            value,
+            oldConfig.DisableOptionalFeatures,
+            oldConfig.CloneTypeBehaviors(),
+            oldConfig.CacheKey,
+            useStartupDefaultSingleton: true);
+
+        FastClonerPublishedEngine newEngine = ReferenceEquals(newConfig, FastClonerRuntimeConfig.Default)
+            ? FastClonerPublishedEngine.StartupDefault
+            : FastClonerPublishedEngine.CreateConfigured(newConfig);
+
+        maxRecursionDepth = value;
+        Volatile.Write(ref publishedEngine, newEngine);
     }
 
     private static FastClonerPublishedEngine CreatePublishedEngine(

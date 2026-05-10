@@ -22,9 +22,9 @@ internal static class StateRequirementAnalyzer
             return new AnalysisResult(false, false);
         }
         
-        Dictionary<ITypeSymbol, int> typeOccurrences = new(SymbolEqualityComparer.Default);
-        HashSet<ITypeSymbol> visited = new(SymbolEqualityComparer.Default);
-        HashSet<ITypeSymbol> typesInCollections = new(SymbolEqualityComparer.Default);
+        Dictionary<ITypeSymbol, int> typeOccurrences = new Dictionary<ITypeSymbol, int>(SymbolEqualityComparer.Default);
+        HashSet<ITypeSymbol> visited = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+        HashSet<ITypeSymbol> typesInCollections = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
         
         log.Add($"  -> Collecting reachable reference types from {rootType.Name} members...");
         

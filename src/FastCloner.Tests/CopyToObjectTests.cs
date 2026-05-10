@@ -521,7 +521,7 @@ public class CopyToObjectTests(int maxRecursionDepth) : BaseTestFixture(maxRecur
     }
 
     [Test]
-    [NotInParallel("FastClonerGlobalState")]
+    [NotInParallel]
     public async Task DeepCloneTo_RuntimeMutations_ReflectAndRestoreOnConfiguredRail()
     {
         C1 shared = new C1 { A = 12, B = "shared" };

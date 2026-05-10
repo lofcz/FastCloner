@@ -84,13 +84,18 @@ internal static class FastClonerExprGenerator
         });
     }
     
-    /// <summary>
-    /// Gets the clone behavior for a member by checking:
-    /// 1. Member-level FastClonerBehaviorAttribute (highest priority)
-    /// 2. [NonSerialized] attribute (treat as Ignore)
-    /// 3. Backing field's corresponding property
-    /// 4. Type-level FastClonerBehaviorAttribute on the member's type (lowest priority)
-    /// </summary>
+    internal static FastClonerMemberVisibility? GetTypeVisibility(Type type)
+    {
+        if (FastCloner.DisableOptionalFeatures)
+            return null;
+
+        return FastClonerCache.GetOrAddAttributedTypeVisibility(type, static t =>
+        {
+            FastClonerVisibilityAttribute? attr = t.GetCustomAttribute<FastClonerVisibilityAttribute>(inherit: true);
+            return attr?.Visibility;
+        });
+    }
+    
     internal static CloneBehavior? GetMemberBehavior(MemberInfo memberInfo)
     {
         if (FastCloner.DisableOptionalFeatures)
@@ -422,6 +427,50 @@ internal static class FastClonerExprGenerator
     {
         return type.IsValueType ? Activator.CreateInstance(type) : null;
     }
+    
+    private static void AddPolicyExcludedMemberResetExpressions(
+        List<Expression> expressionList,
+        ParameterExpression toLocal,
+        MemberInfo[] excludedMembers,
+        bool skipReadonly)
+    {
+        for (int i = 0; i < excludedMembers.Length; i++)
+        {
+            MemberInfo member = excludedMembers[i];
+            switch (member)
+            {
+                case FieldInfo fieldInfo:
+                {
+                    bool isReadonly = readonlyFields.GetOrAdd(fieldInfo, f => f.IsInitOnly);
+                    if (isReadonly)
+                    {
+                        if (skipReadonly)
+                            continue;
+                        
+                        expressionList.Add(Expression.Call(
+                            Expression.Constant(fieldInfo),
+                            fieldSetMethod,
+                            Expression.Convert(toLocal, typeof(object)),
+                            Expression.Convert(Expression.Default(fieldInfo.FieldType), typeof(object))));
+                    }
+                    else
+                    {
+                        expressionList.Add(Expression.Assign(
+                            Expression.Field(toLocal, fieldInfo),
+                            Expression.Default(fieldInfo.FieldType)));
+                    }
+                    break;
+                }
+                case PropertyInfo { CanWrite: true } property:
+                {
+                    expressionList.Add(Expression.Assign(
+                        Expression.MakeMemberAccess(toLocal, property),
+                        Expression.Default(property.PropertyType)));
+                    break;
+                }
+            }
+        }
+    }
 
     private static void AddMemberCloneExpressions(
         List<Expression> expressionList,
@@ -437,6 +486,17 @@ internal static class FastClonerExprGenerator
         FastClonerCache.TypeShape typeShape = GetTypeShape(type);
         MemberInfo[] members = typeShape.Members;
         Dictionary<string, Type>? ignoredEventDetails = typeShape.IgnoredEventDetails;
+
+        // Visibility-policy excluded members run BEFORE the regular member cloning pass:
+        // the destination has just been seeded with MemberwiseClone (line ~1066), which
+        // copied the source's reference/value verbatim into the excluded slot. We reset
+        // those slots to default so the policy actually takes effect at the boundary.
+        // No-op when the type has no policy (the array is null), so the common path stays
+        // free of extra work.
+        if (typeShape.MembersExcludedByVisibility is { Length: > 0 } excludedMembers)
+        {
+            AddPolicyExcludedMemberResetExpressions(expressionList, toLocal, excludedMembers, skipReadonly);
+        }
 
         foreach (MemberInfo member in members)
         {
@@ -757,6 +817,7 @@ internal static class FastClonerExprGenerator
     private static FastClonerCache.TypeShape BuildTypeShape(Type type)
     {
         List<MemberInfo> members = [];
+        List<MemberInfo>? excludedByVisibility = null;
         Dictionary<string, Type>? ignoredEventDetails = null;
         List<Type> cycleFieldTypes = new List<Type>();
         bool hasReadonlyFields = false;
@@ -764,6 +825,9 @@ internal static class FastClonerExprGenerator
         bool hasDirectSelfReference = false;
         bool includeMemberMetadata = true;
         Type? currentType = type;
+        FastClonerMemberVisibility? cachedVisibility = GetTypeVisibility(type);
+        FastClonerMemberVisibility visibilityPolicy = cachedVisibility ?? FastClonerMemberVisibility.All;
+        bool hasNonDefaultPolicy = cachedVisibility.HasValue;
 
         while (currentType != null && currentType != typeof(object))
         {
@@ -781,6 +845,24 @@ internal static class FastClonerExprGenerator
                 if (!includeMemberMetadata)
                 {
                     continue;
+                }
+
+                if (hasNonDefaultPolicy)
+                {
+                    PropertyInfo? backedProperty = TryGetBackingPropertyForField(field);
+                    bool hasExplicit = HasExplicitMemberBehavior(field) ||
+                                       (backedProperty is not null && HasExplicitMemberBehavior(backedProperty));
+                    if (!hasExplicit)
+                    {
+                        FastClonerMemberVisibility memberMask = backedProperty is not null
+                            ? PropertyVisibilityMask(backedProperty)
+                            : FieldVisibilityMask(field);
+                        if ((visibilityPolicy & memberMask) == 0)
+                        {
+                            (excludedByVisibility ??= []).Add(field);
+                            continue;
+                        }
+                    }
                 }
 
                 members.Add(field);
@@ -810,6 +892,16 @@ internal static class FastClonerExprGenerator
                     if (!property.CanRead || !property.CanWrite || property.GetIndexParameters().Length != 0)
                     {
                         continue;
+                    }
+
+                    if (hasNonDefaultPolicy && !HasExplicitMemberBehavior(property))
+                    {
+                        FastClonerMemberVisibility memberMask = PropertyVisibilityMask(property);
+                        if ((visibilityPolicy & memberMask) == 0)
+                        {
+                            (excludedByVisibility ??= []).Add(property);
+                            continue;
+                        }
                     }
 
                     members.Add(property);
@@ -842,8 +934,106 @@ internal static class FastClonerExprGenerator
             CycleFieldTypes = cycleFieldTypes.ToArray(),
             HasReadonlyFields = hasReadonlyFields,
             ContainsIgnoredMembers = containsIgnoredMembers,
-            HasDirectSelfReference = hasDirectSelfReference
+            HasDirectSelfReference = hasDirectSelfReference,
+            MembersExcludedByVisibility = excludedByVisibility?.ToArray()
         };
+    }
+    
+    private static FastClonerMemberVisibility FieldVisibilityMask(FieldInfo field)
+    {
+        FieldAttributes access = field.Attributes & FieldAttributes.FieldAccessMask;
+        switch (access)
+        {
+            case FieldAttributes.Public:
+                return FastClonerMemberVisibility.Public;
+            case FieldAttributes.Assembly:
+                return FastClonerMemberVisibility.Internal;
+            case FieldAttributes.Family:
+                return FastClonerMemberVisibility.Protected;
+            case FieldAttributes.FamORAssem:  // protected internal
+            case FieldAttributes.FamANDAssem: // private protected
+                return FastClonerMemberVisibility.Protected | FastClonerMemberVisibility.Internal;
+            case FieldAttributes.Private:
+            case FieldAttributes.PrivateScope:
+            default:
+                return FastClonerMemberVisibility.Private;
+        }
+    }
+    
+    private static FastClonerMemberVisibility PropertyVisibilityMask(PropertyInfo property)
+    {
+        MethodInfo? getter = property.GetGetMethod(nonPublic: true);
+        MethodInfo? setter = property.GetSetMethod(nonPublic: true);
+
+        FastClonerMemberVisibility? getMask = getter is null ? null : MaskFromMethodAttributes(getter.Attributes);
+        FastClonerMemberVisibility? setMask = setter is null ? null : MaskFromMethodAttributes(setter.Attributes);
+
+        switch (getMask)
+        {
+            case null when setMask is null:
+                return FastClonerMemberVisibility.Private;
+            case null:
+                return setMask.Value;
+        }
+
+        if (setMask is null)
+            return getMask.Value;
+
+        // Pick the more permissive of the two single-value masks.
+        return Score(getMask.Value) >= Score(setMask.Value) ? getMask.Value : setMask.Value;
+
+        static int Score(FastClonerMemberVisibility v) => v switch
+        {
+            FastClonerMemberVisibility.Public => 6,
+            // protected internal / private protected (Protected | Internal)
+            (FastClonerMemberVisibility.Protected | FastClonerMemberVisibility.Internal) => 5,
+            FastClonerMemberVisibility.Internal => 4,
+            FastClonerMemberVisibility.Protected => 3,
+            FastClonerMemberVisibility.Private => 1,
+            _ => 0,
+        };
+    }
+    
+    private static PropertyInfo? TryGetBackingPropertyForField(FieldInfo field)
+    {
+        string name = field.Name;
+        if (name.Length < "<>k__BackingField".Length || name[0] != '<' || !name.EndsWith(">k__BackingField"))
+            return null;
+
+        int closingBracket = name.IndexOf('>');
+        if (closingBracket <= 1)
+            return null;
+
+        string propertyName = name.Substring(1, closingBracket - 1);
+        return field.DeclaringType?.GetProperty(
+            propertyName,
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+    }
+
+    private static FastClonerMemberVisibility MaskFromMethodAttributes(MethodAttributes attributes)
+    {
+        MethodAttributes access = attributes & MethodAttributes.MemberAccessMask;
+        switch (access)
+        {
+            case MethodAttributes.Public:
+                return FastClonerMemberVisibility.Public;
+            case MethodAttributes.Assembly:
+                return FastClonerMemberVisibility.Internal;
+            case MethodAttributes.Family:
+                return FastClonerMemberVisibility.Protected;
+            case MethodAttributes.FamORAssem:  // protected internal
+            case MethodAttributes.FamANDAssem: // private protected
+                return FastClonerMemberVisibility.Protected | FastClonerMemberVisibility.Internal;
+            case MethodAttributes.Private:
+            case MethodAttributes.PrivateScope:
+            default:
+                return FastClonerMemberVisibility.Private;
+        }
+    }
+    
+    private static bool HasExplicitMemberBehavior(MemberInfo member)
+    {
+        return member.GetCustomAttribute<FastClonerBehaviorAttribute>(inherit: false) is not null;
     }
 
     private static object? CloneIClonable(Type type)

@@ -24,7 +24,7 @@ FastCloner is a zero-dependency deep cloning library for .NET, from <code>.NET 4
 - **Precise control** - Override clone behavior per type or member with `Clone`, `Reference`, `Shallow`, or `Ignore`, at compile time or runtime
 - **Selective tracking** - FastCloner avoids identity and cycle-tracking overhead by default, but enables it when graph shape or `[FastClonerPreserveIdentity]` requires it
 - **Easy Integration** - `FastDeepClone()` for AOT cloning, `DeepClone()` for reflection cloning. FastCloner respects standard .NET attributes like `[NonSerialized]`, so you can adopt it without depending on library-specific annotations
-- **Production Ready** - Used by projects like [Foundatio](https://github.com/FoundatioFx/Foundatio), [Jobbr](https://jobbr.readthedocs.io/en/latest), [TarkovSP](https://sp-tarkov.com), [SnapX](https://github.com/SnapXL/SnapX), and [WinPaletter](https://github.com/Abdelrhman-AK/WinPaletter), with over [300K downloads on NuGet](https://www.nuget.org/packages/fastCloner#usedby-body-tab)
+- **Production Ready** - Used by projects like [Foundatio](https://github.com/FoundatioFx/Foundatio), [Jobbr](https://jobbr.readthedocs.io/en/latest), [TarkovSP](https://sp-tarkov.com), [SnapX](https://github.com/SnapXL/SnapX), and [WinPaletter](https://github.com/Abdelrhman-AK/WinPaletter), with over [500K downloads on NuGet](https://www.nuget.org/packages/fastCloner#usedby-body-tab)
 ## Getting Started
 
 Install the package via NuGet:
@@ -238,6 +238,24 @@ if (ctx.TryClone(obj, out var cloned))
     // Successfully cloned
 }
 ```
+
+### Member Visibility
+
+By default, all members are eligible for cloning regardless of access modifier. Apply `[FastClonerVisibility]` to a type to restrict cloning to a specific subset:
+
+```csharp
+[FastClonerVisibility(FastClonerMemberVisibility.Public | FastClonerMemberVisibility.Internal)]
+public class Dto
+{
+    public int Id { get; set; }        // cloned
+    internal string Tag;               // cloned
+    private string _secret;            // skipped
+}
+```
+
+The policy applies to both reflection and source-generated paths; excluded members are left at their default value on the clone.
+
+The visibility filter runs before the behavior pipeline and is bypassed for any member carrying a member-level behavior attribute (`[FastClonerBehavior]`, `[FastClonerIgnore]`, `[FastClonerShallow]`, `[FastClonerReference]`), so those members are always included with their declared behavior.
 
 ### Nullability Trust
 

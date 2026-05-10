@@ -10,6 +10,9 @@ internal static class MemberCloneGenerator
     {
         string memberName = member.Name;
         string nf = (!member.IsNullable && !member.IsValueType) ? "!" : "";
+        
+        if (member.AccessorStrategy != NonPublicAccessorStrategy.None)
+            return string.Empty;
 
         switch (member)
         {
@@ -82,6 +85,18 @@ internal static class MemberCloneGenerator
         string memberName = member.Name;
         string nf = (!member.IsNullable && !member.IsValueType) ? "!" : "";
         StringBuilder sb = context.Source;
+        
+        if (member.AccessorStrategy != NonPublicAccessorStrategy.None)
+        {
+            if (!NonPublicAccessorEmitter.CanCloneNonPublicMembers(context))
+            {
+                context.SkippedNonPublicMembers.Add(memberName);
+                return;
+            }
+
+            NonPublicAccessorEmitter.WriteCloneCall(context, sb, member, resultVar, sourceVar, stateVar, "            ");
+            return;
+        }
 
         switch (member)
         {

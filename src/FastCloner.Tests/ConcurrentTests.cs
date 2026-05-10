@@ -1,8 +1,9 @@
 using System.Collections.Concurrent;
 using FastCloner.Code;
-using System.Threading.Tasks;
 
 namespace FastCloner.Tests;
+
+[NotInParallel]
 public class ConcurrentTests(int maxRecursionDepth) : BaseTestFixture(maxRecursionDepth)
 {
     private class TestClass
