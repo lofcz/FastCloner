@@ -21,7 +21,7 @@ on:
         default: true
 
 env:
-  DOTNET_VERSION: "10.0.103"
+  DOTNET_VERSION: "10.0.x"
   BASELINE_BRANCH: "next"
 
 permissions:
