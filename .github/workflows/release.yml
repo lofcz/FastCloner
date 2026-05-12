@@ -12,6 +12,11 @@ on:
           - patch
           - minor
           - major
+      force_release:
+        description: 'Force release (bump every packable project even if it has no changes since the last tag)'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   build-and-release:
@@ -39,6 +44,11 @@ jobs:
         CHANGED_PROJECT_PATHS=""
         LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
         NEW_VERSION=""
+        FORCE_RELEASE="${{ github.event.inputs.force_release }}"
+
+        if [ "$FORCE_RELEASE" = "true" ]; then
+          echo "Force release enabled: every packable project will be bumped regardless of git diff."
+        fi
         
         # Function to compare version numbers
         version_gt() {
@@ -157,8 +167,8 @@ jobs:
           MINOR="${VERSION_PARTS[1]}"
           PATCH="${VERSION_PARTS[2]}"
           
-          # Check if project has changes since last tag
-          if [ -z "$LATEST_TAG" ] || ! git diff --quiet $LATEST_TAG HEAD -- "$PROJECT_DIR"; then
+          # Check if project has changes since last tag (or force release)
+          if [ "$FORCE_RELEASE" = "true" ] || [ -z "$LATEST_TAG" ] || ! git diff --quiet $LATEST_TAG HEAD -- "$PROJECT_DIR"; then
             # Calculate new version based on release type
             case "${{ github.event.inputs.release_type }}" in
               "major")
@@ -188,6 +198,10 @@ jobs:
         done
         
         if [ -z "$NEW_VERSION" ]; then
+          if [ "$FORCE_RELEASE" = "true" ]; then
+            echo "::error::Force release was requested but no packable project with a <Version> was found."
+            exit 1
+          fi
           echo "No version changes detected"
           exit 0
         fi
