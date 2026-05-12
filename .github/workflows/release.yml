@@ -44,6 +44,77 @@ jobs:
         version_gt() {
           test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"
         }
+
+        # Fetch the latest stable version of a package from NuGet.
+        # Prints the version on stdout (empty on any failure) and a human-
+        # readable explanation on stderr. Distinguishes between:
+        #   - package not yet published (HTTP 404)        -> empty, log "new package"
+        #   - transient network / DNS / TLS failures      -> empty, log warning
+        #   - HTTP 5xx or other unexpected status codes   -> empty, log warning
+        #   - successful response but no stable versions  -> empty, log warning
+        # Always returns 0 so the workflow can fall back to the csproj version
+        # rather than failing the release entirely. Pipefail-safe.
+        fetch_latest_nuget_version() {
+          local package_id="$1"
+          if [ -z "$package_id" ]; then
+            return 0
+          fi
+
+          local lower
+          lower=$(echo "$package_id" | tr '[:upper:]' '[:lower:]')
+          local url="https://api.nuget.org/v3-flatcontainer/${lower}/index.json"
+
+          # -sS: silent but show errors; -w appends HTTP status as the final line.
+          # On total failure (DNS, TLS, timeout) curl exits non-zero and the
+          # `|| true` keeps us going; we then inject "000" as the status code.
+          local raw
+          raw=$(curl -sS --retry 3 --retry-delay 2 --max-time 30 \
+                  -w $'\n%{http_code}' "$url" 2>/dev/null || true)
+          if [ -z "$raw" ]; then
+            echo "  -> network failure contacting NuGet for ${package_id}" >&2
+            return 0
+          fi
+
+          local http_code
+          http_code=$(printf '%s' "$raw" | tail -n 1)
+          local body
+          body=$(printf '%s' "$raw" | sed '$d')
+
+          case "$http_code" in
+            200)
+              : # fall through to parsing
+              ;;
+            404)
+              echo "  -> ${package_id} is not yet published to NuGet (404, treating as new package)" >&2
+              return 0
+              ;;
+            000|"")
+              echo "  -> network failure contacting NuGet for ${package_id}" >&2
+              return 0
+              ;;
+            *)
+              echo "  -> unexpected NuGet response for ${package_id} (HTTP ${http_code})" >&2
+              return 0
+              ;;
+          esac
+
+          if [ -z "$body" ]; then
+            echo "  -> empty NuGet response body for ${package_id}" >&2
+            return 0
+          fi
+
+          # Extract stable MAJOR.MINOR.PATCH versions (skip prereleases).
+          # `|| true` is required because grep returns 1 when there are no
+          # matches and the surrounding step runs under `set -eo pipefail`.
+          local versions
+          versions=$(printf '%s' "$body" | grep -oE '"[0-9]+\.[0-9]+\.[0-9]+"' | tr -d '"' || true)
+          if [ -z "$versions" ]; then
+            echo "  -> no stable versions found on NuGet for ${package_id}" >&2
+            return 0
+          fi
+
+          printf '%s\n' "$versions" | sort -V | tail -n 1
+        }
         
         # Check each project for changes and update versions
         for proj in $(find . -name "*.csproj"); do
@@ -57,9 +128,31 @@ jobs:
             echo "Warning: Could not find version in $proj"
             continue
           fi
+
+          # Resolve the package id used on NuGet. Falls back to the assembly
+          # name (csproj filename without extension) when <PackageId> is omitted.
+          PACKAGE_ID=$(grep -oP '(?<=<PackageId>).*(?=</PackageId>)' "$proj" | head -n 1 || echo "")
+          if [ -z "$PACKAGE_ID" ]; then
+            PACKAGE_ID="${PROJECT_NAME%.csproj}"
+          fi
+
+          # Reconcile against NuGet so a previously-published version is never
+          # re-used (which would silently no-op behind --skip-duplicate).
+          # The helper logs the specific reason on stderr if it returns empty.
+          BASE_VERSION="$CURRENT_VERSION"
+          LATEST_NUGET=$(fetch_latest_nuget_version "$PACKAGE_ID")
+          if [ -n "$LATEST_NUGET" ]; then
+            echo "Latest version of $PACKAGE_ID on NuGet: $LATEST_NUGET (csproj: $CURRENT_VERSION)"
+            if version_gt "$LATEST_NUGET" "$BASE_VERSION"; then
+              echo "Using NuGet version $LATEST_NUGET as bump baseline for $PACKAGE_ID"
+              BASE_VERSION="$LATEST_NUGET"
+            fi
+          else
+            echo "Falling back to csproj version $CURRENT_VERSION as bump baseline for $PACKAGE_ID"
+          fi
           
           # Split version into parts
-          IFS='.' read -r -a VERSION_PARTS <<< "$CURRENT_VERSION"
+          IFS='.' read -r -a VERSION_PARTS <<< "$BASE_VERSION"
           MAJOR="${VERSION_PARTS[0]}"
           MINOR="${VERSION_PARTS[1]}"
           PATCH="${VERSION_PARTS[2]}"
