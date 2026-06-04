@@ -20,6 +20,12 @@ public class ExternalBird : AbstractClassTests.Pet
     public double Wingspan { get; set; }
     public bool CanFly { get; set; }
 }
+
+public class ExternalWatch : AbstractClassTests.IncludedDevice
+{
+    public string? FirmwareVersion { get; set; }
+}
+
 [SourceGeneratorCompatible]
 public class AbstractClassTests
 {
@@ -174,6 +180,14 @@ public class AbstractClassTests
     public class PlainPhone : PlainDevice
     {
         public string? OperatingSystem { get; set; }
+    }
+
+    [FastClonerClonable(IncludeSubtypes = true)]
+    [FastClonerDisableAutoDiscovery]
+    [FastClonerInclude(typeof(ExternalWatch))]
+    public class IncludedDevice
+    {
+        public string? Name { get; set; }
     }
 
     #endregion
@@ -595,6 +609,31 @@ public class AbstractClassTests
         await Assert.That(((ExternalDog)clones[0]!).Name).IsEqualTo("Buddy");
         await Assert.That(((ExternalCat)clones[1]!).FurColor).IsEqualTo("Orange");
         await Assert.That(((ExternalBird)clones[2]!).CanFly).IsTrue();
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task IncludeSubtypes_WithFastClonerInclude_ExternalSubtype_Should_Clone()
+    {
+        // Arrange
+        ExternalWatch watch = new ExternalWatch
+        {
+            Name = "Pixel Watch",
+            FirmwareVersion = "1.2.3"
+        };
+
+        // Act - clone via concrete base with IncludeSubtypes=true
+        IncludedDevice device = watch;
+        IncludedDevice? clone = device.FastDeepClone();
+
+        // Assert
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsTypeOf<ExternalWatch>();
+        await Assert.That(clone).IsNotSameReferenceAs(watch);
+
+        ExternalWatch clonedWatch = (ExternalWatch)clone!;
+        await Assert.That(clonedWatch.Name).IsEqualTo("Pixel Watch");
+        await Assert.That(clonedWatch.FirmwareVersion).IsEqualTo("1.2.3");
     }
 
     #endregion
