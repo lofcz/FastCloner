@@ -137,11 +137,11 @@ internal static class DerivedTypeCollector
             RelatedTypes: EquatableArray<TypeModel>.Empty,
             NestedTypes: EquatableArray<MemberModel>.Empty,
             DerivedTypes: EquatableArray<TypeModel>.Empty,
-            nullabilityEnabled,
-            trustNullability,
+            NullabilityEnabled: nullabilityEnabled,
+            TrustNullability: trustNullability,
             PreserveIdentity: null,
             IsRefLikeType: false,
-            hasParameterlessConstructor,
+            HasParameterlessConstructor: hasParameterlessConstructor,
             CodeAnalysisAvailable: compilation.GetTypeByMetadataName("System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute") != null,
             TargetFramework: targetFramework);
     }
@@ -332,10 +332,10 @@ internal static class DerivedTypeCollector
             trustNullability,
             preserveIdentity,
             IsRefLikeType: false,
-            hasParameterlessConstructor,
+            HasParameterlessConstructor: hasParameterlessConstructor,
             CodeAnalysisAvailable: compilation.GetTypeByMetadataName("System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute") != null,
             TargetFramework: targetFramework,
-            new EquatableArray<string>(circRefLog.ToArray()));
+            CircularAnalysisLog: new EquatableArray<string>(circRefLog.ToArray()));
     }
     
     private static bool? GetPreserveIdentityFromType(INamedTypeSymbol symbol)

@@ -23,6 +23,8 @@ internal static class TypeModelFactory
             .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerSimulateNoRuntimeAttribute");
         bool trustNullability = symbol.GetAttributes()
             .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerTrustNullabilityAttribute");
+        bool requestedIncludeSubtypes = GetIncludeSubtypesFromType(symbol);
+        bool effectiveIncludeSubtypes = requestedIncludeSubtypes && !symbol.IsValueType && !symbol.IsSealed;
         bool? preserveIdentity = GetPreserveIdentityFromType(symbol);
         bool codeAnalysisAvailable = compilation.GetTypeByMetadataName("System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute") != null;
         
@@ -211,12 +213,12 @@ internal static class TypeModelFactory
         bool isRefLikeType = TypeAnalyzer.IsRefStructType(symbol);
         EquatableArray<TypeModel> derivedTypes = EquatableArray<TypeModel>.Empty;
         
-        if (symbol.IsAbstract)
+        if (symbol.IsAbstract || effectiveIncludeSubtypes)
         {
             List<TypeModel> derivedTypesList = DerivedTypeCollector.Collect(symbol, compilation, nullabilityEnabled, targetFramework);
             derivedTypes = new EquatableArray<TypeModel>(derivedTypesList.ToArray());
             
-            if (derivedTypesList.Count == 0 && !isFastClonerAvailable)
+            if (symbol.IsAbstract && derivedTypesList.Count == 0 && !isFastClonerAvailable)
             {
                 error = Diagnostic.Create(
                     new DiagnosticDescriptor(
@@ -257,6 +259,7 @@ internal static class TypeModelFactory
             isRefLikeType,
             hasParameterlessConstructor,
             codeAnalysisAvailable,
+            effectiveIncludeSubtypes,
             targetFramework,
             new EquatableArray<string>(circRefLog.ToArray()));
 
@@ -282,5 +285,24 @@ internal static class TypeModelFactory
             }
         }
         return null;
+    }
+
+    private static bool GetIncludeSubtypesFromType(INamedTypeSymbol symbol)
+    {
+        foreach (AttributeData attr in symbol.GetAttributes())
+        {
+            if (attr.AttributeClass?.ToDisplayString() != "FastCloner.SourceGenerator.Shared.FastClonerClonableAttribute")
+                continue;
+
+            foreach (KeyValuePair<string, TypedConstant> namedArg in attr.NamedArguments)
+            {
+                if (namedArg is { Key: "IncludeSubtypes", Value.Value: bool includeSubtypes })
+                    return includeSubtypes;
+            }
+
+            return false;
+        }
+
+        return false;
     }
 }
