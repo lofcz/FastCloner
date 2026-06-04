@@ -177,6 +177,24 @@ Animal pet = new Dog { Name = "Buddy", Breed = "Labrador" };
 Animal clone = pet.FastDeepClone(); // Returns a cloned Dog
 ```
 
+For non-abstract base classes, you can opt into the same runtime subtype dispatch behavior:
+
+```cs
+[FastClonerClonable(IncludeSubtypes = true)]
+public class Device
+{
+    public string Name { get; set; }
+}
+
+public class Phone : Device
+{
+    public string OS { get; set; }
+}
+
+Device device = new Phone { Name = "Pixel", OS = "Android" };
+Device clone = device.FastDeepClone(); // Returns a cloned Phone
+```
+
 ### Explicitly Including Types
 
 When a type is only used dynamically (not visible at compile time), use `[FastClonerInclude]` to ensure the generator creates cloning code for it:

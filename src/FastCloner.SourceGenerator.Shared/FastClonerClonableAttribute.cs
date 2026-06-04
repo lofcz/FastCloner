@@ -10,6 +10,20 @@ namespace FastCloner.SourceGenerator.Shared;
 public class FastClonerClonableAttribute : Attribute
 {
     /// <summary>
+    /// Gets or sets whether subtype dispatch should be generated for this type.
+    /// When true, generated clone code dispatches by runtime type and clones known subtypes similarly to abstract roots.
+    /// This is ignored for abstract types, which always have subtype dispatch.
+    /// This is ignored for structs, which cannot have subtypes.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// [FastClonerClonable(IncludeSubtypes = true)]
+    /// public class BaseType { }
+    /// </code>
+    /// </example>
+    public bool IncludeSubtypes { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of the FastClonerClonableAttribute.
     /// </summary>
     public FastClonerClonableAttribute()

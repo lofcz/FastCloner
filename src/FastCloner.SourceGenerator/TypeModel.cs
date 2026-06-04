@@ -31,5 +31,6 @@ internal sealed record TypeModel(
     bool IsRefLikeType = false, // Whether the type is a ref struct (cannot be boxed/used as generic)
     bool HasParameterlessConstructor = true, // Whether the type has a public parameterless constructor (defaults to true for safety)
     bool CodeAnalysisAvailable = false, // Whether System.Diagnostics.CodeAnalysis attributes are available
+    bool IncludeSubtypes = false, // Whether subtype dispatch should be generated for this type
     TargetFramework TargetFramework = TargetFramework.NetStandard20, // Detected target framework for TFM-specific optimizations
     EquatableArray<string> CircularAnalysisLog = default) : IEquatable<TypeModel>;

@@ -208,7 +208,9 @@ internal sealed class CloneCodeGenerator
              return;
         }
         
-        if (_context.Model.IsAbstract)
+        bool needsSubtypeDispatcher = !_context.Model.IsStruct && (_context.Model.IsAbstract || _context.Model.IncludeSubtypes);
+
+        if (needsSubtypeDispatcher)
         {
             sb.AppendLine("            return InternalFastDeepClone(source, null);");
         }
@@ -274,11 +276,19 @@ internal sealed class CloneCodeGenerator
             sb.AppendLine("            if (source == null) return null;");
         }
         
-        if (_context.Model.IsAbstract)
+        bool needsSubtypeDispatcher = !_context.Model.IsStruct && (_context.Model.IsAbstract || _context.Model.IncludeSubtypes);
+        if (needsSubtypeDispatcher)
         {
-            WriteAbstractTypeDispatcher(typeName);
+            WriteSubtypeDispatcher(typeName, fullTypeName, includeRootTypeGuard: !_context.Model.IsAbstract);
+            if (_context.Model.IsAbstract)
+            {
+                sb.AppendLine("        }");
+                sb.AppendLine();
+                return;
+            }
         }
-        else if (_context.NeedsStateTracking)
+
+        if (_context.NeedsStateTracking)
         {
             _context.NeedsStateClass = true;
             sb.AppendLine("            var localState = state ?? new FcGeneratedCloneState();");
@@ -309,7 +319,7 @@ internal sealed class CloneCodeGenerator
         sb.AppendLine();
     }
 
-    private void WriteAbstractTypeDispatcher(string typeName)
+    private void WriteSubtypeDispatcher(string typeName, string fullTypeName, bool includeRootTypeGuard)
     {
         StringBuilder sb = _context.Source;
         EquatableArray<TypeModel> derivedTypes = _context.Model.DerivedTypes;
@@ -318,6 +328,14 @@ internal sealed class CloneCodeGenerator
         sb.AppendLine("            // Dispatch to concrete type cloner based on runtime type");
         sb.AppendLine("            var runtimeType = source.GetType();");
         sb.AppendLine();
+
+        string indent = "            ";
+        if (includeRootTypeGuard)
+        {
+            sb.AppendLine($"            if (runtimeType != typeof({fullTypeName}))");
+            sb.AppendLine("            {");
+            indent = "                ";
+        }
 
         foreach (TypeModel? derivedType in derivedTypes)
         {
@@ -331,29 +349,35 @@ internal sealed class CloneCodeGenerator
                     extensionClassName = $"{derivedType.Name}FastDeepCloneExtensions";
                 }
                 
-                sb.AppendLine($"            if (runtimeType == typeof({derivedTypeName}))");
-                sb.AppendLine($"                return ({typeName}){extensionClassName}.InternalFastDeepClone(({derivedTypeName})source, state);");
+                sb.AppendLine($"{indent}if (runtimeType == typeof({derivedTypeName}))");
+                sb.AppendLine($"{indent}    return ({typeName}){extensionClassName}.InternalFastDeepClone(({derivedTypeName})source, state);");
             }
             else
             {
                 string helperName = $"Clone{GetSafeTypeName(derivedType.Name)}";
                 _context.RegisterDerivedTypeHelper(derivedType, helperName);
                 
-                sb.AppendLine($"            if (runtimeType == typeof({derivedTypeName}))");
-                sb.AppendLine($"                return ({typeName}){helperName}(({derivedTypeName})source, state);");
+                sb.AppendLine($"{indent}if (runtimeType == typeof({derivedTypeName}))");
+                sb.AppendLine($"{indent}    return ({typeName}){helperName}(({derivedTypeName})source, state);");
             }
             sb.AppendLine();
         }
         
         if (_context.IsFastClonerAvailable)
         {
-            sb.AppendLine($"            return ({typeName}){CloneGeneratorContext.FastClonerDeepCloneCall("source")}!;");
+            sb.AppendLine($"{indent}return ({typeName}){CloneGeneratorContext.FastClonerDeepCloneCall("source")}!;");
         }
         else
         {
-            sb.AppendLine($"            throw new InvalidOperationException($\"Cannot clone unknown derived type {{runtimeType.FullName}} of {_context.Model.Name}. \" +");
-            sb.AppendLine("                \"Either add the derived type to this assembly, use [FastClonerInclude] to register it, \" +");
-            sb.AppendLine("                \"or install the FastCloner NuGet package for runtime fallback.\");");
+            sb.AppendLine($"{indent}throw new InvalidOperationException($\"Cannot clone unknown derived type {{runtimeType.FullName}} of {_context.Model.Name}. \" +");
+            sb.AppendLine($"{indent}    \"Either add the derived type to this assembly, use [FastClonerInclude] to register it, \" +");
+            sb.AppendLine($"{indent}    \"or install the FastCloner NuGet package for runtime fallback.\");");
+        }
+
+        if (includeRootTypeGuard)
+        {
+            sb.AppendLine("            }");
+            sb.AppendLine();
         }
     }
 

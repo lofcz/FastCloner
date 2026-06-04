@@ -152,6 +152,32 @@ public class AbstractClassTests
 
     #endregion
 
+    #region Test Classes - Concrete Base with IncludeSubtypes
+
+    [FastClonerClonable(IncludeSubtypes = true)]
+    public class Device
+    {
+        public string? Name { get; set; }
+    }
+
+    public class Phone : Device
+    {
+        public string? OperatingSystem { get; set; }
+    }
+
+    [FastClonerClonable]
+    public class PlainDevice
+    {
+        public string? Name { get; set; }
+    }
+
+    public class PlainPhone : PlainDevice
+    {
+        public string? OperatingSystem { get; set; }
+    }
+
+    #endregion
+
     #region Tests - Basic Abstract Class Cloning
     
     [Test]
@@ -210,6 +236,74 @@ public class AbstractClassTests
         await Assert.That(clonedCat.Age).IsEqualTo(3);
         await Assert.That(clonedCat.Color).IsEqualTo("Orange");
         await Assert.That(clonedCat.IsIndoor).IsTrue();
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task ConcreteBase_WithIncludeSubtypes_Should_Dispatch_To_Derived_Cloner()
+    {
+        // Arrange
+        Phone phone = new Phone
+        {
+            Name = "MyPhone",
+            OperatingSystem = "Android"
+        };
+
+        // Act - Clone via concrete base type
+        Device device = phone;
+        Device? clone = device.FastDeepClone();
+
+        // Assert
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsTypeOf<Phone>();
+        await Assert.That(clone).IsNotSameReferenceAs(phone);
+
+        Phone clonedPhone = (Phone)clone!;
+        await Assert.That(clonedPhone.Name).IsEqualTo("MyPhone");
+        await Assert.That(clonedPhone.OperatingSystem).IsEqualTo("Android");
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task ConcreteBase_WithoutIncludeSubtypes_Should_Keep_Default_Behavior()
+    {
+        // Arrange
+        PlainPhone phone = new PlainPhone
+        {
+            Name = "LegacyPhone",
+            OperatingSystem = "Symbian"
+        };
+
+        // Act - Clone via concrete base type without IncludeSubtypes
+        PlainDevice device = phone;
+        PlainDevice? clone = device.FastDeepClone();
+
+        // Assert
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsTypeOf<PlainDevice>();
+        await Assert.That(clone).IsNotSameReferenceAs(phone);
+        await Assert.That(clone is PlainPhone).IsFalse();
+        await Assert.That(clone!.Name).IsEqualTo("LegacyPhone");
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task ConcreteBase_WithIncludeSubtypes_Should_Clone_Device_Instance()
+    {
+        // Arrange
+        Device device = new Device
+        {
+            Name = "BaseDevice"
+        };
+
+        // Act
+        Device? clone = device.FastDeepClone();
+
+        // Assert
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsTypeOf<Device>();
+        await Assert.That(clone).IsNotSameReferenceAs(device);
+        await Assert.That(clone!.Name).IsEqualTo("BaseDevice");
     }
 
     #endregion

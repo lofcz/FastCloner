@@ -204,7 +204,7 @@ internal static class ImplicitTypeAnalyzer
                 trustNullability,
                 PreserveIdentity: null,
                 IsRefLikeType: false,
-                hasParameterlessConstructor,
+                HasParameterlessConstructor: hasParameterlessConstructor,
                 CodeAnalysisAvailable: compilation.GetTypeByMetadataName("System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute") != null,
                 TargetFramework: targetFramework);
                 
