@@ -23,7 +23,8 @@ internal static class TypeModelFactory
             .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerSimulateNoRuntimeAttribute");
         bool trustNullability = symbol.GetAttributes()
             .Any(a => a.AttributeClass?.ToDisplayString() == "FastCloner.SourceGenerator.Shared.FastClonerTrustNullabilityAttribute");
-        bool includeSubtypes = GetIncludeSubtypesFromType(symbol);
+        bool requestedIncludeSubtypes = GetIncludeSubtypesFromType(symbol);
+        bool effectiveIncludeSubtypes = requestedIncludeSubtypes && !symbol.IsValueType && !symbol.IsSealed;
         bool? preserveIdentity = GetPreserveIdentityFromType(symbol);
         bool codeAnalysisAvailable = compilation.GetTypeByMetadataName("System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute") != null;
         
@@ -212,7 +213,7 @@ internal static class TypeModelFactory
         bool isRefLikeType = TypeAnalyzer.IsRefStructType(symbol);
         EquatableArray<TypeModel> derivedTypes = EquatableArray<TypeModel>.Empty;
         
-        if (symbol.IsAbstract || includeSubtypes)
+        if (symbol.IsAbstract || effectiveIncludeSubtypes)
         {
             List<TypeModel> derivedTypesList = DerivedTypeCollector.Collect(symbol, compilation, nullabilityEnabled, targetFramework);
             derivedTypes = new EquatableArray<TypeModel>(derivedTypesList.ToArray());
@@ -258,7 +259,7 @@ internal static class TypeModelFactory
             isRefLikeType,
             hasParameterlessConstructor,
             codeAnalysisAvailable,
-            includeSubtypes,
+            effectiveIncludeSubtypes,
             targetFramework,
             new EquatableArray<string>(circRefLog.ToArray()));
 

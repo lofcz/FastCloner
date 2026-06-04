@@ -99,6 +99,18 @@ public class AbstractClassTests
         public string? Name { get; set; }
     }
 
+    [FastClonerClonable(IncludeSubtypes = true)]
+    public sealed class SealedDevice
+    {
+        public string? Name { get; set; }
+    }
+
+    [FastClonerClonable(IncludeSubtypes = true)]
+    public struct StructDevice
+    {
+        public int Id { get; set; }
+    }
+
     public abstract class Polygon : Shape
     {
         public int NumberOfSides { get; set; }
@@ -318,6 +330,43 @@ public class AbstractClassTests
         await Assert.That(clone).IsTypeOf<Device>();
         await Assert.That(clone).IsNotSameReferenceAs(device);
         await Assert.That(clone!.Name).IsEqualTo("BaseDevice");
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task SealedClass_WithIncludeSubtypes_Should_Clone_Normally()
+    {
+        // Arrange
+        SealedDevice device = new SealedDevice
+        {
+            Name = "Sealed"
+        };
+
+        // Act
+        SealedDevice? clone = device.FastDeepClone();
+
+        // Assert
+        await Assert.That(clone).IsNotNull();
+        await Assert.That(clone).IsTypeOf<SealedDevice>();
+        await Assert.That(clone).IsNotSameReferenceAs(device);
+        await Assert.That(clone!.Name).IsEqualTo("Sealed");
+    }
+
+    [Test]
+    [SourceGeneratorCompatible]
+    public async Task Struct_WithIncludeSubtypes_Should_Clone_Normally()
+    {
+        // Arrange
+        StructDevice device = new StructDevice
+        {
+            Id = 42
+        };
+
+        // Act
+        StructDevice clone = device.FastDeepClone();
+
+        // Assert
+        await Assert.That(clone.Id).IsEqualTo(42);
     }
 
     #endregion
