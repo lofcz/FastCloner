@@ -23,6 +23,45 @@ public class FastCloneStatePoolTests
         WorkItemType.GetField("Type", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!;
 
     [Test]
+    [Arguments(false, 0)]
+    [Arguments(false, 4)]
+    [Arguments(true, 0)]
+    [Arguments(true, 4)]
+    public async Task CloneReferenceFreeArray_TracksArrayWithoutReservingPerElement(bool useStringElements, int existingReferences)
+    {
+        // Arrange
+        FastCloneState state = FastCloneState.Rent();
+        FieldInfo loopsField = typeof(FastCloneState).GetField("loops", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        loopsField.SetValue(state, null);
+        Array original = useStringElements
+            ? Enumerable.Repeat("value", 10000).ToArray()
+            : Enumerable.Range(0, 10000).ToArray();
+
+        try
+        {
+            for (int i = 0; i < existingReferences; i++)
+                state.AddKnownRef(new object(), new object());
+
+            // Act
+            Array clone = original is string[] strings
+                ? FastClonerGenerator.Clone1DimArraySafeInternal(strings, state)
+                : FastClonerGenerator.Clone1DimArraySafeInternal((int[])original, state);
+            object? loops = loopsField.GetValue(state);
+            int capacity = loops is null ? 0 : (int)loops.GetType().GetProperty("Capacity")!.GetValue(loops)!;
+
+            // Assert
+            await Assert.That(clone).IsNotSameReferenceAs(original);
+            await Assert.That(clone).IsEquivalentTo(original);
+            await Assert.That(state.GetKnownRef(original)).IsSameReferenceAs(clone);
+            await Assert.That(capacity).IsLessThanOrEqualTo(8);
+        }
+        finally
+        {
+            FastCloneState.Return(state);
+        }
+    }
+
+    [Test]
     public async Task TryPop_Clears_Popped_WorkItem_References()
     {
         FastCloneState state = FastCloneState.Rent();

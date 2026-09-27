@@ -466,7 +466,7 @@ internal static class FastClonerGenerator
             return true;
         }
 
-        Type? payloadType = GetCollectionPayloadType(type);
+        Type? payloadType = IsKnownArrayBackedCollection(type) ? GetCollectionPayloadType(type) : null;
         if (payloadType is not null)
         {
             bool payloadTriviallyAcyclic =
@@ -594,6 +594,17 @@ internal static class FastClonerGenerator
     private static Type[] GetCycleFieldTypes(Type type)
     {
         return FastClonerExprGenerator.GetTypeShape(type).CycleFieldTypes;
+    }
+
+    private static bool IsKnownArrayBackedCollection(Type type)
+    {
+        // Payload safety is sufficient only for these exact array-backed shapes. Other collections
+        // can have cycles in keys, comparers, cached views, or internal storage; subclasses add state.
+        if (!type.IsGenericType)
+            return false;
+
+        Type definition = type.GetGenericTypeDefinition();
+        return definition == typeof(List<>) || definition == typeof(Queue<>) || definition == typeof(Stack<>);
     }
 
     private static Type? GetCollectionPayloadType(Type type)
@@ -932,7 +943,6 @@ internal static class FastClonerGenerator
         T[] outArray = FastArrayCopy<T>.Clone(obj);
         if (state.TrackReferences)
         {
-            state.EnsureKnownRefCapacity(outArray.Length + 1);
             state.AddKnownRef(obj, outArray);
         }
         return outArray;
