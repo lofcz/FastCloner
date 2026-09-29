@@ -253,7 +253,60 @@ public class ContextTests
         await Assert.That(clone.Groups["eu"][0].City).IsEqualTo("Paris");
         await Assert.That(clone.Groups["eu"][1].City).IsEqualTo("Rome");
     }
+
+    /// <summary>
+    /// A registered type reached through a member whose own default needs no reference tracking must
+    /// still be handed the ambient state. Losing it silently drops identity preservation at that
+    /// boundary even though the enclosing context does track references.
+    /// </summary>
+    [Test]
+    public async Task Context_MemberWhoseDefaultNeedsNoState_StillReceivesTheAmbientState()
+    {
+        CtxPlainLeaf shared = new CtxPlainLeaf { Value = 101 };
+        CtxStateRoot original = new CtxStateRoot
+        {
+            Left = shared,
+            Right = shared,
+            Cyclic = new CtxCycleNode { Value = 102 }
+        };
+
+        CtxStateContext ctx = new CtxStateContext();
+        CtxStateRoot clone = ctx.Clone(original)!;
+
+        await Assert.That(clone.Cyclic).IsNotNull();
+        await Assert.That(clone.Cyclic!.Value).IsEqualTo(102);
+        await Assert.That(clone.Left).IsNotSameReferenceAs(original.Left);
+        await Assert.That(clone.Left!.Value).IsEqualTo(101);
+        await Assert.That(clone.Left).IsSameReferenceAs(clone.Right).Because(
+            "the context tracks references, so a registered-type member must share its state");
+    }
 }
+
+/// <summary>Plain registered type with no reference members of its own.</summary>
+public class CtxPlainLeaf
+{
+    public int Value { get; set; }
+}
+
+/// <summary>Registered type that makes the context graph cycle-capable.</summary>
+public class CtxCycleNode
+{
+    public int Value { get; set; }
+
+    public CtxCycleNode? Next { get; set; }
+}
+
+public class CtxStateRoot
+{
+    public CtxPlainLeaf? Left { get; set; }
+
+    public CtxPlainLeaf? Right { get; set; }
+
+    public CtxCycleNode? Cyclic { get; set; }
+}
+
+[FastClonerRegister(typeof(CtxStateRoot), typeof(CtxPlainLeaf), typeof(CtxCycleNode))]
+public partial class CtxStateContext : FastClonerContext { }
 
 public class NodeA { public NodeB? B { get; set; } }
 public class NodeB { public NodeA? A { get; set; } }

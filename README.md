@@ -387,13 +387,66 @@ You can also explicitly disable identity preservation for a member when the type
 public class Graph
 {
     public Node Root { get; set; }
-    
-    [FastClonerPreserveIdentity(false)] // Opt out for this member
-    public List<string> Labels { get; set; }
+
+    [FastClonerPreserveIdentity(false)] // Opt out for this member and its subgraph
+    public List<Node> Nodes { get; set; }
 }
 ```
 
-> **Note**: Identity preservation adds overhead for tracking seen objects. Circular references are always detected regardless of this setting.
+Member-level settings win over the type-level attribute, which wins over the default (off). So a
+member marked `false` stops identity preservation for its own subgraph even when the member's type is
+itself marked `[FastClonerPreserveIdentity(true)]`.
+
+The override covers every member kind generated code can clone: clonable members, implicit
+(unannotated) POCOs, collections, arrays, multidimensional arrays and dictionaries, including
+non-public members on .NET 8 and later, which are cloned through generated accessors. It does not
+reach members the generator cannot clone itself (`object`, type parameters, other runtime-cloned
+members) or non-public members on target frameworks below .NET 8, which are cloned through the runtime
+bridge; those paths track references on the runtime engine's own terms. Types registered in a
+`FastClonerContext` are cloned by the context's own generated cloners, which honour the override in the
+same way.
+
+> **Note**: Identity preservation adds overhead for tracking seen objects. Circular references are always detected regardless of this setting. The opt-out is a view over the same clone operation, so objects whose clones are still being built stay visible through it: an active cycle — including one that passes through the opted-out member, or one pointing back at the collection, array or dictionary the member came from — resolves to the clone under construction instead of recursing. Only completed aliases are dropped, so repeated references under the opt-out still clone independently, and an unrelated cycle-capable member of the containing type does not re-enable aliasing inside the opted-out member's subgraph.
+
+### Container back-references
+
+Mutable containers register themselves before their elements are cloned, so an element that refers
+back to the container it came from resolves to the container clone:
+
+```csharp
+[FastClonerClonable]
+public class Node
+{
+    public List<Node> Owner { get; set; } = [];
+}
+
+[FastClonerClonable]
+public class Root
+{
+    [FastClonerPreserveIdentity(false)]
+    public List<Node> Items { get; set; } = [];
+}
+
+// node.Owner points at root.Items
+Root clone = root.FastDeepClone();
+// clone.Items[0].Owner == clone.Items
+```
+
+This holds for `List<T>`-style collections, arrays and dictionaries. It does not hold for:
+
+- a **getter-only** collection or dictionary member, whose contents are cloned into an intermediate
+  collection and then copied into the instance the member's getter returns - a back-reference resolves
+  to that intermediate clone rather than to the collection the caller sees;
+- `ReadOnlyCollection<T>` or `ReadOnlyDictionary<TKey,TValue>`, and immutable collections or immutable
+  dictionaries, whose container only exists after its contents have been cloned, so there is no
+  container instance to resolve to while the contents are being traversed;
+- an implicit (unannotated) POCO that participates in a cycle through itself, whose instance is built
+  with an object initializer, so its members are cloned before it can be registered.
+
+In all of those shapes a back-reference resolves to a second container instead of the one being built.
+They are pre-existing limitations, independent of this attribute: they reproduce on `next` with no
+opt-out in play, and closing them would need a construction/fixup design (build, then patch the
+back-references, or populate the target container directly) that generated code does not currently use.
 
 ## Limitations
 

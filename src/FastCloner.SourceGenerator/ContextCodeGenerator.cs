@@ -69,7 +69,11 @@ internal sealed class ContextCodeGenerator
     
     private void GenerateTypeCloner(TypeModel model)
     {
-        CloneGeneratorContext ctx = new CloneGeneratorContext(model, sharedMethodNames: _sharedMethodNames, sharedNeededHelpers: _sharedNeededHelpers);
+        CloneGeneratorContext ctx = new CloneGeneratorContext(
+            model,
+            sharedMethodNames: _sharedMethodNames,
+            sharedNeededHelpers: _sharedNeededHelpers,
+            additionalModels: GetRegisteredModels());
         ctx.NeedsStateClass = true; // Use shared state class logic
         ctx.UseStaticMethods = false; // Use instance methods for context
 
@@ -146,6 +150,23 @@ internal sealed class ContextCodeGenerator
         _sb.Append(ctx.Source.ToString());
     }
     
+    /// <summary>
+    /// Every model this context registers, so an identity opt-out anywhere among them can widen helper
+    /// capability before the first helper decision is taken.
+    /// </summary>
+    private IEnumerable<TypeModel> GetRegisteredModels()
+    {
+        foreach (TypeModel registered in _model.RegisteredTypes)
+        {
+            yield return registered;
+
+            foreach (TypeModel related in registered.RelatedTypes)
+            {
+                yield return related;
+            }
+        }
+    }
+
     private void GenerateCloneBody(CloneGeneratorContext ctx, string typeName, bool useState, string? stateVarName = null)
     {
          if (ctx.Model.IsStruct)
@@ -329,3 +350,4 @@ internal sealed class ContextCodeGenerator
         return cycleFound;
     }
 }
+

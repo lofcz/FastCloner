@@ -10,12 +10,60 @@ internal sealed class CloneCodeGenerator
     private readonly CloneGeneratorContext _context;
     private readonly EquatableArray<GenericUsage> _usages;
     private readonly EquatableArray<ClosedSubtypeUsage> _subtypeUsages;
+    private readonly List<TypeModel> _effectiveDerivedTypes;
 
     public CloneCodeGenerator(TypeModel model, EquatableArray<GenericUsage> usages, EquatableArray<ClosedSubtypeUsage> subtypeUsages, BridgeContract bridgeContract)
     {
-        _context = new CloneGeneratorContext(model, bridgeContract);
         _usages = usages;
         _subtypeUsages = subtypeUsages;
+
+        // Every subtype this root dispatches to: declared ones plus the closed generic constructions
+        // only usage analysis can reveal. Computed once here, so the dispatcher and the identity
+        // opt-out scan below see exactly the same set.
+        _effectiveDerivedTypes = CollectEffectiveDerivedTypes(model, subtypeUsages);
+
+        // Usage analysis contributes models that become known only here — implicit models and closed
+        // subtypes — and they may carry a member-level identity opt-out. Handing them to the context up
+        // front keeps the opt-out capability complete before the first helper decision, so generated
+        // code cannot depend on which usage happens to be analysed first.
+        _context = new CloneGeneratorContext(model, bridgeContract, additionalModels: GetPreEmissionModels(model));
+    }
+
+    private static List<TypeModel> CollectEffectiveDerivedTypes(TypeModel model, EquatableArray<ClosedSubtypeUsage> subtypeUsages)
+    {
+        List<TypeModel> derivedTypes = [.. model.DerivedTypes];
+        HashSet<string> known = [.. derivedTypes.Select(t => t.FullyQualifiedName)];
+
+        foreach (ClosedSubtypeUsage usage in subtypeUsages
+                     .Where(u => u.RootFqn == model.FullyQualifiedName)
+                     .OrderBy(u => u.Model.FullyQualifiedName, StringComparer.Ordinal))
+        {
+            if (known.Add(usage.Model.FullyQualifiedName))
+            {
+                derivedTypes.Add(usage.Model);
+            }
+        }
+
+        return derivedTypes;
+    }
+
+    private IEnumerable<TypeModel> GetPreEmissionModels(TypeModel model)
+    {
+        foreach (GenericUsage usage in _usages)
+        {
+            if (usage.GenericTypeMetadataName != model.FullyQualifiedName)
+                continue;
+
+            foreach (TypeModel implicitType in usage.ImplicitTypes)
+            {
+                yield return implicitType;
+            }
+        }
+
+        foreach (TypeModel derivedType in _effectiveDerivedTypes)
+        {
+            yield return derivedType;
+        }
     }
 
     public string Generate()
@@ -326,24 +374,7 @@ internal sealed class CloneCodeGenerator
     /// </summary>
     private List<TypeModel> GetEffectiveDerivedTypes()
     {
-        List<TypeModel> derivedTypes = [.. _context.Model.DerivedTypes];
-
-        if (_subtypeUsages.Count > 0)
-        {
-            HashSet<string> known = [.. derivedTypes.Select(t => t.FullyQualifiedName)];
-
-            foreach (ClosedSubtypeUsage usage in _subtypeUsages
-                         .Where(u => u.RootFqn == _context.Model.FullyQualifiedName)
-                         .OrderBy(u => u.Model.FullyQualifiedName, StringComparer.Ordinal))
-            {
-                if (known.Add(usage.Model.FullyQualifiedName))
-                {
-                    derivedTypes.Add(usage.Model);
-                }
-            }
-        }
-
-        return derivedTypes;
+        return _effectiveDerivedTypes;
     }
 
     private void WriteAbstractTypeDispatcher(string typeName)
@@ -537,7 +568,6 @@ internal sealed class CloneCodeGenerator
             
             if (derivedModel.NeedsStateTracking)
             {
-                _context.NeedsStateClass = true;
                 sb.AppendLine($"            var localState = state ?? new {GeneratedTypeNames.CloneState}();");
                 sb.AppendLine("            var known = localState.GetKnownRef(source);");
                 sb.AppendLine($"            if (known != null) return ({derivedModel.FullyQualifiedName})known;");
@@ -547,7 +577,24 @@ internal sealed class CloneCodeGenerator
             }
             else
             {
-                WriteDerivedTypeCloneBody(derivedModel, false, "state");
+                // The type's own default needs no tracking, but the caller may still have supplied a
+                // state: an opted-out abstract/polymorphic member passes a suppressing view, and
+                // discarding it here would let a nested identity-preserving member re-enable aliasing
+                // inside the opted-out subgraph. This mirrors the stateless root, which already
+                // propagates a supplied state. A null state keeps the untracked behaviour exactly as
+                // before - the lookup is skipped and the registration below is a no-op - so ordinary
+                // acyclic derived cloning allocates nothing extra.
+                if (!derivedModel.IsStruct)
+                {
+                    sb.AppendLine("            if (state != null)");
+                    sb.AppendLine("            {");
+                    sb.AppendLine("                var known = state.GetKnownRef(source);");
+                    sb.AppendLine($"                if (known != null) return ({derivedModel.FullyQualifiedName})known;");
+                    sb.AppendLine("            }");
+                    sb.AppendLine();
+                }
+
+                WriteDerivedTypeCloneBody(derivedModel, true, "state");
             }
 
             sb.AppendLine("        }");
@@ -582,7 +629,7 @@ internal sealed class CloneCodeGenerator
                         typeName,
                         ClassCloneBodyGenerator.CollectObjectInitializerAssignments(_context, derivedModel.Members, "source", stateVarName));
 
-                    sb.AppendLine($"            {stateVarName}?.AddKnownRef(source, result);");
+                    sb.AppendLine($"            var registration = {stateVarName}?.RegisterKnownRef(source, result);");
                     sb.AppendLine();
 
                     foreach (MemberModel member in derivedModel.Members)
@@ -592,6 +639,8 @@ internal sealed class CloneCodeGenerator
 
                         MemberCloneGenerator.WriteMemberCloning(_context, member, "result", "source", stateVarName);
                     }
+
+                    ClassCloneBodyGenerator.WriteCycleCompletion(_context, sb, stateVarName, "?", "source", useState: true, "registration");
 
                     sb.AppendLine();
                     sb.AppendLine("            return result;");
@@ -627,7 +676,7 @@ internal sealed class CloneCodeGenerator
 
                 if (useState)
                 {
-                    sb.AppendLine($"            {stateVarName}?.AddKnownRef(source, result);");
+                    sb.AppendLine($"            var registration = {stateVarName}?.RegisterKnownRef(source, result);");
                 }
 
                 sb.AppendLine();
@@ -638,6 +687,8 @@ internal sealed class CloneCodeGenerator
                 {
                     MemberCloneGenerator.WriteMemberCloning(_context, member, "result", "source", stateVarName, instanceCreatedWithoutConstructor: true);
                 }
+
+                ClassCloneBodyGenerator.WriteCycleCompletion(_context, sb, stateVarName, "?", "source", useState: useState, "registration");
 
                 sb.AppendLine();
                 sb.AppendLine("            return result;");
@@ -678,6 +729,7 @@ internal sealed class CloneCodeGenerator
 
         foreach (MemberModel member in _context.Model.Members)
         {
+            // Value types never allocate reference-tracking state, so they never need continuity.
             MemberCloneGenerator.WriteMemberCloning(_context, member, "result", "source", stateVarName);
         }
 
@@ -802,11 +854,7 @@ internal sealed class CloneCodeGenerator
             {
                 MemberModel collectionModel = usage.CollectionModel.Value;
                 string helperName = _context.GetOrCreateHelperMethodName(collectionModel);
-                bool needsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(_context, collectionModel);
-                
-                string callArgs = needsState 
-                    ? $"(({argType})(object)source, state)" 
-                    : $"(({argType})(object)source)";
+                string callArgs = GetClonerDispatchArgs(_context, collectionModel.TypeFullName, argType);
 
                 sb.AppendLine($"                if (typeof({castTypeParam}) == typeof({argType}))");
                 sb.AppendLine($"                    return ({castTypeParam})(object){helperName}{typeParams}{callArgs}!;");
@@ -816,10 +864,7 @@ internal sealed class CloneCodeGenerator
                 if (_context.TryGetImplicitTypeModel(argType, out TypeModel implicitModel))
                 {
                      string helperName = _context.GetOrCreateHelperMethodName(argType);
-                     bool needsState = implicitModel.NeedsStateTracking && _context.NeedsStateTracking;
-                     string callArgs = needsState 
-                        ? $"(({argType})(object)source, state)" 
-                        : $"(({argType})(object)source)";
+                     string callArgs = GetClonerDispatchArgs(_context, argType, argType);
 
                      sb.AppendLine($"                if (typeof({castTypeParam}) == typeof({argType}))");
                      sb.AppendLine($"                    return ({castTypeParam})(object){helperName}{typeParams}{callArgs}!;");
@@ -830,7 +875,6 @@ internal sealed class CloneCodeGenerator
         string fallbackCastTypeParam = (typeParamsArray == null || typeParamsArray.Length == 0)
             ? "T" 
             : typeParamsArray[0];
-        
         if (_context.IsFastClonerAvailable)
         {
             sb.AppendLine($"                return ({fallbackCastTypeParam}){CloneGeneratorContext.FastClonerDeepCloneCall("source")}!;");
@@ -844,6 +888,25 @@ internal sealed class CloneCodeGenerator
         sb.AppendLine("        }");
     }
 
+    /// <summary>
+    /// Argument list for a <c>Cloner&lt;T&gt;</c> dispatch into a generated helper.
+    /// <br/><br/>
+    /// The number of arguments follows the helper's signature capability, but the value follows the
+    /// helper's own default requirement: a helper that only gained the parameter so an identity
+    /// opt-out could reach it keeps producing exactly what it produced before when its ordinary
+    /// caller has no state to give.
+    /// </summary>
+    private static string GetClonerDispatchArgs(CloneGeneratorContext context, string typeFullName, string argType)
+    {
+        if (!context.HelperAcceptsState(typeFullName))
+        {
+            return $"(({argType})(object)source)";
+        }
+
+        string stateArg = context.HelperDefaultNeedsState(typeFullName) ? "state" : "null";
+        return $"(({argType})(object)source, {stateArg})";
+    }
+
     private void WriteFileFooter()
     {
         if (!string.IsNullOrEmpty(_context.Model.Namespace))
@@ -852,3 +915,4 @@ internal sealed class CloneCodeGenerator
         }
     }
 }
+

@@ -112,10 +112,11 @@ internal static class ClassCloneBodyGenerator
             WriteGetUninitializedObject(sb, typeName);
         }
 
+        string nullConditional = useNullConditional ? "?" : "";
+
         if (useState)
         {
-            string nullConditional = useNullConditional ? "?" : "";
-            sb.AppendLine($"            {stateVar}{nullConditional}.AddKnownRef({sourceVarName}, result);");
+            sb.AppendLine($"            var registration = {stateVar}{nullConditional}.RegisterKnownRef({sourceVarName}, result);");
             sb.AppendLine();
         }
 
@@ -126,9 +127,32 @@ internal static class ClassCloneBodyGenerator
 
             MemberCloneGenerator.WriteMemberCloning(ctx, member, "result", sourceVarName, stateVar, instanceCreatedWithoutConstructor);
         }
+
+        WriteCycleCompletion(ctx, sb, stateVar, nullConditional, sourceVarName, useState, "registration");
             
         sb.AppendLine();
         sb.AppendLine("            return result;");
+    }
+
+    /// <summary>
+    /// Closes the in-flight registration a clone body made for <paramref name="sourceVarName"/>.
+    /// <br/><br/>
+    /// A state that suppresses identity keeps its mappings only while an object's clone is being
+    /// built; dropping the mapping here is what makes two occurrences of the same source object
+    /// under an opt-out clone independently. It is emitted unconditionally because such a state can
+    /// arrive from another generated file; for an identity-preserving state the call is a no-op.
+    /// <br/><br/>
+    /// <paramref name="registrationVar"/> is the local holding the slot token returned by the
+    /// matching <c>RegisterKnownRef</c> call, which avoids looking the source object up a second time.
+    /// </summary>
+    internal static void WriteCycleCompletion(CloneGeneratorContext ctx, StringBuilder sb, string stateVar, string nullConditional, string sourceVarName, bool useState, string registrationVar)
+    {
+        // Value types are boxed by RegisterKnownRef, so a second box could never match the first; they
+        // have no reference identity to complete either.
+        if (!useState || ctx.Model.IsStruct)
+            return;
+
+        sb.AppendLine($"            {stateVar}{nullConditional}.CompleteKnownRef({registrationVar});");
     }
     
     internal static void WriteGetUninitializedObject(StringBuilder sb, string typeName)
@@ -232,7 +256,7 @@ internal static class ClassCloneBodyGenerator
         }
 
         string nullConditional = useNullConditional ? "?" : "";
-        sb.AppendLine($"            {stateVar}{nullConditional}.AddKnownRef({sourceVarName}, result);");
+        sb.AppendLine($"            var registration = {stateVar}{nullConditional}.RegisterKnownRef({sourceVarName}, result);");
         sb.AppendLine();
 
         foreach (MemberModel member in ctx.Model.Members)
@@ -243,8 +267,9 @@ internal static class ClassCloneBodyGenerator
             MemberCloneGenerator.WriteMemberCloning(ctx, member, "result", sourceVarName, stateVar);
         }
 
+        WriteCycleCompletion(ctx, sb, stateVar, nullConditional, sourceVarName, useState: true, "registration");
+
         sb.AppendLine();
         sb.AppendLine("            return result;");
     }
 }
-

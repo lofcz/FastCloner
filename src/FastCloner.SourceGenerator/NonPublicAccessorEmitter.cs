@@ -261,14 +261,25 @@ internal static class NonPublicAccessorEmitter
                 return $"{readExpression}!";
 
             case MemberTypeKind.Clonable:
-                return $"{member.ClonableExtensionClass}.InternalFastDeepClone({readExpression}, {stateVar})!";
+                return $"{MemberCloneGenerator.WrapOptOutSingleRead(context, member, readExpression, value => $"{member.ClonableExtensionClass}.InternalFastDeepClone({value}, {MemberCloneGenerator.GetMemberStateVar(member, stateVar)})")}!";
             
             default:
+            {
+                // Route through the same generated helpers as the ordinary member path, so a
+                // member-level [FastClonerPreserveIdentity(false)] applies to non-public members too.
+                // The runtime cloner remains the fallback for member kinds generated code cannot clone.
+                string generated = MemberCloneGenerator.GetGeneratedMemberCloneExpression(context, member, readExpression, stateVar);
+                if (!string.IsNullOrEmpty(generated))
+                {
+                    return $"{generated}!";
+                }
+
                 if (context.IsFastClonerAvailable)
                 {
                     return $"({member.TypeFullName})({CloneGeneratorContext.FastClonerDeepCloneCall(readExpression)}!)";
                 }
                 return $"{readExpression}!";
+            }
         }
     }
 

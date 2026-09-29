@@ -54,11 +54,13 @@ internal static class CollectionHelperGenerator
     private static void WriteImplicitCloneMethod(CloneGeneratorContext context, TypeModel implicitModel, string methodName)
     {
         string typeName = implicitModel.FullyQualifiedName;
-        // Determine if we need state. 
+        // Determine if we need state.
         // If Root can't have circular refs, then we don't pass state down (it's null).
         // If Root CAN, then we check if ImplicitModel CAN.
         // If ImplicitModel CAN, we accept state.
-        bool needsState = implicitModel.NeedsStateTracking && context.NeedsStateTracking;
+        // A member-level [FastClonerPreserveIdentity(false)] also requires the parameter, so the
+        // opt-out can be handed to this helper even when no default behaviour needs state.
+        bool needsState = context.HelperAcceptsState(typeName);
         StringBuilder sb = context.Source;
 
         if (needsState)
@@ -80,10 +82,7 @@ internal static class CollectionHelperGenerator
             sb.AppendLine("            if (state != null)");
             sb.AppendLine("            {");
             sb.AppendLine("                var known = state.GetKnownRef(source);");
-            if (implicitModel.IsStruct)
-                sb.AppendLine($"                if (known != null) return ({typeName})known;");
-            else
-                sb.AppendLine($"                if (known != null) return ({typeName})known;");
+            sb.AppendLine($"                if (known != null) return ({typeName})known;");
             sb.AppendLine("            }");
             sb.AppendLine();
         }
@@ -118,7 +117,7 @@ internal static class CollectionHelperGenerator
 
         if (needsState)
         {
-            sb.AppendLine("            state?.AddKnownRef(source, result);");
+            sb.AppendLine($"            var registration_1 = state?.RegisterKnownRef(source, result);");
         }
 
         // struct logic for members?
@@ -129,6 +128,11 @@ internal static class CollectionHelperGenerator
                 // We use WriteMemberCloning to handle assignment statements
                 MemberCloneGenerator.WriteMemberCloning(context, member, "result", "source", needsState ? "state" : "null");
             }
+        }
+
+        if (needsState)
+        {
+            sb.AppendLine($"            state?.CompleteKnownRef(registration_1);");
         }
 
         sb.AppendLine();
@@ -144,13 +148,14 @@ internal static class CollectionHelperGenerator
         string typeName = member.TypeFullName;
         string methodName = context.GetMethodName(typeName);
         CollectionKind kind = member.CollectionKind;
-        bool needsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(context, member);
+        bool needsState = context.HelperAcceptsState(typeName);
+        bool defaultNeedsState = context.HelperDefaultNeedsState(typeName);
         bool isValueType = member.IsValueType;
         
         // Handle special collections
         if (kind.ToString().StartsWith("Immutable"))
         {
-            WriteImmutableCollectionCloneMethod(context, member, typeName, methodName, kind, needsState, isValueType);
+            WriteImmutableCollectionCloneMethod(context, member, typeName, methodName, kind, needsState, defaultNeedsState, isValueType);
             return;
         }
 
@@ -209,7 +214,9 @@ internal static class CollectionHelperGenerator
         // Requires a ctor VERIFIED to copy (Collection<T>'s IList<T> ctor wraps the source instead)
         // and is skipped for stacks: enumerating a stack yields top->bottom, so pushing that
         // sequence into a new stack would reverse it.
-        if (isSafe && !needsState && member.ConcreteHasCopyCtor && !isStack)
+        // Keyed off the helper's *default* requirement: widening the signature so an opt-out can be
+        // handed down must not disable the fast path for ordinary calls.
+        if (isSafe && !defaultNeedsState && member.ConcreteHasCopyCtor && !isStack)
         {
             sb.AppendLine($"            return new {concreteType}(source);");
         }
@@ -227,7 +234,7 @@ internal static class CollectionHelperGenerator
 
             if (needsState)
             {
-                sb.AppendLine("            state?.AddKnownRef(source, result);");
+                sb.AppendLine($"            var registration_2 = state?.RegisterKnownRef(source, result);");
                 sb.AppendLine();
             }
             
@@ -285,6 +292,11 @@ internal static class CollectionHelperGenerator
                 sb.AppendLine("            }");
             }
             
+            if (needsState)
+            {
+                sb.AppendLine($"            state?.CompleteKnownRef(registration_2);");
+            }
+
             sb.AppendLine();
             sb.AppendLine("            return result;");
         }
@@ -293,7 +305,7 @@ internal static class CollectionHelperGenerator
         sb.AppendLine();
     }
 
-    private static void WriteImmutableCollectionCloneMethod(CloneGeneratorContext context, MemberModel member, string typeName, string methodName, CollectionKind kind, bool needsState, bool isValueType)
+    private static void WriteImmutableCollectionCloneMethod(CloneGeneratorContext context, MemberModel member, string typeName, string methodName, CollectionKind kind, bool needsState, bool defaultNeedsState, bool isValueType)
     {
         StringBuilder sb = context.Source;
         bool isSafe = member.ElementIsSafe;
@@ -310,7 +322,10 @@ internal static class CollectionHelperGenerator
             sb.AppendLine("            if (source == null) return null;");
         }
         
-        if (isSafe && !needsState)
+        // Keyed off the helper's *default* requirement, not on the widened signature: a helper that
+        // gained a state parameter only so an opt-out can be handed down must still return the
+        // source for a safe immutable collection when it is invoked normally.
+        if (isSafe && !defaultNeedsState)
         {
             sb.AppendLine("            return source;");
             sb.AppendLine("        }");
@@ -357,7 +372,9 @@ internal static class CollectionHelperGenerator
 
         if (needsState)
         {
-            sb.AppendLine("            state?.AddKnownRef(source, result);");
+            sb.AppendLine($"            var registration_3 = state?.RegisterKnownRef(source, result);");
+
+            sb.AppendLine($"            state?.CompleteKnownRef(registration_3);");
         }
 
         sb.AppendLine("            return result;");
@@ -405,7 +422,9 @@ internal static class CollectionHelperGenerator
 
         if (needsState)
         {
-            sb.AppendLine("            state?.AddKnownRef(source, result);");
+            sb.AppendLine($"            var registration_4 = state?.RegisterKnownRef(source, result);");
+
+            sb.AppendLine($"            state?.CompleteKnownRef(registration_4);");
         }
 
         sb.AppendLine("            return result;");
@@ -430,7 +449,7 @@ internal static class CollectionHelperGenerator
         if (context.TryGetMemberModel(member.ElementTypeName!, out MemberModel nestedModel))
         {
             string helperName = context.GetOrCreateHelperMethodName(nestedModel);
-            bool elementNeedsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(context, nestedModel);
+            bool elementNeedsState = context.HelperTakesState(helperName, nestedModel.TypeFullName, MemberCloneGenerator.MemberNeedsCircularRefTracking(context, nestedModel));
             string actualStateVar = parentNeedsState ? "state" : "null";
             return GetHelperMethodCall(context, helperName, itemVar, elementNeedsState, actualStateVar);
         }
@@ -444,7 +463,7 @@ internal static class CollectionHelperGenerator
             }
             
             string helperName = context.GetOrCreateHelperMethodName(implicitModel.FullyQualifiedName);
-            bool elementNeedsState = implicitModel.NeedsStateTracking && context.NeedsStateTracking;
+            bool elementNeedsState = context.HelperTakesState(helperName, implicitModel.FullyQualifiedName, implicitModel.NeedsStateTracking && context.NeedsStateTracking);
             string actualStateVar = parentNeedsState ? "state" : "null";
             return GetHelperMethodCall(context, helperName, itemVar, elementNeedsState, actualStateVar);
         }
@@ -461,12 +480,13 @@ internal static class CollectionHelperGenerator
         string typeName = member.TypeFullName;
         string methodName = context.GetMethodName(typeName);
         CollectionKind kind = member.CollectionKind;
-        bool needsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(context, member);
+        bool needsState = context.HelperAcceptsState(typeName);
+        bool defaultNeedsState = context.HelperDefaultNeedsState(typeName);
         bool isValueType = member.IsValueType;
         
         if (kind.ToString().StartsWith("Immutable"))
         {
-            WriteImmutableDictionaryCloneMethod(context, member, typeName, methodName, kind, needsState, isValueType);
+            WriteImmutableDictionaryCloneMethod(context, member, typeName, methodName, kind, needsState, defaultNeedsState, isValueType);
             return;
         }
 
@@ -500,7 +520,8 @@ internal static class CollectionHelperGenerator
         
         // The copy-ctor fast path requires a ctor VERIFIED to copy (only the exact BCL Dictionary;
         // subclasses don't inherit it and custom dictionary-taking ctors may wrap the source).
-        if (keysAreSafe && valuesAreSafe && !needsState && kind == CollectionKind.Dictionary && member.ConcreteHasCopyCtor)
+        // Keyed off the default requirement, never off the widened signature capability.
+        if (keysAreSafe && valuesAreSafe && !defaultNeedsState && kind == CollectionKind.Dictionary && member.ConcreteHasCopyCtor)
         {
             sb.AppendLine($"            return new {concreteType}(source);");
             sb.AppendLine("        }");
@@ -529,7 +550,7 @@ internal static class CollectionHelperGenerator
 
         if (needsState)
         {
-            sb.AppendLine("            state?.AddKnownRef(source, result);");
+            sb.AppendLine($"            var registration_5 = state?.RegisterKnownRef(source, result);");
             sb.AppendLine();
         }
 
@@ -550,13 +571,19 @@ internal static class CollectionHelperGenerator
         }
 
         sb.AppendLine("            }");
+
+        if (needsState)
+        {
+            sb.AppendLine($"            state?.CompleteKnownRef(registration_5);");
+        }
+
         sb.AppendLine();
         sb.AppendLine("            return result;");
         sb.AppendLine("        }");
         sb.AppendLine();
     }
 
-    private static void WriteImmutableDictionaryCloneMethod(CloneGeneratorContext context, MemberModel member, string typeName, string methodName, CollectionKind kind, bool needsState, bool isValueType)
+    private static void WriteImmutableDictionaryCloneMethod(CloneGeneratorContext context, MemberModel member, string typeName, string methodName, CollectionKind kind, bool needsState, bool defaultNeedsState, bool isValueType)
     {
         StringBuilder sb = context.Source;
         bool keysAreSafe = member.KeyIsSafe;
@@ -572,7 +599,9 @@ internal static class CollectionHelperGenerator
             sb.AppendLine("            if (source == null) return null;");
         }
         
-        if (keysAreSafe && valuesAreSafe && !needsState)
+        // Keyed off the default requirement: a helper widened only so an opt-out can be handed down
+        // must still return the source for a safe immutable dictionary.
+        if (keysAreSafe && valuesAreSafe && !defaultNeedsState)
         {
             sb.AppendLine("            return source;");
             sb.AppendLine("        }");
@@ -608,7 +637,9 @@ internal static class CollectionHelperGenerator
 
         if (needsState)
         {
-            sb.AppendLine("            state?.AddKnownRef(source, result);");
+            sb.AppendLine($"            var registration_6 = state?.RegisterKnownRef(source, result);");
+
+            sb.AppendLine($"            state?.CompleteKnownRef(registration_6);");
         }
 
         sb.AppendLine("            return result;");
@@ -653,7 +684,9 @@ internal static class CollectionHelperGenerator
 
         if (needsState)
         {
-            sb.AppendLine("            state?.AddKnownRef(source, result);");
+            sb.AppendLine($"            var registration_7 = state?.RegisterKnownRef(source, result);");
+
+            sb.AppendLine($"            state?.CompleteKnownRef(registration_7);");
         }
 
         sb.AppendLine("            return result;");
@@ -674,7 +707,7 @@ internal static class CollectionHelperGenerator
             else if (context.TryGetMemberModel(member.KeyTypeName!, out MemberModel nestedKeyModel))
             {
                 string helperName = context.GetOrCreateHelperMethodName(nestedKeyModel);
-                bool keyNeedsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(context, nestedKeyModel);
+                bool keyNeedsState = context.HelperTakesState(helperName, nestedKeyModel.TypeFullName, MemberCloneGenerator.MemberNeedsCircularRefTracking(context, nestedKeyModel));
                 string actualStateVar = needsState ? "state" : "null";
                 keyExpr = GetHelperMethodCall(context, helperName, "kvp.Key", keyNeedsState, actualStateVar);
             }
@@ -688,7 +721,7 @@ internal static class CollectionHelperGenerator
                 else
                 {
                     string helperName = context.GetOrCreateHelperMethodName(implicitKeyModel.FullyQualifiedName);
-                    bool keyNeedsState = implicitKeyModel.NeedsStateTracking && context.NeedsStateTracking;
+                    bool keyNeedsState = context.HelperTakesState(helperName, implicitKeyModel.FullyQualifiedName, implicitKeyModel.NeedsStateTracking && context.NeedsStateTracking);
                     string actualStateVar = needsState ? "state" : "null";
                     keyExpr = GetHelperMethodCall(context, helperName, "kvp.Key", keyNeedsState, actualStateVar);
                 }
@@ -710,7 +743,7 @@ internal static class CollectionHelperGenerator
             else if (context.TryGetMemberModel(member.ValueTypeName!, out MemberModel nestedValModel))
             {
                 string helperName = context.GetOrCreateHelperMethodName(nestedValModel);
-                bool valNeedsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(context, nestedValModel);
+                bool valNeedsState = context.HelperTakesState(helperName, nestedValModel.TypeFullName, MemberCloneGenerator.MemberNeedsCircularRefTracking(context, nestedValModel));
                 string actualStateVar = needsState ? "state" : "null";
                 valExpr = GetHelperMethodCall(context, helperName, "kvp.Value", valNeedsState, actualStateVar);
             }
@@ -724,7 +757,7 @@ internal static class CollectionHelperGenerator
                 else
                 {
                     string helperName = context.GetOrCreateHelperMethodName(implicitValModel.FullyQualifiedName);
-                    bool valNeedsState = implicitValModel.NeedsStateTracking && context.NeedsStateTracking;
+                    bool valNeedsState = context.HelperTakesState(helperName, implicitValModel.FullyQualifiedName, implicitValModel.NeedsStateTracking && context.NeedsStateTracking);
                     string actualStateVar = needsState ? "state" : "null";
                     valExpr = GetHelperMethodCall(context, helperName, "kvp.Value", valNeedsState, actualStateVar);
                 }
@@ -746,7 +779,7 @@ internal static class CollectionHelperGenerator
         string methodName = context.GetMethodName(typeName);
         bool isSafe = member.ElementIsSafe;
         bool hasClonableAttr = member.ElementHasClonableAttr;
-        bool needsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(context, member);
+        bool needsState = context.HelperAcceptsState(typeName);
         StringBuilder sb = context.Source;
 
         if (needsState)
@@ -773,7 +806,7 @@ internal static class CollectionHelperGenerator
 
         if (needsState)
         {
-            sb.AppendLine("            state?.AddKnownRef(source, result);");
+            sb.AppendLine($"            var registration_8 = state?.RegisterKnownRef(source, result);");
             sb.AppendLine();
         }
 
@@ -797,7 +830,7 @@ internal static class CollectionHelperGenerator
             else if (context.TryGetMemberModel(member.ElementTypeName!, out MemberModel nestedModel))
             {
                 string helperName = context.GetOrCreateHelperMethodName(nestedModel);
-                bool elementNeedsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(context, nestedModel);
+                bool elementNeedsState = context.HelperTakesState(helperName, nestedModel.TypeFullName, MemberCloneGenerator.MemberNeedsCircularRefTracking(context, nestedModel));
                 string actualStateVar = needsState ? "state" : "null";
                 itemExpr = GetHelperMethodCall(context, helperName, "source[i]", elementNeedsState, actualStateVar);
             }
@@ -811,7 +844,7 @@ internal static class CollectionHelperGenerator
                 else
                 {
                     string helperName = context.GetOrCreateHelperMethodName(implicitModel.FullyQualifiedName);
-                    bool elementNeedsState = implicitModel.NeedsStateTracking && context.NeedsStateTracking;
+                    bool elementNeedsState = context.HelperTakesState(helperName, implicitModel.FullyQualifiedName, implicitModel.NeedsStateTracking && context.NeedsStateTracking);
                     string actualStateVar = needsState ? "state" : "null";
                     itemExpr = GetHelperMethodCall(context, helperName, "source[i]", elementNeedsState, actualStateVar);
                 }
@@ -829,6 +862,12 @@ internal static class CollectionHelperGenerator
             sb.AppendLine("                result[i] = clonedItem!;");
             sb.AppendLine("            }");
         }
+
+        if (needsState)
+        {
+            sb.AppendLine($"            state?.CompleteKnownRef(registration_8);");
+        }
+
         sb.AppendLine();
         sb.AppendLine("            return result;");
         sb.AppendLine("        }");
@@ -843,7 +882,7 @@ internal static class CollectionHelperGenerator
         string methodName = context.GetMethodName(typeName);
         bool isSafe = member.ElementIsSafe;
         bool hasClonableAttr = member.ElementHasClonableAttr;
-        bool needsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(context, member);
+        bool needsState = context.HelperAcceptsState(typeName);
         int rank = member.ArrayRank;
         StringBuilder sb = context.Source;
 
@@ -877,7 +916,7 @@ internal static class CollectionHelperGenerator
 
         if (needsState)
         {
-            sb.AppendLine("            state?.AddKnownRef(source, result);");
+            sb.AppendLine($"            var registration_9 = state?.RegisterKnownRef(source, result);");
         }
         sb.AppendLine();
         
@@ -907,7 +946,7 @@ internal static class CollectionHelperGenerator
             else if (context.TryGetMemberModel(member.ElementTypeName!, out MemberModel nestedModel))
             {
                 string helperName = context.GetOrCreateHelperMethodName(nestedModel);
-                bool elementNeedsState = MemberCloneGenerator.MemberNeedsCircularRefTracking(context, nestedModel);
+                bool elementNeedsState = context.HelperTakesState(helperName, nestedModel.TypeFullName, MemberCloneGenerator.MemberNeedsCircularRefTracking(context, nestedModel));
                 string actualStateVar = needsState ? "state" : "null";
                 itemExpr = GetHelperMethodCall(context, helperName, $"source[{indexList}]", elementNeedsState, actualStateVar);
             }
@@ -921,7 +960,7 @@ internal static class CollectionHelperGenerator
                 else
                 {
                     string helperName = context.GetOrCreateHelperMethodName(implicitModel.FullyQualifiedName);
-                    bool elementNeedsState = implicitModel.NeedsStateTracking && context.NeedsStateTracking;
+                    bool elementNeedsState = context.HelperTakesState(helperName, implicitModel.FullyQualifiedName, implicitModel.NeedsStateTracking && context.NeedsStateTracking);
                     string actualStateVar = needsState ? "state" : "null";
                     itemExpr = GetHelperMethodCall(context, helperName, $"source[{indexList}]", elementNeedsState, actualStateVar);
                 }
@@ -943,6 +982,11 @@ internal static class CollectionHelperGenerator
                 string indent = new string(' ', 12 + d * 4);
                 sb.AppendLine($"{indent}}}");
             }
+        }
+
+        if (needsState)
+        {
+            sb.AppendLine($"            state?.CompleteKnownRef(registration_9);");
         }
 
         sb.AppendLine();
